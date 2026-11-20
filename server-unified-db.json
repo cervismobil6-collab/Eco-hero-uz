@@ -50,47 +50,6 @@
       },
       "lastUpdated": "2026-11-15T15:17:10.244Z"
     },
-    "user_web_1794568950988": {
-      "uid": "user_web_1794568950988",
-      "fullName": "Test Student",
-      "email": "test_stu_1794568950976@example.uz",
-      "passwordHash": "a109e36947ad56de1dca1cc49f0ef8ac9ad9a7b1aa0df41fb3c4cb73c1ff01ea",
-      "phoneNumber": "+998901234567",
-      "role": "student",
-      "approvedRoles": [
-        "student"
-      ],
-      "schoolId": "school_toshkent_shahri_yunusobod_tumani_17",
-      "schoolName": "17-maktab",
-      "schoolNumber": "17",
-      "region": "Toshkent shahri",
-      "district": "Yunusobod tumani",
-      "grade": "9-A",
-      "ecoCoins": 280,
-      "totalCoinsEarned": 280,
-      "reportsCount": 0,
-      "cleanupsCount": 0,
-      "treesPlanted": 1,
-      "streakDays": 1,
-      "badge": "Yangi Eko-Qahramon",
-      "referralCode": "ECO0988",
-      "isVerified": false,
-      "isOnboarded": true,
-      "privacyConsentAccepted": true,
-      "welcomeBonusClaimed": true,
-      "avatarUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80",
-      "profileImage": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80",
-      "registrationDate": "2026-11-13T11:22:30.988Z",
-      "activityStats": {
-        "reportsCount": 0,
-        "cleanupsCount": 0,
-        "treesPlanted": 1,
-        "streakDays": 1,
-        "totalCoinsEarned": 280
-      },
-      "userId": "user_web_1794568950988",
-      "lastUpdated": "2026-11-13T11:22:30.989Z"
-    },
     "user_tg_8608733163": {
       "uid": "user_tg_8608733163",
       "userId": "user_tg_8608733163",
@@ -179,512 +138,9 @@
       "privacyConsentAccepted": true,
       "welcomeBonusClaimed": true,
       "registrationDate": "2026-11-15T14:07:23.657Z"
-    },
-    "user_regional_tashkent": {
-      "uid": "user_regional_tashkent",
-      "userId": "user_regional_tashkent",
-      "fullName": "Nodira Mirzayeva",
-      "email": "nodira.tashkent@ecohero.uz",
-      "phoneNumber": "+998901010101",
-      "telegramUsername": "@nodira_toshkent_eko",
-      "telegramAuth": true,
-      "role": "regional_coordinator",
-      "approvedRoles": [
-        "regional_coordinator"
-      ],
-      "region": "Toshkent shahri",
-      "district": "Shayxontohur tumani",
-      "schoolId": "",
-      "schoolName": "Toshkent shahar Eko-Boshqarmasi",
-      "schoolNumber": "",
-      "ecoCoins": 2400,
-      "totalCoinsEarned": 2400,
-      "isVerified": true,
-      "isOnboarded": true,
-      "badge": "Viloyat Koordinatori",
-      "registrationDate": "2026-08-01T08:00:00Z"
-    },
-    "user_district_shayxontohur": {
-      "uid": "user_district_shayxontohur",
-      "userId": "user_district_shayxontohur",
-      "fullName": "Azizbek Rahimov",
-      "email": "azizbek.shayxontohur@ecohero.uz",
-      "phoneNumber": "+998902020202",
-      "telegramUsername": "@azizbek_shayxontohur",
-      "telegramAuth": true,
-      "role": "district_coordinator",
-      "approvedRoles": [
-        "district_coordinator"
-      ],
-      "region": "Toshkent shahri",
-      "district": "Shayxontohur tumani",
-      "schoolId": "",
-      "schoolName": "Shayxontohur tumani Kengashi",
-      "schoolNumber": "",
-      "ecoCoins": 1950,
-      "totalCoinsEarned": 1950,
-      "isVerified": true,
-      "isOnboarded": true,
-      "badge": "Tuman Koordinatori",
-      "registrationDate": "2026-08-03T08:00:00Z"
-    },
-    "user_district_chilonzor": {
-      "uid": "user_district_chilonzor",
-      "userId": "user_district_chilonzor",
-      "fullName": "Farrux Sobirov",
-      "email": "farrux.chilonzor@ecohero.uz",
-      "phoneNumber": "+998902020303",
-      "telegramUsername": "@farrux_chilonzor",
-      "telegramAuth": true,
-      "role": "district_coordinator",
-      "approvedRoles": [
-        "district_coordinator"
-      ],
-      "region": "Toshkent shahri",
-      "district": "Chilonzor tumani",
-      "schoolId": "",
-      "schoolName": "Chilonzor tumani Kengashi",
-      "schoolNumber": "",
-      "ecoCoins": 1720,
-      "totalCoinsEarned": 1720,
-      "isVerified": true,
-      "isOnboarded": true,
-      "badge": "Tuman Koordinatori",
-      "registrationDate": "2026-08-04T08:00:00Z"
-    },
-    "user_district_yunusobod": {
-      "uid": "user_district_yunusobod",
-      "userId": "user_district_yunusobod",
-      "fullName": "Malika Karimova",
-      "email": "malika.yunusobod@ecohero.uz",
-      "phoneNumber": "+998902020404",
-      "telegramUsername": "@malika_yunusobod",
-      "telegramAuth": true,
-      "role": "district_coordinator",
-      "approvedRoles": [
-        "district_coordinator"
-      ],
-      "region": "Toshkent shahri",
-      "district": "Yunusobod tumani",
-      "schoolId": "",
-      "schoolName": "Yunusobod tumani Kengashi",
-      "schoolNumber": "",
-      "ecoCoins": 1680,
-      "totalCoinsEarned": 1680,
-      "isVerified": true,
-      "isOnboarded": true,
-      "badge": "Tuman Koordinatori",
-      "registrationDate": "2026-08-05T08:00:00Z"
-    },
-    "user_school_admin_17": {
-      "uid": "user_school_admin_17",
-      "userId": "user_school_admin_17",
-      "fullName": "Sardorbek Tursunov",
-      "email": "sardor.17@ecohero.uz",
-      "phoneNumber": "+998903171717",
-      "telegramUsername": "@sardor_17maktab",
-      "telegramAuth": true,
-      "role": "school_admin",
-      "approvedRoles": [
-        "school_admin"
-      ],
-      "region": "Toshkent shahri",
-      "district": "Shayxontohur tumani",
-      "schoolId": "school_tashkent_17",
-      "schoolName": "Toshkent sh. 17-sonli ixtisoslashtirilgan maktab",
-      "schoolNumber": "17",
-      "grade": "11-A",
-      "ecoCoins": 1840,
-      "totalCoinsEarned": 1840,
-      "isVerified": true,
-      "isOnboarded": true,
-      "badge": "Maktab Sardori",
-      "registrationDate": "2026-08-06T08:00:00Z"
-    },
-    "user_school_admin_19": {
-      "uid": "user_school_admin_19",
-      "userId": "user_school_admin_19",
-      "fullName": "Bekzod Alimardonov",
-      "email": "sardor.19@ecohero.uz",
-      "phoneNumber": "+998903191919",
-      "telegramUsername": "@bekzod_19maktab",
-      "telegramAuth": true,
-      "role": "school_admin",
-      "approvedRoles": [
-        "school_admin"
-      ],
-      "region": "Toshkent shahri",
-      "district": "Shayxontohur tumani",
-      "schoolId": "school_tashkent_19",
-      "schoolName": "Toshkent sh. 19-sonli umumiy o'rta ta'lim maktabi",
-      "schoolNumber": "19",
-      "grade": "10-B",
-      "ecoCoins": 1520,
-      "totalCoinsEarned": 1520,
-      "isVerified": true,
-      "isOnboarded": true,
-      "badge": "Maktab Sardori",
-      "registrationDate": "2026-08-07T08:00:00Z"
-    },
-    "user_school_admin_41": {
-      "uid": "user_school_admin_41",
-      "userId": "user_school_admin_41",
-      "fullName": "Shohruh Nematov",
-      "email": "sardor.41@ecohero.uz",
-      "phoneNumber": "+998903414141",
-      "telegramUsername": "@shohruh_41maktab",
-      "telegramAuth": true,
-      "role": "school_admin",
-      "approvedRoles": [
-        "school_admin"
-      ],
-      "region": "Toshkent shahri",
-      "district": "Shayxontohur tumani",
-      "schoolId": "school_tashkent_41",
-      "schoolName": "Toshkent sh. 41-sonli ixtisoslashtirilgan maktab",
-      "schoolNumber": "41",
-      "grade": "11-V",
-      "ecoCoins": 1390,
-      "totalCoinsEarned": 1390,
-      "isVerified": true,
-      "isOnboarded": true,
-      "badge": "Maktab Sardori",
-      "registrationDate": "2026-08-08T08:00:00Z"
-    },
-    "user_ambassador_01": {
-      "uid": "user_ambassador_01",
-      "userId": "user_ambassador_01",
-      "fullName": "Dilshoda Rustamova",
-      "email": "dilshoda.ambassador@maktab.uz",
-      "phoneNumber": "+998901234567",
-      "telegramUsername": "@dilshoda_eco17",
-      "telegramAuth": true,
-      "role": "ambassador",
-      "approvedRoles": [
-        "ambassador"
-      ],
-      "region": "Toshkent shahri",
-      "district": "Shayxontohur tumani",
-      "schoolId": "school_tashkent_17",
-      "schoolName": "Toshkent sh. 17-sonli ixtisoslashtirilgan maktab",
-      "schoolNumber": "17",
-      "grade": "10-sinf",
-      "ecoCoins": 1450,
-      "totalCoinsEarned": 1450,
-      "reportsCount": 6,
-      "treesPlanted": 18,
-      "isVerified": true,
-      "isOnboarded": true,
-      "badge": "Eko-Elchi",
-      "registrationDate": "2026-08-15T10:00:00Z"
-    },
-    "user_student_01": {
-      "uid": "user_student_01",
-      "userId": "user_student_01",
-      "fullName": "Jasurbek Aliyev",
-      "email": "jasurbek@ecohero.uz",
-      "phoneNumber": "+998901112233",
-      "telegramUsername": "@jasurbek_17",
-      "telegramAuth": true,
-      "role": "student",
-      "approvedRoles": [
-        "student"
-      ],
-      "region": "Toshkent shahri",
-      "district": "Shayxontohur tumani",
-      "schoolId": "school_tashkent_17",
-      "schoolName": "Toshkent sh. 17-sonli ixtisoslashtirilgan maktab",
-      "schoolNumber": "17",
-      "grade": "9-A",
-      "ecoCoins": 1450,
-      "totalCoinsEarned": 1650,
-      "reportsCount": 8,
-      "treesPlanted": 12,
-      "isVerified": true,
-      "isOnboarded": true,
-      "allowStudentMessages": true,
-      "badge": "Eko-Lochin",
-      "registrationDate": "2026-08-20T09:00:00Z"
-    },
-    "user_student_17_2": {
-      "uid": "user_student_17_2",
-      "userId": "user_student_17_2",
-      "fullName": "Sevara Xolmatova",
-      "email": "sevara17@ecohero.uz",
-      "phoneNumber": "+998901112244",
-      "telegramUsername": "@sevara_eco17",
-      "telegramAuth": true,
-      "role": "student",
-      "approvedRoles": [
-        "student"
-      ],
-      "region": "Toshkent shahri",
-      "district": "Shayxontohur tumani",
-      "schoolId": "school_tashkent_17",
-      "schoolName": "Toshkent sh. 17-sonli ixtisoslashtirilgan maktab",
-      "schoolNumber": "17",
-      "grade": "10-B",
-      "ecoCoins": 1120,
-      "totalCoinsEarned": 1220,
-      "reportsCount": 5,
-      "treesPlanted": 14,
-      "isVerified": true,
-      "isOnboarded": true,
-      "allowStudentMessages": true,
-      "badge": "Yashil Qahramon",
-      "registrationDate": "2026-09-02T09:00:00Z"
-    },
-    "user_student_17_3": {
-      "uid": "user_student_17_3",
-      "userId": "user_student_17_3",
-      "fullName": "umidjon Ismoilov",
-      "email": "umidjon17@ecohero.uz",
-      "phoneNumber": "+998901112255",
-      "telegramUsername": "@umidjon_17",
-      "telegramAuth": true,
-      "role": "student",
-      "approvedRoles": [
-        "student"
-      ],
-      "region": "Toshkent shahri",
-      "district": "Shayxontohur tumani",
-      "schoolId": "school_tashkent_17",
-      "schoolName": "Toshkent sh. 17-sonli ixtisoslashtirilgan maktab",
-      "schoolNumber": "17",
-      "grade": "8-V",
-      "ecoCoins": 890,
-      "totalCoinsEarned": 990,
-      "reportsCount": 3,
-      "treesPlanted": 9,
-      "isVerified": true,
-      "isOnboarded": true,
-      "allowStudentMessages": true,
-      "badge": "Tabiat Do‘sti",
-      "registrationDate": "2026-09-08T09:00:00Z"
-    },
-    "user_student_chilonzor_1": {
-      "uid": "user_student_chilonzor_1",
-      "userId": "user_student_chilonzor_1",
-      "fullName": "Dostonbek Rasulov",
-      "email": "doston.chilonzor@ecohero.uz",
-      "phoneNumber": "+998915551122",
-      "telegramUsername": "@doston_chilonzor",
-      "telegramAuth": true,
-      "role": "student",
-      "approvedRoles": [
-        "student"
-      ],
-      "region": "Toshkent shahri",
-      "district": "Chilonzor tumani",
-      "schoolId": "school_chilonzor_101",
-      "schoolName": "Chilonzor 101-sonli maktab",
-      "schoolNumber": "101",
-      "grade": "10-A",
-      "ecoCoins": 950,
-      "totalCoinsEarned": 950,
-      "reportsCount": 4,
-      "treesPlanted": 8,
-      "isVerified": true,
-      "isOnboarded": true,
-      "allowStudentMessages": true,
-      "badge": "Eko-Faol",
-      "registrationDate": "2026-09-12T09:00:00Z"
     }
   },
   "schools": [
-    {
-      "id": "school_tashkent_17",
-      "name": "Toshkent sh. 17-sonli ixtisoslashtirilgan maktab",
-      "number": "17",
-      "region": "Toshkent shahri",
-      "district": "Shayxontohur tumani",
-      "logoUrl": "/assets/schools/tashkent_campus.jpg",
-      "totalCoins": 29450,
-      "registeredStudentsCount": 342,
-      "studentsCount": 342,
-      "treesPlanted": 520,
-      "cleanupsCompleted": 38,
-      "ambassadorId": "user_smoke_student_1794756096412",
-      "ambassadorName": "Ariza Smoke Nomzod 1794756096412",
-      "adminEmail": "admin.17maktab@tashkent.uzedu.uz",
-      "ratingRank": 1,
-      "status": "verified",
-      "createdAt": "2026-08-01T08:00:00Z",
-      "lat": 41.3168,
-      "lng": 69.2486,
-      "verifiedPhotos": [
-        "/assets/schools/tashkent_campus.jpg",
-        "/assets/schools/eco_courtyard.jpg"
-      ],
-      "address": "Shayxontohur tumani, Toshkent shahri",
-      "greenAreaSqm": 5300,
-      "environmentalScore": 100,
-      "captainId": "user_school_admin_1794755945183_oe12"
-    },
-    {
-      "id": "school_samarkand_42",
-      "name": "Samarqand sh. 42-sonli maktab",
-      "number": "42",
-      "region": "Samarqand viloyati",
-      "district": "Samarqand shahri",
-      "logoUrl": "/assets/schools/samarkand_campus.jpg",
-      "totalCoins": 24100,
-      "registeredStudentsCount": 280,
-      "studentsCount": 280,
-      "treesPlanted": 460,
-      "cleanupsCompleted": 31,
-      "ambassadorId": "user_ambassador_02",
-      "ambassadorName": "Javohir Olimov (11-sinf)",
-      "adminEmail": "admin.42maktab@samarkand.uzedu.uz",
-      "ratingRank": 3,
-      "status": "verified",
-      "createdAt": "2026-08-05T08:00:00Z",
-      "lat": 39.6547,
-      "lng": 66.9749,
-      "verifiedPhotos": [
-        "/assets/schools/samarkand_campus.jpg",
-        "/assets/schools/eco_courtyard.jpg"
-      ],
-      "address": "Samarqand shahri, Samarqand viloyati",
-      "greenAreaSqm": 4675,
-      "environmentalScore": 100
-    },
-    {
-      "id": "school_margilan_pres",
-      "name": "Marg'ilon shahar 1-Prezident maktabi",
-      "number": "1",
-      "region": "Farg'ona viloyati",
-      "district": "Marg'ilon shahri",
-      "logoUrl": "/assets/schools/fergana_campus.jpg",
-      "totalCoins": 22800,
-      "registeredStudentsCount": 195,
-      "studentsCount": 195,
-      "treesPlanted": 390,
-      "cleanupsCompleted": 27,
-      "ambassadorId": "user_ambassador_03",
-      "ambassadorName": "Mohinur Xoldorova (9-sinf)",
-      "adminEmail": "pres.margilan@piima.uz",
-      "ratingRank": 4,
-      "status": "verified",
-      "createdAt": "2026-08-10T08:00:00Z",
-      "lat": 40.4721,
-      "lng": 71.7169,
-      "verifiedPhotos": [
-        "/assets/schools/fergana_campus.jpg",
-        "/assets/schools/eco_courtyard.jpg"
-      ],
-      "address": "Marg'ilon shahri, Farg'ona viloyati",
-      "greenAreaSqm": 4050,
-      "environmentalScore": 100
-    },
-    {
-      "id": "school_bukhara_10",
-      "name": "Buxoro sh. 10-sonli ixtisoslashtirilgan maktab",
-      "number": "10",
-      "region": "Buxoro viloyati",
-      "district": "Buxoro shahri",
-      "logoUrl": "/assets/schools/bukhara_campus.jpg",
-      "totalCoins": 19650,
-      "registeredStudentsCount": 220,
-      "studentsCount": 220,
-      "treesPlanted": 340,
-      "cleanupsCompleted": 24,
-      "ambassadorName": "Behzod Qosimov (10-sinf)",
-      "adminEmail": "admin.10maktab@bukhara.uzedu.uz",
-      "ratingRank": 6,
-      "status": "verified",
-      "createdAt": "2026-08-15T08:00:00Z",
-      "lat": 39.7747,
-      "lng": 64.4286,
-      "verifiedPhotos": [
-        "/assets/schools/bukhara_campus.jpg",
-        "/assets/schools/eco_courtyard.jpg"
-      ],
-      "address": "Buxoro shahri, Buxoro viloyati",
-      "greenAreaSqm": 3600,
-      "environmentalScore": 94
-    },
-    {
-      "id": "school_andijan_5",
-      "name": "Andijon sh. 5-sonli umumiy o'rta ta'lim maktabi",
-      "number": "5",
-      "region": "Andijon viloyati",
-      "district": "Andijon shahri",
-      "totalCoins": 17200,
-      "registeredStudentsCount": 185,
-      "studentsCount": 185,
-      "treesPlanted": 290,
-      "cleanupsCompleted": 19,
-      "ambassadorName": "Shoira Ergasheva (11-sinf)",
-      "adminEmail": "admin.5maktab@andijan.uzedu.uz",
-      "ratingRank": 7,
-      "status": "verified",
-      "createdAt": "2026-08-20T08:00:00Z",
-      "lat": 40.7821,
-      "lng": 72.3442,
-      "logoUrl": "/assets/schools/fergana_campus.jpg",
-      "verifiedPhotos": [
-        "/assets/schools/fergana_campus.jpg",
-        "/assets/schools/eco_courtyard.jpg"
-      ],
-      "address": "Andijon shahri, Andijon viloyati",
-      "greenAreaSqm": 3100,
-      "environmentalScore": 82
-    },
-    {
-      "id": "school_urgench_2",
-      "name": "Urganch sh. 2-sonli maktab-internati",
-      "number": "2",
-      "region": "Xorazm viloyati",
-      "district": "Urganch shahri",
-      "totalCoins": 15400,
-      "registeredStudentsCount": 160,
-      "studentsCount": 160,
-      "treesPlanted": 260,
-      "cleanupsCompleted": 16,
-      "ambassadorName": "Bobur Mansurov (10-sinf)",
-      "adminEmail": "admin.2maktab@khorezm.uzedu.uz",
-      "ratingRank": 8,
-      "status": "verified",
-      "createdAt": "2026-08-25T08:00:00Z",
-      "lat": 41.5503,
-      "lng": 60.6314,
-      "logoUrl": "/assets/schools/bukhara_campus.jpg",
-      "verifiedPhotos": [
-        "/assets/schools/bukhara_campus.jpg",
-        "/assets/schools/eco_courtyard.jpg"
-      ],
-      "address": "Urganch shahri, Xorazm viloyati",
-      "greenAreaSqm": 2800,
-      "environmentalScore": 75
-    },
-    {
-      "id": "school_toshkent_shahri_yunusobod_tumani_17",
-      "name": "17-maktab",
-      "number": "17",
-      "region": "Toshkent shahri",
-      "district": "Yunusobod tumani",
-      "totalCoins": 280,
-      "registeredStudentsCount": 1,
-      "studentsCount": 1,
-      "treesPlanted": 1,
-      "cleanupsCompleted": 0,
-      "ambassadorName": "Tayinlanmagan",
-      "adminEmail": "",
-      "ratingRank": 10,
-      "status": "active",
-      "createdAt": "2026-11-13T11:22:30.987Z",
-      "lat": 41.31048464704915,
-      "lng": 69.28810781123565,
-      "logoUrl": "/assets/schools/tashkent_campus.jpg",
-      "verifiedPhotos": [
-        "/assets/schools/tashkent_campus.jpg",
-        "/assets/schools/eco_courtyard.jpg"
-      ],
-      "address": "Yunusobod tumani, Toshkent shahri",
-      "greenAreaSqm": 480,
-      "environmentalScore": 38
-    },
     {
       "id": "school_andijon_viloyati_jalaquduq_tumani_28",
       "name": "28-maktab",
@@ -698,7 +154,7 @@
       "cleanupsCompleted": 0,
       "ambassadorName": "Tayinlanmagan",
       "adminEmail": "",
-      "ratingRank": 11,
+      "ratingRank": 1,
       "status": "active",
       "createdAt": "2026-11-15T14:03:18.877Z",
       "lat": 40.78969828203104,
@@ -725,7 +181,7 @@
       "cleanupsCompleted": 0,
       "ambassadorName": "Tayinlanmagan",
       "adminEmail": "",
-      "ratingRank": 12,
+      "ratingRank": 2,
       "status": "active",
       "createdAt": "2026-11-15T14:07:23.656Z",
       "lat": 40.786687219425986,
@@ -738,398 +194,11 @@
       "address": "Paxtaobod tumani, Andijon viloyati",
       "greenAreaSqm": 480,
       "environmentalScore": 38
-    },
-    {
-      "id": "school_tashkent_19",
-      "name": "Toshkent sh. 19-sonli umumiy o'rta ta'lim maktabi",
-      "number": "19",
-      "region": "Toshkent shahri",
-      "district": "Shayxontohur tumani",
-      "address": "Ko'kcha darvoza ko'chasi, 12-uy, Shayxontohur tumani",
-      "logoUrl": "/assets/schools/tashkent_campus.jpg",
-      "verifiedPhotos": [
-        "/assets/schools/tashkent_campus.jpg",
-        "/assets/schools/eco_courtyard.jpg"
-      ],
-      "greenAreaSqm": 2300,
-      "environmentalScore": 91,
-      "totalCoins": 25600,
-      "registeredStudentsCount": 295,
-      "studentsCount": 295,
-      "treesPlanted": 430,
-      "cleanupsCompleted": 32,
-      "ambassadorId": "user_ambassador_04",
-      "ambassadorName": "Kamronbek Toshmatov (11-sinf)",
-      "adminEmail": "admin.19maktab@tashkent.uzedu.uz",
-      "ratingRank": 2,
-      "status": "verified",
-      "createdAt": "2026-08-26T08:00:00Z",
-      "lat": 41.3215,
-      "lng": 69.2284
-    },
-    {
-      "id": "school_tashkent_41",
-      "name": "Toshkent sh. 41-sonli ixtisoslashtirilgan maktab",
-      "number": "41",
-      "region": "Toshkent shahri",
-      "district": "Shayxontohur tumani",
-      "address": "Labzak ko'chasi, 8-uy, Shayxontohur tumani",
-      "logoUrl": "/assets/schools/eco_courtyard.jpg",
-      "verifiedPhotos": [
-        "/assets/schools/eco_courtyard.jpg",
-        "/assets/schools/tashkent_campus.jpg"
-      ],
-      "greenAreaSqm": 1980,
-      "environmentalScore": 88,
-      "totalCoins": 20900,
-      "registeredStudentsCount": 240,
-      "studentsCount": 240,
-      "treesPlanted": 365,
-      "cleanupsCompleted": 26,
-      "ambassadorId": "user_ambassador_05",
-      "ambassadorName": "Madina Xusanova (10-sinf)",
-      "adminEmail": "admin.41maktab@tashkent.uzedu.uz",
-      "ratingRank": 5,
-      "status": "verified",
-      "createdAt": "2026-08-27T08:00:00Z",
-      "lat": 41.3292,
-      "lng": 69.2591
-    },
-    {
-      "id": "school_tashkent_132",
-      "name": "Toshkent sh. 132-sonli maktab",
-      "number": "132",
-      "region": "Toshkent shahri",
-      "district": "Shayxontohur tumani",
-      "address": "Beruniy shoh ko'chasi, 55-uy, Shayxontohur tumani",
-      "logoUrl": "/assets/schools/tashkent_campus.jpg",
-      "verifiedPhotos": [
-        "/assets/schools/tashkent_campus.jpg"
-      ],
-      "greenAreaSqm": 1520,
-      "environmentalScore": 79,
-      "totalCoins": 13800,
-      "registeredStudentsCount": 190,
-      "studentsCount": 190,
-      "treesPlanted": 210,
-      "cleanupsCompleted": 14,
-      "ambassadorId": "user_ambassador_06",
-      "ambassadorName": "Sardorbek Ilhomov (9-sinf)",
-      "adminEmail": "admin.132maktab@tashkent.uzedu.uz",
-      "ratingRank": 9,
-      "status": "verified",
-      "createdAt": "2026-08-28T08:00:00Z",
-      "lat": 41.3342,
-      "lng": 69.2145
     }
   ],
-  "reports": [
-    {
-      "id": "rep_001",
-      "title": "Anhor bo'yidagi noqonuniy plastik chiqindilar",
-      "description": "Kichik xiyobon orqasidagi anhor qirg'og'ida ko'p miqdorda bir marotabalik idishlar va plastik xaltalar to'planib qolgan. Suv oqimi to'silib, hid paydo bo'lmoqda.",
-      "category": "water",
-      "severity": "high",
-      "status": "in_progress",
-      "region": "Toshkent shahri",
-      "district": "Shayxontohur tumani",
-      "address": "Anhor kanali bo'yi, 17-maktab yaqinida",
-      "lat": 41.311081,
-      "lng": 69.240562,
-      "imageUrl": "https://images.unsplash.com/photo-1618477461853-cf6ed80faba5?auto=format&fit=crop&w=800&q=80",
-      "reporterUid": "user_student_01",
-      "reporterName": "Jasurbek Aliyev",
-      "schoolId": "school_tashkent_17",
-      "schoolName": "Toshkent sh. 17-maktab",
-      "rewardCoins": 150,
-      "coinsAwarded": true,
-      "aiAnalysis": {
-        "severityScore": 8,
-        "recommendedAction": "Suv havzasini ifloslantiruvchi chiqindilarni alohida to'rli qoplarga yig'ish va eng yaqin Sanfa qayta ishlash punktiga topshirish.",
-        "neededEquipment": [
-          "Suv o'tkazmaydigan uzun rezina etik",
-          "Qalin qo'lqoplar",
-          "Chiqindi qisqichlari"
-        ],
-        "urgencyNote": "Suv oqimi orqali zaharli mikroplastiklar shahar kanallariga tarqalishi mumkin."
-      },
-      "upvotes": 34,
-      "upvotedBy": [],
-      "createdAt": "2026-11-04T10:30:00Z"
-    },
-    {
-      "id": "rep_002",
-      "title": "Ko'p qavatli uylar oralig'idagi noqonuniy chiqindixona",
-      "description": "Qurilish chiqindilari va maishiy axlatlar bolalar o'yingohi yoniga tashlab ketilgan. Shamol esganda qog'oz va paketlar butun mahallaga uchmoqda.",
-      "category": "waste",
-      "severity": "medium",
-      "status": "verified",
-      "region": "Samarqand viloyati",
-      "district": "Samarqand shahri",
-      "address": "Rudakiy ko'chasi, 42-uy orqasi",
-      "lat": 39.654167,
-      "lng": 66.959722,
-      "imageUrl": "https://images.unsplash.com/photo-1530587191325-3db32d826c18?auto=format&fit=crop&w=800&q=80",
-      "reporterUid": "user_student_02",
-      "reporterName": "Madinabonu Saidova",
-      "schoolId": "school_samarkand_42",
-      "schoolName": "Samarqand sh. 42-maktab",
-      "rewardCoins": 100,
-      "coinsAwarded": true,
-      "aiAnalysis": {
-        "severityScore": 6,
-        "recommendedAction": "Mahalla fuqarolar yig'ini bilan birga 'Toza Mahalla' hashari o'tkazish va chiqindi konteynerlarini o'rnatish.",
-        "neededEquipment": [
-          "Chiqindi qoplari",
-          "Belkurak",
-          "Transport"
-        ]
-      },
-      "upvotes": 21,
-      "upvotedBy": [],
-      "createdAt": "2026-11-05T14:15:00Z"
-    },
-    {
-      "id": "rep_003",
-      "title": "Yoshlar xiyobonida sug'orish tizimi ishlamayotgani",
-      "description": "Yangi ekilgan 30 ga yaqin manzarali terak va eman ko'chatlari suvsizlikdan so'lib qolmoqda. Tomchilatib sug'orish trubasi shikastlangan.",
-      "category": "greening_needed",
-      "severity": "high",
-      "status": "in_progress",
-      "region": "Farg'ona viloyati",
-      "district": "Marg'ilon shahri",
-      "address": "Mustaqillik ko'chasi, Yoshlar xiyoboni",
-      "lat": 40.472222,
-      "lng": 71.722222,
-      "imageUrl": "https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=800&q=80",
-      "reporterUid": "user_student_03",
-      "reporterName": "Azizbek Qodirov",
-      "schoolId": "school_margilan_pres",
-      "schoolName": "Marg'ilon 1-Prezident maktabi",
-      "rewardCoins": 120,
-      "coinsAwarded": true,
-      "aiAnalysis": {
-        "severityScore": 7,
-        "recommendedAction": "Trubani tuzatish yoki vaqtincha chelaklar bilan har bir ko'chatga 15-20 litr suv quyish hasharini tashkil qilish.",
-        "treeRecommendations": [
-          "Chinor",
-          "Qayrag'och",
-          "Eman"
-        ]
-      },
-      "upvotes": 48,
-      "upvotedBy": [],
-      "createdAt": "2026-11-03T09:00:00Z"
-    },
-    {
-      "id": "rep_004",
-      "title": "Eski bozor hududi tozalandi va ko'chatlar ekildi",
-      "description": "10-maktab o'quvchilari va mahalla yoshlari tashabbusi bilan 3 tonna chiqindi yig'ildi va 50 tup mevali ko'chat o'tqazildi!",
-      "category": "greening_needed",
-      "severity": "low",
-      "status": "resolved",
-      "region": "Buxoro viloyati",
-      "district": "Buxoro shahri",
-      "address": "Ipak Yo'li ko'chasi, 12",
-      "lat": 39.774722,
-      "lng": 64.428611,
-      "imageUrl": "https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=800&q=80",
-      "resolvedImageUrl": "https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=800&q=80",
-      "reporterUid": "user_student_04",
-      "reporterName": "Nilufar Karimova",
-      "schoolId": "school_bukhara_10",
-      "schoolName": "Buxoro 10-IDUM",
-      "rewardCoins": 250,
-      "coinsAwarded": true,
-      "upvotes": 89,
-      "upvotedBy": [],
-      "createdAt": "2026-10-28T16:00:00Z",
-      "resolvedAt": "2026-11-02T18:00:00Z"
-    },
-    {
-      "id": "rep_005",
-      "title": "Qurigan chinor shoxlari yo'lovchilarga xavf solmoqda",
-      "description": "Maktab darvozasi oldidagi asriy chinorning bir nechta katta shoxi qurib qolgan. Shamolli havoda o'quvchilar xavfsizligiga xavf tug'dirishi mumkin.",
-      "category": "deforestation",
-      "severity": "medium",
-      "status": "verified",
-      "region": "Andijon viloyati",
-      "district": "Andijon shahri",
-      "address": "Navoiy shoh ko'chasi, 5-maktab ro'parasi",
-      "lat": 40.783333,
-      "lng": 72.35,
-      "imageUrl": "https://images.unsplash.com/photo-1513836279014-a89f7a76ae86?auto=format&fit=crop&w=800&q=80",
-      "reporterUid": "user_student_05",
-      "reporterName": "Sardorbek Jo'rayev",
-      "schoolId": "school_andijan_5",
-      "schoolName": "Andijon sh. 5-maktab",
-      "rewardCoins": 100,
-      "coinsAwarded": true,
-      "upvotes": 19,
-      "upvotedBy": [],
-      "createdAt": "2026-11-05T08:30:00Z"
-    },
-    {
-      "id": "rep_006",
-      "title": "Sanoat korxonasidan ko'tarilayotgan qora quyuq tutun",
-      "description": "Ertalabki va kechki payt filtrsiz zaharli tutun chiqarilmoqda, havoda qattiq kuya hidi sezilmoqda.",
-      "category": "air",
-      "severity": "high",
-      "status": "pending",
-      "region": "Navoiy viloyati",
-      "district": "Karmana tumani",
-      "address": "Sanoat hududi, 2-yo'l",
-      "lat": 40.083333,
-      "lng": 65.366667,
-      "imageUrl": "https://images.unsplash.com/photo-1611273426858-450d8e3c9fce?auto=format&fit=crop&w=800&q=80",
-      "reporterUid": "user_student_06",
-      "reporterName": "Otabek Temirov",
-      "schoolName": "Navoiy 1-maktab",
-      "rewardCoins": 150,
-      "coinsAwarded": false,
-      "upvotes": 42,
-      "upvotedBy": [],
-      "createdAt": "2026-11-06T07:20:00Z"
-    }
-  ],
-  "ambassadors": [
-    {
-      "id": "user_ambassador_01",
-      "schoolId": "school_tashkent_17",
-      "schoolName": "Toshkent sh. 17-sonli ixtisoslashtirilgan maktab",
-      "fullName": "Dilshoda Rustamova",
-      "email": "dilshoda.ambassador@maktab.uz",
-      "phone": "+998 90 123 45 67",
-      "status": "active",
-      "appointedAt": "2026-08-15T10:00:00Z",
-      "permissions": [
-        "manage_reports",
-        "host_cleanup",
-        "invite_students",
-        "redeem_vouchers"
-      ]
-    },
-    {
-      "id": "user_ambassador_02",
-      "schoolId": "school_samarkand_42",
-      "schoolName": "Samarqand sh. 42-sonli maktab",
-      "fullName": "Javohir Olimov",
-      "email": "javohir.ambassador@maktab.uz",
-      "phone": "+998 91 234 56 78",
-      "status": "active",
-      "appointedAt": "2026-08-20T10:00:00Z",
-      "permissions": [
-        "manage_reports",
-        "host_cleanup",
-        "invite_students"
-      ]
-    },
-    {
-      "id": "user_ambassador_03",
-      "schoolId": "school_margilan_pres",
-      "schoolName": "Marg'ilon shahar 1-Prezident maktabi",
-      "fullName": "Mohinur Xoldorova",
-      "email": "mohinur.ambassador@maktab.uz",
-      "phone": "+998 93 345 67 89",
-      "status": "active",
-      "appointedAt": "2026-08-25T10:00:00Z",
-      "permissions": [
-        "manage_reports",
-        "host_cleanup",
-        "invite_students",
-        "redeem_vouchers"
-      ]
-    },
-    {
-      "id": "user_ambassador_04",
-      "schoolId": "school_tashkent_19",
-      "schoolName": "Toshkent sh. 19-sonli umumiy o'rta ta'lim maktabi",
-      "region": "Toshkent shahri",
-      "district": "Shayxontohur tumani",
-      "fullName": "Kamronbek Toshmatov",
-      "email": "kamron.19@maktab.uz",
-      "phone": "+998 90 441 19 19",
-      "ecoCoins": 1480,
-      "verifiedActivitiesCount": 11,
-      "tasksCompletedCount": 7,
-      "status": "active",
-      "appointedAt": "2026-08-26T10:00:00Z",
-      "permissions": [
-        "manage_reports",
-        "host_cleanup",
-        "invite_students"
-      ]
-    },
-    {
-      "id": "user_ambassador_05",
-      "schoolId": "school_tashkent_41",
-      "schoolName": "Toshkent sh. 41-sonli ixtisoslashtirilgan maktab",
-      "region": "Toshkent shahri",
-      "district": "Shayxontohur tumani",
-      "fullName": "Madina Xusanova",
-      "email": "madina.41@maktab.uz",
-      "phone": "+998 93 541 41 41",
-      "ecoCoins": 1140,
-      "verifiedActivitiesCount": 8,
-      "tasksCompletedCount": 5,
-      "status": "active",
-      "appointedAt": "2026-08-27T10:00:00Z",
-      "permissions": [
-        "manage_reports",
-        "host_cleanup",
-        "invite_students"
-      ]
-    },
-    {
-      "id": "user_ambassador_06",
-      "schoolId": "school_tashkent_132",
-      "schoolName": "Toshkent sh. 132-sonli maktab",
-      "region": "Toshkent shahri",
-      "district": "Shayxontohur tumani",
-      "fullName": "Sardorbek Ilhomov",
-      "email": "sardor.132@maktab.uz",
-      "phone": "+998 94 132 00 32",
-      "ecoCoins": 620,
-      "verifiedActivitiesCount": 5,
-      "tasksCompletedCount": 3,
-      "status": "active",
-      "appointedAt": "2026-08-28T10:00:00Z",
-      "permissions": [
-        "manage_reports",
-        "host_cleanup"
-      ]
-    }
-  ],
-  "roleRequests": [
-    {
-      "id": "req_demo_01",
-      "userId": "user_student_02",
-      "userName": "Madinabonu Saidova",
-      "userPhone": "+998901112233",
-      "userSchool": "Samarqand sh. 42-maktab",
-      "currentRole": "student",
-      "requestedRole": "ambassador",
-      "requestedRoleName": "Eko-Elchi",
-      "reason": "Maktabimizda 50+ o'quvchini jalb qilib 'Yashil Patrul' to'garagi tuzdik. Eko-elchi bo'lib nazorat qilmoqchiman.",
-      "status": "pending",
-      "userTelegramUsername": "@madina_eco",
-      "requestedAt": "2026-11-13T05:18:27.511Z"
-    },
-    {
-      "id": "req_demo_02",
-      "userId": "user_student_03",
-      "userName": "Azizbek Qodirov",
-      "userPhone": "+998935557788",
-      "userSchool": "Marg'ilon 1-Prezident maktabi",
-      "currentRole": "student",
-      "requestedRole": "school_admin",
-      "requestedRoleName": "Maktab Admini / Sardori",
-      "reason": "Maktabimiz sardoriman, maktab nomidan hashar va ko'chat ekish hisobotlarini kiritib borishim kerak.",
-      "status": "pending",
-      "userTelegramUsername": "@azizbek_pres",
-      "requestedAt": "2026-11-12T22:18:27.511Z"
-    }
-  ],
+  "reports": [],
+  "ambassadors": [],
+  "roleRequests": [],
   "registrationApplications": [
     {
       "id": "app_1794755601928_o7sb",
@@ -1153,165 +222,10 @@
       "reviewedAt": "2026-11-15T15:17:02.427Z",
       "updatedAt": "2026-11-15T15:17:02.427Z",
       "adminNote": "Aka pzds zoʻr tasdiqlab qoʻydim koʻrinchi"
-    },
-    {
-      "id": "app_1794568951160_156l",
-      "userId": "user_web_1794568950988",
-      "fullName": "Test Student",
-      "telegramId": "1794568950976",
-      "telegramUsername": "",
-      "region": "Toshkent shahri",
-      "district": "Yunusobod tumani",
-      "schoolId": "school_toshkent_shahri_yunusobod_tumani_17",
-      "schoolNumber": "17",
-      "officialSchoolName": "17-maktab",
-      "requestedRole": "ambassador",
-      "requestedRoleName": "Maktab Eko-Elchisi",
-      "contactInfo": "+998901234567",
-      "verificationDetails": "Maktab eko-klubi a'zosi",
-      "status": "rejected",
-      "createdAt": "2026-11-13T11:22:31.160Z",
-      "reviewedBy": "user_tg_8832599080",
-      "reviewedByName": "Jasurbek O'rmonov (@jasurdost)",
-      "reviewedAt": "2026-11-14T08:22:52.477Z",
-      "updatedAt": "2026-11-14T08:22:52.477Z",
-      "adminNote": "Talablarga mos kelmadi"
-    },
-    {
-      "id": "app_seed_01",
-      "userId": "user_student_02",
-      "fullName": "Madinabonu Saidova",
-      "telegramId": "710293841",
-      "telegramUsername": "@madina_eco",
-      "region": "Samarqand viloyati",
-      "district": "Samarqand shahri",
-      "schoolId": "school_samarkand_42",
-      "schoolNumber": "42",
-      "officialSchoolName": "Samarqand sh. 42-sonli maktab",
-      "requestedRole": "ambassador",
-      "requestedRoleName": "Eko-Elchi",
-      "contactInfo": "+998901112233",
-      "verificationDetails": "Maktabimizda 50+ o'quvchini jalb qilib 'Yashil Patrul' to'garagi tuzdik. Direktor ma'lumotnomasi mavjud.",
-      "status": "pending",
-      "createdAt": "2026-11-13T06:21:52.251Z"
-    },
-    {
-      "id": "app_seed_02",
-      "userId": "user_student_03",
-      "fullName": "Azizbek Qodirov",
-      "telegramId": "810293842",
-      "telegramUsername": "@azizbek_pres",
-      "region": "Farg'ona viloyati",
-      "district": "Marg'ilon shahri",
-      "schoolId": "school_margilan_pres",
-      "schoolNumber": "1",
-      "officialSchoolName": "Marg'ilon shahar 1-Prezident maktabi",
-      "requestedRole": "school_admin",
-      "requestedRoleName": "Maktab Sardori / Admini",
-      "contactInfo": "+998935557788",
-      "verificationDetails": "Maktab sardori etib saylanganman, maktabimiz eko-elchilariga vazifa biriktirish uchun sardor huquqi so'rayman.",
-      "status": "pending",
-      "createdAt": "2026-11-12T23:21:52.251Z"
     }
   ],
-  "mediaSubmissions": [
-    {
-      "id": "media_1794568951139_5s00",
-      "userId": "user_web_1794568950988",
-      "userName": "Test Student",
-      "userRole": "student",
-      "schoolId": "school_toshkent_shahri_yunusobod_tumani_17",
-      "schoolName": "17-maktab",
-      "region": "Toshkent shahri",
-      "district": "Yunusobod tumani",
-      "activityCategory": "tree_planting",
-      "mediaType": "image",
-      "mediaUrl": "/uploads/1794568951126_05f1b5da.png",
-      "fileHash": "6b7fa434f92a8b80aab02d9bf1a12e49ffcae424e4013a1c4f68b67e3d2bbcd0",
-      "description": "Maktab hovlisiga daraxt ekildi",
-      "status": "APPROVED",
-      "awardedCoins": 180,
-      "createdAt": "2026-11-13T11:22:31.139Z",
-      "moderatorNote": "Telegram orqali tasdiqlandi",
-      "moderatedBy": "@jasurdost",
-      "moderatedAt": "2026-11-13T11:22:57.113Z",
-      "updatedAt": "2026-11-13T11:22:57.113Z"
-    },
-    {
-      "id": "media_seed_01",
-      "userId": "user_ambassador_01",
-      "userName": "Dilshoda Rustamova",
-      "userRole": "ambassador",
-      "schoolId": "school_tashkent_17",
-      "schoolName": "Toshkent sh. 17-sonli ixtisoslashtirilgan maktab",
-      "region": "Toshkent shahri",
-      "district": "Shayxontohur tumani",
-      "activityCategory": "tree_planting",
-      "mediaType": "image",
-      "mediaUrl": "https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=800&q=80",
-      "description": "17-maktab hovlisiga 25 tup sharq archasi va chinor ko'chatlari ekildi hamda sug'orish ariqchalari tayyorlandi.",
-      "status": "APPROVED",
-      "awardedCoins": 180,
-      "moderatedBy": "Super Admin",
-      "moderatedAt": "2026-11-05T11:00:00Z",
-      "createdAt": "2026-11-05T09:15:00Z"
-    },
-    {
-      "id": "media_seed_02",
-      "userId": "user_ambassador_02",
-      "userName": "Javohir Olimov",
-      "userRole": "ambassador",
-      "schoolId": "school_samarkand_42",
-      "schoolName": "Samarqand sh. 42-sonli maktab",
-      "region": "Samarqand viloyati",
-      "district": "Samarqand shahri",
-      "activityCategory": "waste_sorting",
-      "mediaType": "image",
-      "mediaUrl": "https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?auto=format&fit=crop&w=800&q=80",
-      "description": "Har bir qavatga plastik va qog'oz saralash qutilari o'rnatilib, 42 kg ikkilamchi xomashyo topshirildi.",
-      "status": "APPROVED",
-      "awardedCoins": 80,
-      "moderatedBy": "Super Admin",
-      "moderatedAt": "2026-11-06T10:30:00Z",
-      "createdAt": "2026-11-06T08:40:00Z"
-    },
-    {
-      "id": "media_seed_03",
-      "userId": "user_student_01",
-      "userName": "Jasurbek Aliyev",
-      "userRole": "student",
-      "schoolId": "school_tashkent_17",
-      "schoolName": "Toshkent sh. 17-sonli ixtisoslashtirilgan maktab",
-      "region": "Toshkent shahri",
-      "district": "Shayxontohur tumani",
-      "activityCategory": "tree_care",
-      "mediaType": "image",
-      "mediaUrl": "https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=800&q=80",
-      "description": "Yangi ekilgan nihollarni ertalabki sug'orish va tagini yumshatish ishlari amalga oshirildi.",
-      "status": "PENDING",
-      "awardedCoins": 0,
-      "createdAt": "2026-11-13T08:21:52.251Z"
-    }
-  ],
-  "ecoTasks": [
-    {
-      "id": "task_seed_01",
-      "schoolId": "school_tashkent_17",
-      "schoolName": "Toshkent sh. 17-sonli ixtisoslashtirilgan maktab",
-      "region": "Toshkent shahri",
-      "district": "Shayxontohur tumani",
-      "title": "Anhor kanali bo'yidagi xavfsiz chiqindilarni jamoa bilan saralash",
-      "instructions": "Faqat qalin qo'lqop va qisqichlar bilan plastik idishlarni yig'ing. Shisha yoki noma'lum kimyoviy idishlarga tegmang.",
-      "assignedByUid": "user_school_admin_17",
-      "assignedByName": "Maktab Sardori (17-maktab)",
-      "assigneeUid": "user_ambassador_01",
-      "assigneeName": "Dilshoda Rustamova",
-      "relatedReportId": "rep_001",
-      "status": "in_progress",
-      "rewardCoins": 90,
-      "createdAt": "2026-11-05T08:00:00Z"
-    }
-  ],
+  "mediaSubmissions": [],
+  "ecoTasks": [],
   "rewardSettings": {
     "id": "default",
     "welcomeBonus": 100,
@@ -1512,65 +426,8 @@
       ]
     }
   ],
-  "shopOrders": [
-    {
-      "id": "ord_001",
-      "userId": "user_student_01",
-      "userName": "Jasurbek Aliyev",
-      "userEmail": "diyorbekormonov44@gmail.com",
-      "schoolName": "Toshkent sh. 17-maktab",
-      "itemId": "shop_bag_10",
-      "itemTitle": "ECO HERO Premium Paxta Eko-sumkasi",
-      "priceCoins": 500,
-      "voucherCode": "ECO-SUMKA-9412",
-      "status": "delivered",
-      "createdAt": "2026-10-30T12:00:00Z",
-      "approvedAt": "2026-10-31T09:15:00Z",
-      "sponsorName": "Sanfa Eko Mahsulotlari",
-      "itemImageUrl": "https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&w=600&q=80"
-    },
-    {
-      "id": "ord_002",
-      "userId": "user_student_02",
-      "userName": "Madinabonu Saidova",
-      "userEmail": "madina.saidova@maktab.uz",
-      "schoolName": "Samarqand sh. 42-maktab",
-      "itemId": "shop_tumbler_08",
-      "itemTitle": "Termo-krujka (Eco Tumbler) 500ml",
-      "priceCoins": 950,
-      "voucherCode": "ECO-TUMBLER-3829",
-      "status": "approved",
-      "createdAt": "2026-11-04T16:20:00Z",
-      "approvedAt": "2026-11-05T10:00:00Z",
-      "sponsorName": "Yashil Makon Harakati",
-      "itemImageUrl": "https://images.unsplash.com/photo-1517256064527-09c73fc73e38?auto=format&fit=crop&w=600&q=80"
-    },
-    {
-      "id": "ord_003",
-      "userId": "user_student_03",
-      "userName": "Azizbek Qodirov",
-      "userEmail": "azizbek.q@maktab.uz",
-      "schoolName": "Marg'ilon 1-Prezident maktabi",
-      "itemId": "shop_tg_prem_05",
-      "itemTitle": "Telegram Premium 1 yillik rasmiy obunasi",
-      "priceCoins": 2200,
-      "voucherCode": "ECO-ITPARK-7714",
-      "status": "pending",
-      "createdAt": "2026-11-06T14:45:00Z",
-      "sponsorName": "Yoshlar Ishlari Agentligi",
-      "itemImageUrl": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80"
-    }
-  ],
+  "shopOrders": [],
   "transactions": [
-    {
-      "id": "tx_1794756096698_e88d",
-      "userId": "user_tg_8832599080",
-      "amount": 500,
-      "type": "bonus",
-      "status": "approved",
-      "reason": "Shayxontohur tumani oylik TOP-3 Eko-Elchi mukofoti (#1)",
-      "createdAt": "2026-11-15T15:21:36.698Z"
-    },
     {
       "id": "tx_1794751643658_z73b",
       "userId": "user_tg_5158351057",
@@ -1588,41 +445,6 @@
       "status": "approved",
       "reason": "ECO HERO bot orqali ro'yxatdan o'tish bonusi (+100 EcoCoin)",
       "createdAt": "2026-11-15T14:03:18.881Z"
-    },
-    {
-      "id": "tx_1794568977113_0ons",
-      "userId": "user_web_1794568950988",
-      "amount": 180,
-      "type": "earn",
-      "status": "approved",
-      "reason": "Tasdiqlangan eko-faoliyat (tree_planting)",
-      "mediaSubmissionId": "media_1794568951139_5s00",
-      "createdAt": "2026-11-13T11:22:57.113Z"
-    },
-    {
-      "id": "tx_1794568950989_84me",
-      "userId": "user_web_1794568950988",
-      "amount": 100,
-      "type": "bonus",
-      "status": "approved",
-      "reason": "ECO HERO ro'yxatdan o'tish tabrik bonusi (+100 EcoCoin)",
-      "createdAt": "2026-11-13T11:22:30.989Z"
-    },
-    {
-      "id": "tx_seed_01",
-      "userId": "user_student_01",
-      "amount": 150,
-      "type": "earn",
-      "reason": "Anhor bo'yidagi chiqindi hisoboti uchun",
-      "createdAt": "2026-11-04T12:00:00Z"
-    },
-    {
-      "id": "tx_seed_02",
-      "userId": "user_student_01",
-      "amount": 100,
-      "type": "bonus",
-      "reason": "ECO HERO ro'yxatdan o'tish bonusi",
-      "createdAt": "2026-11-01T09:00:00Z"
     }
   ],
   "partners": [
@@ -1943,229 +765,40 @@
       "complianceNote": "To'liq 15 soniya tomosha qilingach balansingizga avtomatik +100 EcoCoin qo'shiladi."
     }
   ],
-  "referrals": [
-    {
-      "id": "ref_rec_01",
-      "referrerUid": "user_student_01",
-      "referrerName": "Jasurbek Aliyev",
-      "referredUid": "user_ref_01",
-      "referredName": "Sardorbek Tohirov",
-      "referredSchool": "Toshkent sh. 17-sonli maktab",
-      "rewardCoins": 100,
-      "status": "rewarded",
-      "createdAt": "2026-11-04T10:15:00Z"
-    }
-  ],
+  "referrals": [],
   "broadcasts": [],
   "auditLogs": [
     {
-      "id": "log_1794756096707_v39b",
-      "actorUid": "user_school_admin_1794755945183_oe12",
-      "actorName": "Smoke Maktab Sardori",
-      "actorRole": "school_admin",
-      "action": "create_home_post",
-      "targetCollection": "home_posts",
-      "targetId": "hpost_1794756096706_kvpd",
-      "details": {
-        "title": "Captain Post 1794756096412",
-        "category": "bot_news"
-      },
-      "timestamp": "2026-11-15T15:21:36.707Z"
-    },
-    {
-      "id": "log_1794756096700_5cn6",
+      "id": "log_1795163230661_6ltb",
       "actorUid": "user_tg_8832599080",
       "actorName": "Jasurbek O'rmonov (@jasurdost)",
       "actorRole": "super_admin",
-      "action": "award_monthly_top3",
-      "targetCollection": "monthly_awards",
-      "targetId": "award_1794756096699_og3",
+      "action": "update_shop_item",
+      "targetCollection": "shop_items",
+      "targetId": "shop_custom_1795163230638",
       "details": {
-        "district": "Shayxontohur tumani",
-        "topSchools": 3,
-        "topAmbassadors": 3
+        "title": "TEST_GIFT_VERIFY",
+        "priceCoins": 50,
+        "stock": 5,
+        "gateMode": "none"
       },
-      "timestamp": "2026-11-15T15:21:36.700Z"
+      "timestamp": "2026-11-20T08:27:10.661Z"
     },
     {
-      "id": "log_1794756096677_vemp",
-      "actorUid": "user_school_admin_1794755945183_oe12",
-      "actorName": "Smoke Maktab Sardori",
-      "actorRole": "school_admin",
-      "action": "application_approve",
-      "targetCollection": "registration_applications",
-      "targetId": "app_1794756096655_8d94",
-      "details": {
-        "applicant": "Ariza Smoke Nomzod 1794756096412",
-        "role": "ambassador",
-        "adminNote": "Sardor tomonidan tasdiqlandi"
-      },
-      "timestamp": "2026-11-15T15:21:36.677Z"
-    },
-    {
-      "id": "log_1794756096656_nskw",
-      "actorUid": "user_smoke_student_1794756096412",
-      "actorName": "Smoke Student 1794756096412",
-      "actorRole": "student",
-      "action": "submit_registration_application",
-      "targetCollection": "registration_applications",
-      "targetId": "app_1794756096655_8d94",
-      "details": {
-        "requestedRole": "ambassador",
-        "school": "Toshkent sh. 17-sonli ixtisoslashtirilgan maktab",
-        "region": "Toshkent shahri"
-      },
-      "timestamp": "2026-11-15T15:21:36.656Z"
-    },
-    {
-      "id": "log_1794756096645_av2u",
-      "actorUid": "user_school_admin_1794755945183_oe12",
-      "actorName": "Smoke Maktab Sardori",
-      "actorRole": "school_admin",
-      "action": "appoint_ambassador",
-      "targetCollection": "ambassadors",
-      "targetId": "user_ambassador_1794755945210_hq8u",
-      "details": {
-        "fullName": "Smoke Eko Elchi 1794756096412",
-        "schoolId": "school_tashkent_17",
-        "schoolName": "Toshkent sh. 17-sonli ixtisoslashtirilgan maktab"
-      },
-      "timestamp": "2026-11-15T15:21:36.645Z"
-    },
-    {
-      "id": "log_1794756096627_c8gv",
+      "id": "log_1795163230639_z2pk",
       "actorUid": "user_tg_8832599080",
       "actorName": "Jasurbek O'rmonov (@jasurdost)",
       "actorRole": "super_admin",
-      "action": "appoint_school_captain",
-      "targetCollection": "schools",
-      "targetId": "school_tashkent_17",
+      "action": "create_shop_item",
+      "targetCollection": "shop_items",
+      "targetId": "shop_custom_1795163230638",
       "details": {
-        "captainUid": "user_school_admin_1794755945183_oe12",
-        "captainName": "Smoke Maktab Sardori",
-        "schoolName": "Toshkent sh. 17-sonli ixtisoslashtirilgan maktab"
+        "title": "TEST_GIFT_VERIFY",
+        "priceCoins": 50,
+        "stock": 5,
+        "gateMode": "subscription"
       },
-      "timestamp": "2026-11-15T15:21:36.627Z"
-    },
-    {
-      "id": "log_1794756096618_e1jd",
-      "actorUid": "user_tg_8832599080",
-      "actorName": "Jasurbek O'rmonov (@jasurdost)",
-      "actorRole": "super_admin",
-      "action": "appoint_district_coordinator",
-      "targetCollection": "users",
-      "targetId": "user_district_coordinator_1794755945134_67uo",
-      "details": {
-        "coordinatorName": "Smoke Tuman Koordinatori",
-        "region": "Toshkent shahri",
-        "district": "Chilonzor tumani"
-      },
-      "timestamp": "2026-11-15T15:21:36.618Z"
-    },
-    {
-      "id": "log_1794756039686_12ps",
-      "actorUid": "user_tg_8832599080",
-      "actorName": "@jasurdost",
-      "actorRole": "super_admin",
-      "action": "application_approve",
-      "targetCollection": "registration_applications",
-      "targetId": "app_1794756026415_ubn7",
-      "details": {
-        "applicant": "Ariza Smoke Nomzod 1794756026135",
-        "role": "ambassador",
-        "adminNote": "Super Admin tomonidan tasdiqlandi"
-      },
-      "timestamp": "2026-11-15T15:20:39.686Z"
-    },
-    {
-      "id": "log_1794756026441_yc80",
-      "actorUid": "user_school_admin_1794755945183_oe12",
-      "actorName": "Smoke Maktab Sardori",
-      "actorRole": "school_admin",
-      "action": "application_approve",
-      "targetCollection": "registration_applications",
-      "targetId": "app_1794756026415_ubn7",
-      "details": {
-        "applicant": "Ariza Smoke Nomzod 1794756026135",
-        "role": "ambassador",
-        "adminNote": "Sardor tomonidan tasdiqlandi"
-      },
-      "timestamp": "2026-11-15T15:20:26.441Z"
-    },
-    {
-      "id": "log_1794756026416_zkyd",
-      "actorUid": "user_smoke_student_1794756026135",
-      "actorName": "Smoke Student 1794756026135",
-      "actorRole": "student",
-      "action": "submit_registration_application",
-      "targetCollection": "registration_applications",
-      "targetId": "app_1794756026415_ubn7",
-      "details": {
-        "requestedRole": "ambassador",
-        "school": "Toshkent sh. 17-sonli ixtisoslashtirilgan maktab",
-        "region": "Toshkent shahri"
-      },
-      "timestamp": "2026-11-15T15:20:26.416Z"
-    },
-    {
-      "id": "log_1794756026403_wfzu",
-      "actorUid": "user_school_admin_1794755945183_oe12",
-      "actorName": "Smoke Maktab Sardori",
-      "actorRole": "school_admin",
-      "action": "appoint_ambassador",
-      "targetCollection": "ambassadors",
-      "targetId": "user_ambassador_1794755945210_hq8u",
-      "details": {
-        "fullName": "Smoke Eko Elchi 1794756026135",
-        "schoolId": "school_tashkent_17",
-        "schoolName": "Toshkent sh. 17-sonli ixtisoslashtirilgan maktab"
-      },
-      "timestamp": "2026-11-15T15:20:26.403Z"
-    },
-    {
-      "id": "log_1794756026380_i5im",
-      "actorUid": "user_tg_8832599080",
-      "actorName": "Jasurbek O'rmonov (@jasurdost)",
-      "actorRole": "super_admin",
-      "action": "appoint_school_captain",
-      "targetCollection": "schools",
-      "targetId": "school_tashkent_17",
-      "details": {
-        "captainUid": "user_school_admin_1794755945183_oe12",
-        "captainName": "Smoke Maktab Sardori",
-        "schoolName": "Toshkent sh. 17-sonli ixtisoslashtirilgan maktab"
-      },
-      "timestamp": "2026-11-15T15:20:26.380Z"
-    },
-    {
-      "id": "log_1794756026367_jabq",
-      "actorUid": "user_tg_8832599080",
-      "actorName": "Jasurbek O'rmonov (@jasurdost)",
-      "actorRole": "super_admin",
-      "action": "appoint_district_coordinator",
-      "targetCollection": "users",
-      "targetId": "user_district_coordinator_1794755945134_67uo",
-      "details": {
-        "coordinatorName": "Smoke Tuman Koordinatori",
-        "region": "Toshkent shahri",
-        "district": "Chilonzor tumani"
-      },
-      "timestamp": "2026-11-15T15:20:26.367Z"
-    },
-    {
-      "id": "log_1794756004281_hriy",
-      "actorUid": "user_tg_8832599080",
-      "actorName": "@jasurdost",
-      "actorRole": "super_admin",
-      "action": "application_reject",
-      "targetCollection": "registration_applications",
-      "targetId": "app_1794755945245_c0lh",
-      "details": {
-        "applicant": "Ariza Smoke Nomzod",
-        "role": "ambassador",
-        "adminNote": "Super Admin tomonidan rad etildi"
-      },
-      "timestamp": "2026-11-15T15:20:04.281Z"
+      "timestamp": "2026-11-20T08:27:10.639Z"
     },
     {
       "id": "log_1794755945246_g5d3",
@@ -2256,249 +889,9 @@
         "region": "Andijon viloyati"
       },
       "timestamp": "2026-11-15T15:13:21.930Z"
-    },
-    {
-      "id": "log_1794644572481_0j4j",
-      "actorUid": "user_tg_8832599080",
-      "actorName": "Jasurbek O'rmonov (@jasurdost)",
-      "actorRole": "super_admin",
-      "action": "application_reject",
-      "targetCollection": "registration_applications",
-      "targetId": "app_1794568951160_156l",
-      "details": {
-        "applicant": "Test Student",
-        "role": "ambassador",
-        "adminNote": "Talablarga mos kelmadi"
-      },
-      "timestamp": "2026-11-14T08:22:52.481Z"
-    },
-    {
-      "id": "log_1794568977115_dy31",
-      "actorUid": "user_tg_8832599080",
-      "actorName": "@jasurdost",
-      "actorRole": "super_admin",
-      "action": "media_approved",
-      "targetCollection": "media_submissions",
-      "targetId": "media_1794568951139_5s00",
-      "details": {
-        "awardedCoins": 180,
-        "category": "tree_planting"
-      },
-      "timestamp": "2026-11-13T11:22:57.115Z"
-    },
-    {
-      "id": "log_1794568951162_jstd",
-      "actorUid": "user_web_1794568950988",
-      "actorName": "Test Student",
-      "actorRole": "student",
-      "action": "submit_registration_application",
-      "targetCollection": "registration_applications",
-      "targetId": "app_1794568951160_156l",
-      "details": {
-        "requestedRole": "ambassador",
-        "school": "17-maktab",
-        "region": "Toshkent shahri"
-      },
-      "timestamp": "2026-11-13T11:22:31.162Z"
-    },
-    {
-      "id": "log_1794568950990_zplg",
-      "actorUid": "user_web_1794568950988",
-      "actorName": "Test Student",
-      "actorRole": "student",
-      "action": "user_registered",
-      "targetCollection": "users",
-      "targetId": "user_web_1794568950988",
-      "details": {
-        "email": "test_stu_1794568950976@example.uz",
-        "schoolName": "17-maktab",
-        "region": "Toshkent shahri"
-      },
-      "timestamp": "2026-11-13T11:22:30.990Z"
-    },
-    {
-      "id": "log_001",
-      "actorUid": "user_super_admin_01",
-      "actorName": "Diyorbek O'rmonov (Super Admin)",
-      "actorRole": "super_admin",
-      "action": "approve_school",
-      "targetCollection": "schools",
-      "targetId": "school_tashkent_17",
-      "details": {
-        "schoolName": "Toshkent sh. 17-sonli ixtisoslashtirilgan maktab",
-        "verified": true
-      },
-      "timestamp": "2026-11-06T08:30:00Z"
-    },
-    {
-      "id": "log_002",
-      "actorUid": "user_moderator_01",
-      "actorName": "Shahnoza Karimova",
-      "actorRole": "moderator",
-      "action": "resolve_report",
-      "targetCollection": "reports",
-      "targetId": "rep_004",
-      "details": {
-        "rewardGiven": 250,
-        "location": "Buxoro shahri"
-      },
-      "timestamp": "2026-11-05T14:20:00Z"
     }
   ],
   "notifications": [
-    {
-      "id": "notif_1794756096698_w78",
-      "userId": "user_tg_8832599080",
-      "title": "🏆 Noyabr 2026 TOP-1 Eko-Elchi mukofoti!",
-      "message": "Shayxontohur tumani bo'yicha #1 o'rin uchun +500 EcoCoin taqdim etildi.",
-      "type": "award",
-      "read": false,
-      "createdAt": "2026-11-15T15:21:36.698Z"
-    },
-    {
-      "id": "notif_1794756096676",
-      "userId": "user_smoke_student_1794756096412",
-      "title": "Maktab Eko-Elchisi lavozimi tasdiqlandi",
-      "message": "Toshkent sh. 17-sonli ixtisoslashtirilgan maktab bo'yicha arizangiz Super Admin tomonidan tasdiqlandi.",
-      "type": "role",
-      "read": false,
-      "createdAt": "2026-11-15T15:21:36.674Z"
-    },
-    {
-      "id": "notif_1794756096655_wz7q",
-      "userId": "user_school_admin_1794755945183_oe12",
-      "title": "Yangi Maktab Eko-Elchisi arizasi",
-      "message": "Ariza Smoke Nomzod 1794756096412 (Toshkent sh. 17-sonli ixtisoslashtirilgan maktab) lavozimga ariza yubordi.",
-      "type": "role",
-      "read": false,
-      "createdAt": "2026-11-15T15:21:36.655Z"
-    },
-    {
-      "id": "notif_1794756096644_sbw",
-      "userId": "user_ambassador_1794755945210_hq8u",
-      "title": "Siz Eko-Elchi etib tayinlandingiz!",
-      "message": "Smoke Maktab Sardori sizni Toshkent sh. 17-sonli ixtisoslashtirilgan maktab Eko-Elchisi etib tayinladi.",
-      "type": "role",
-      "read": false,
-      "createdAt": "2026-11-15T15:21:36.644Z"
-    },
-    {
-      "id": "notif_1794756096626_q0a",
-      "userId": "user_school_admin_1794755945183_oe12",
-      "title": "Maktab Sardori etib tayinlandingiz!",
-      "message": "Jasurbek O'rmonov (@jasurdost) sizni Toshkent sh. 17-sonli ixtisoslashtirilgan maktab Maktab Sardori etib tayinladi.",
-      "type": "role",
-      "read": false,
-      "createdAt": "2026-11-15T15:21:36.626Z"
-    },
-    {
-      "id": "notif_1794756096617_mjm",
-      "userId": "user_district_coordinator_1794755945134_67uo",
-      "title": "Tuman Koordinatori etib saylandingiz!",
-      "message": "Jasurbek O'rmonov (@jasurdost) sizni Toshkent shahri, Chilonzor tumani Tuman Koordinatori etib sayladi.",
-      "type": "role",
-      "read": false,
-      "createdAt": "2026-11-15T15:21:36.617Z"
-    },
-    {
-      "id": "notif_1794756039685",
-      "userId": "user_smoke_student_1794756026135",
-      "title": "Maktab Eko-Elchisi lavozimi tasdiqlandi",
-      "message": "Toshkent sh. 17-sonli ixtisoslashtirilgan maktab bo'yicha arizangiz Super Admin tomonidan tasdiqlandi.",
-      "type": "role",
-      "read": false,
-      "createdAt": "2026-11-15T15:20:39.684Z"
-    },
-    {
-      "id": "notif_1794756026439",
-      "userId": "user_smoke_student_1794756026135",
-      "title": "Maktab Eko-Elchisi lavozimi tasdiqlandi",
-      "message": "Toshkent sh. 17-sonli ixtisoslashtirilgan maktab bo'yicha arizangiz Super Admin tomonidan tasdiqlandi.",
-      "type": "role",
-      "read": false,
-      "createdAt": "2026-11-15T15:20:26.436Z"
-    },
-    {
-      "id": "notif_1794756026415_yjzu",
-      "userId": "user_school_admin_1794755945183_oe12",
-      "title": "Yangi Maktab Eko-Elchisi arizasi",
-      "message": "Ariza Smoke Nomzod 1794756026135 (Toshkent sh. 17-sonli ixtisoslashtirilgan maktab) lavozimga ariza yubordi.",
-      "type": "role",
-      "read": false,
-      "createdAt": "2026-11-15T15:20:26.415Z"
-    },
-    {
-      "id": "notif_1794756026402_i5o",
-      "userId": "user_ambassador_1794755945210_hq8u",
-      "title": "Siz Eko-Elchi etib tayinlandingiz!",
-      "message": "Smoke Maktab Sardori sizni Toshkent sh. 17-sonli ixtisoslashtirilgan maktab Eko-Elchisi etib tayinladi.",
-      "type": "role",
-      "read": false,
-      "createdAt": "2026-11-15T15:20:26.401Z"
-    },
-    {
-      "id": "notif_1794756026379_9r1",
-      "userId": "user_school_admin_1794755945183_oe12",
-      "title": "Maktab Sardori etib tayinlandingiz!",
-      "message": "Jasurbek O'rmonov (@jasurdost) sizni Toshkent sh. 17-sonli ixtisoslashtirilgan maktab Maktab Sardori etib tayinladi.",
-      "type": "role",
-      "read": false,
-      "createdAt": "2026-11-15T15:20:26.379Z"
-    },
-    {
-      "id": "notif_1794756026365_vx3",
-      "userId": "user_district_coordinator_1794755945134_67uo",
-      "title": "Tuman Koordinatori etib saylandingiz!",
-      "message": "Jasurbek O'rmonov (@jasurdost) sizni Toshkent shahri, Chilonzor tumani Tuman Koordinatori etib sayladi.",
-      "type": "role",
-      "read": false,
-      "createdAt": "2026-11-15T15:20:26.365Z"
-    },
-    {
-      "id": "notif_1794756004279",
-      "userId": "user_smoke_student_01",
-      "title": "Ariza rad etildi",
-      "message": "Super Admin tomonidan rad etildi",
-      "type": "role",
-      "read": false,
-      "createdAt": "2026-11-15T15:20:04.279Z"
-    },
-    {
-      "id": "notif_1794755945245_30nt",
-      "userId": "user_school_admin_1794755945183_oe12",
-      "title": "Yangi Maktab Eko-Elchisi arizasi",
-      "message": "Ariza Smoke Nomzod (Toshkent sh. 17-sonli ixtisoslashtirilgan maktab) lavozimga ariza yubordi.",
-      "type": "role",
-      "read": false,
-      "createdAt": "2026-11-15T15:19:05.245Z"
-    },
-    {
-      "id": "notif_1794755945211_uw3",
-      "userId": "user_ambassador_1794755945210_hq8u",
-      "title": "Siz Eko-Elchi etib tayinlandingiz!",
-      "message": "Jasurbek O'rmonov (@jasurdost) sizni Toshkent sh. 17-sonli ixtisoslashtirilgan maktab Eko-Elchisi etib tayinladi.",
-      "type": "role",
-      "read": false,
-      "createdAt": "2026-11-15T15:19:05.211Z"
-    },
-    {
-      "id": "notif_1794755945185_9hv",
-      "userId": "user_school_admin_1794755945183_oe12",
-      "title": "Maktab Sardori etib tayinlandingiz!",
-      "message": "Jasurbek O'rmonov (@jasurdost) sizni Toshkent sh. 17-sonli ixtisoslashtirilgan maktab Maktab Sardori etib tayinladi.",
-      "type": "role",
-      "read": false,
-      "createdAt": "2026-11-15T15:19:05.185Z"
-    },
-    {
-      "id": "notif_1794755945135_4ih",
-      "userId": "user_district_coordinator_1794755945134_67uo",
-      "title": "Tuman Koordinatori etib saylandingiz!",
-      "message": "Jasurbek O'rmonov (@jasurdost) sizni Toshkent shahri, Chilonzor tumani Tuman Koordinatori etib sayladi.",
-      "type": "role",
-      "read": false,
-      "createdAt": "2026-11-15T15:19:05.135Z"
-    },
     {
       "id": "notif_1794755822427",
       "userId": "user_tg_8608733163",
@@ -2507,24 +900,6 @@
       "type": "role",
       "read": false,
       "createdAt": "2026-11-15T15:17:02.427Z"
-    },
-    {
-      "id": "notif_1794644572477",
-      "userId": "user_web_1794568950988",
-      "title": "Ariza rad etildi",
-      "message": "Talablarga mos kelmadi",
-      "type": "role",
-      "read": false,
-      "createdAt": "2026-11-14T08:22:52.477Z"
-    },
-    {
-      "id": "notif_1794568977114",
-      "userId": "user_web_1794568950988",
-      "title": "Eko-media tasdiqlandi",
-      "message": "tree_planting faoliyatingiz tasdiqlandi: +180 EcoCoin.",
-      "type": "media",
-      "read": false,
-      "createdAt": "2026-11-13T11:22:57.113Z"
     }
   ],
   "mapLayers": [
@@ -2616,118 +991,203 @@
       "title": "@Ecoheros_bot Telegram botda yangi tezkor imkoniyatlar!",
       "content": "Endi barcha o'quvchilar bot orqali ko'chat ekish hisoboti yuborishi, kunlik EcoCoin olishi va yutgan sovg'alarining QR vaucherlarini tekshirishi mumkin.",
       "category": "bot_news",
-      "imageUrl": "/assets/schools/tashkent_campus.jpg",
+      "imageUrl": "/assets/schools/eco_courtyard.jpg",
       "ctaText": "Botni ochish (@Ecoheros_bot)",
       "ctaUrl": "https://t.me/Ecoheros_bot",
-      "authorUid": "user_super_admin_01",
+      "authorUid": "user_tg_8832599080",
       "authorName": "EcoHero Markaziy Jamoasi",
       "authorRole": "super_admin",
-      "schoolId": "school_tashkent_17",
-      "schoolName": "Toshkent sh. 17-sonli ixtisoslashtirilgan maktab",
-      "region": "Toshkent shahri",
-      "district": "Shayxontohur tumani",
       "isPinned": true,
       "status": "active",
       "createdAt": "2026-11-15T11:18:05.273Z"
-    },
-    {
-      "id": "post_seed_channel_02",
-      "title": "Oy oxirida Tuman bo‘yicha TOP-3 Maktab va TOP-3 Eko-Elchi taqdirlanadi!",
-      "content": "Har oy yakunida tumandagi eng faol 3 ta maktab va eng faol 3 nafar Eko-Elchi maxsus sertifikat hamda +1000 EcoCoin bilan mukofotlanadi.",
-      "category": "channel_ad",
-      "imageUrl": "/assets/schools/eco_courtyard.jpg",
-      "ctaText": "Rasmiy kanalga obuna bo‘lish",
-      "ctaUrl": "https://t.me/Ecoheros_bot",
-      "authorUid": "user_school_admin_17",
-      "authorName": "17-Maktab Sardori",
-      "authorRole": "school_admin",
-      "schoolId": "school_tashkent_17",
-      "schoolName": "Toshkent sh. 17-sonli ixtisoslashtirilgan maktab",
-      "region": "Toshkent shahri",
-      "district": "Shayxontohur tumani",
-      "isPinned": false,
-      "status": "active",
-      "createdAt": "2026-11-15T01:18:05.273Z"
-    },
-    {
-      "id": "post_seed_web_03",
-      "title": "Yashil Makon va Ekologiya Vazirligi hamkorlik portali",
-      "content": "Maktabingiz hududini ko'kalamzorlashtirish uchun bepul ko'chat olish bo'yicha rasmiy yo'riqnoma va foydali ekologik portal bilan tanishing.",
-      "category": "website",
-      "imageUrl": "/assets/schools/samarkand_campus.jpg",
-      "ctaText": "Saytga o‘tish",
-      "ctaUrl": "https://eco.gov.uz",
-      "authorUid": "user_school_admin_17",
-      "authorName": "Maktab Ekologiya Kengashi",
-      "authorRole": "school_admin",
-      "schoolId": "school_tashkent_17",
-      "schoolName": "Toshkent sh. 17-sonli ixtisoslashtirilgan maktab",
-      "region": "Toshkent shahri",
-      "district": "Shayxontohur tumani",
-      "isPinned": false,
-      "status": "active",
-      "createdAt": "2026-11-14T11:18:05.273Z"
     }
   ],
   "monthlyAwards": [],
-  "chatMessages": [
-    {
-      "id": "msg_seed_amb_01",
-      "channelId": "amb_group:school_tashkent_17",
-      "scope": "school_ambassadors",
-      "messageKind": "bot_notice",
-      "senderUid": "user_school_admin_17",
-      "senderName": "Sardorbek Tursunov",
-      "senderRole": "school_admin",
-      "schoolId": "school_tashkent_17",
-      "schoolName": "Toshkent sh. 17-sonli ixtisoslashtirilgan maktab",
-      "region": "Toshkent shahri",
-      "district": "Shayxontohur tumani",
-      "text": "Assalomu alaykum, Eko-Elchilar! Bugun soat 15:00 da maktab bog'idagi ko'chatlarni sug'orish aksiyasini boshlaymiz. @Ecoheros_bot orqali fotohisobot yuklashni unutmang.",
-      "viaBot": true,
-      "botHandle": "@Ecoheros_bot",
-      "createdAt": "2026-11-16T04:22:59.606Z"
-    },
-    {
-      "id": "msg_seed_dist_01",
-      "channelId": "dist_group:shayxontohur_tumani",
-      "scope": "district_captains",
-      "messageKind": "command",
-      "senderUid": "user_district_shayxontohur",
-      "senderName": "Azizbek Rahimov",
-      "senderRole": "district_coordinator",
-      "region": "Toshkent shahri",
-      "district": "Shayxontohur tumani",
-      "text": "Barcha Maktab Sardorlariga topshiriq: Shu hafta oxirigacha har bir maktab kamida 30 nafar yangi o'quvchini @Ecoheros_bot ga jalb qilishi va Eko-Elchilar ro'yxatini yangilashi lozim.",
-      "viaBot": false,
-      "createdAt": "2026-11-16T06:22:59.606Z"
-    },
-    {
-      "id": "msg_seed_reg_01",
-      "channelId": "reg_group:toshkent_shahri",
-      "scope": "regional_coordinators",
-      "messageKind": "idea",
-      "senderUid": "user_regional_tashkent",
-      "senderName": "Nodira Mirzayeva",
-      "senderRole": "regional_coordinator",
-      "region": "Toshkent shahri",
-      "district": "Shayxontohur tumani",
-      "text": "Tuman koordinatorlari diqqatiga! TOP-3 foydalanuvchi yig'ish poygasida tumaningiz maktablari o'rtasida haftalik yashil estafeta o'tkazish taklifini muhokama qilaylik.",
-      "viaBot": false,
-      "createdAt": "2026-11-16T08:22:59.606Z"
-    }
-  ],
+  "chatMessages": [],
   "chatPermissions": [],
   "adRewardClaims": [],
+  "ecoMissions": [
+    {
+      "id": "mission_quiz_plastic_01",
+      "type": "quiz",
+      "title": "Plastik va Chiqindilarni Saralash Testi (5 savol)",
+      "description": "5 ta savolga javob bering. Yakunda kamida 70% natija ko'rsatsangiz +100 EcoCoin olasiz!",
+      "rewardCoins": 100,
+      "passingPercent": 70,
+      "status": "active",
+      "category": "quiz",
+      "questions": [
+        {
+          "id": "q_pl_1",
+          "question": "Tabiatda oddiy plastik butilka to'liq chirib yo'q bo'lishi uchun o'rtacha necha yil kerak bo'ladi?",
+          "options": [
+            "5 - 10 yil",
+            "50 yil",
+            "400 - 450 yil",
+            "1 yil"
+          ],
+          "correctIndex": 2,
+          "explanation": "Plastik butilkalar tabiatda 400–450 yilgacha saqlanib qoladi, shu sababli ularni saralab qayta ishlash juda muhim."
+        },
+        {
+          "id": "q_pl_2",
+          "question": "Qayta ishlash uchun chiqindilarni qaysi rangdagi qutilarga saralash tavsiya etiladi?",
+          "options": [
+            "Barchasini bitta qora qopga solish",
+            "Plastik, qog‘oz, shisha va organik chiqindilarni alohida qutilarga",
+            "Faqat metallarni ajratish",
+            "Suv ariqlariga tashlash"
+          ],
+          "correctIndex": 1,
+          "explanation": "Chiqindilarni alohida turlarga ajratish qayta ishlash samaradorligini 3 baravar oshiradi."
+        },
+        {
+          "id": "q_pl_3",
+          "question": "1 tonna makulatura (qog‘oz) qayta ishlansa, taxminan nechta katta daraxt saqlab qolinadi?",
+          "options": [
+            "1 ta daraxt",
+            "5 ta daraxt",
+            "17 ta daraxt",
+            "100 ta daraxt"
+          ],
+          "correctIndex": 2,
+          "explanation": "1 tonna qog‘ozni qayta ishlash 17 ta katta daraxt va 26 000 litr suvni tejaydi."
+        },
+        {
+          "id": "q_pl_4",
+          "question": "Qaysi chiqindi turi tuproq va yerosti suvlarini og‘ir metallar bilan eng ko‘p zaharlaydi?",
+          "options": [
+            "Barg xazoni",
+            "Ishlatilgan batareykalar",
+            "Karton quti",
+            "Yog‘och qipig‘i"
+          ],
+          "correctIndex": 1,
+          "explanation": "Bitta kichik batareyka 20 kvadrat metr tuproq yoki 400 litr suvni og‘ir metallar bilan ifloslantiradi."
+        },
+        {
+          "id": "q_pl_5",
+          "question": "Plastik paketlardan foydalanishni kamaytirishning eng samarali usuli qaysi?",
+          "options": [
+            "Har safar yangi yupqa paket olish",
+            "Paketni yoqib yuborish",
+            "Ko‘p martalik mato xalta (eko-sumka) ishlatish",
+            "Paketni daryoga tashlash"
+          ],
+          "correctIndex": 2,
+          "explanation": "Bitta eko-sumka yiliga o‘rtacha 300–500 ta bir martalik plastik paket o‘rnini bosadi."
+        }
+      ],
+      "createdAt": "2026-11-17T08:19:07.689Z",
+      "createdByName": "ECO HERO Admin"
+    },
+    {
+      "id": "mission_quiz_yashil_02",
+      "type": "quiz",
+      "title": "Yashil Makon va Suvni Asrash Vikorinasi (5 savol)",
+      "description": "Tabiat, daraxt ekish va suv resurslari bo'yicha 5 ta test. O'tish bali: 70%.",
+      "rewardCoins": 120,
+      "passingPercent": 70,
+      "status": "active",
+      "category": "quiz",
+      "questions": [
+        {
+          "id": "q_ym_1",
+          "question": "Yangi ekilgan ko‘chatlarni kunning qaysi vaqtida sug‘orish eng foydali?",
+          "options": [
+            "Tush payti quyosh tik kelganda",
+            "Ertalab barvaqt yoki kechki salqinda",
+            "Faqat yomg‘ir yog‘ganda",
+            "Yarim tunda issiq suv bilan"
+          ],
+          "correctIndex": 1,
+          "explanation": "Ertalab yoki kechqurun sug‘orilganda suv bug‘lanib ketmaydi va ildizga to‘liq yetib boradi."
+        },
+        {
+          "id": "q_ym_2",
+          "question": "Bitta katta sog‘lom daraxt bir yilda o‘rtacha qancha karbonat angidrid (CO2) gazini yutadi?",
+          "options": [
+            "1 kg",
+            "22 kg gacha",
+            "500 gram",
+            "Yutmaydi"
+          ],
+          "correctIndex": 1,
+          "explanation": "Bitta yetuk daraxt yiliga ~22 kg CO2 yutib, 2 kishiga yetarli kislorod ishlab chiqaradi."
+        },
+        {
+          "id": "q_ym_3",
+          "question": "O‘zbekistonda suvni eng tejamkor yetkazib beradigan sug‘orish usuli qaysi?",
+          "options": [
+            "Tomchilatib sug‘orish",
+            "Ariqdan to‘liq oqizib yuborish",
+            "Yo‘llarga sepish",
+            "Chelaklab peshinda quyish"
+          ],
+          "correctIndex": 0,
+          "explanation": "Tomchilatib sug‘orish suv sarfini 50–65% gacha tejaydi va daraxt o‘sishini tezlashtiradi."
+        },
+        {
+          "id": "q_ym_4",
+          "question": "Kuzda to‘kilgan daraxt barglarini (xazonni) nima qilish to‘g‘ri hisoblanadi?",
+          "options": [
+            "Kuchli olovda yoqib yuborish",
+            "Kompost (tabiiy o‘g‘it) tayyorlash",
+            "Plastik bilan aralashtirish",
+            "Ariqqa tashlab ko‘mish"
+          ],
+          "correctIndex": 1,
+          "explanation": "Barglarni yoqish zaharli tutun chiqaradi; ulardan kompost tayyorlansa tuproq unumdorligini oshiradi."
+        },
+        {
+          "id": "q_ym_5",
+          "question": "Maktab hududida havo haroratini yozda 3–5°C ga pasaytirish uchun eng yaxshi chora nima?",
+          "options": [
+            "Ko‘proq asfalt yotqizish",
+            "Soya beruvchi daraxtlar va yashil hudud barpo etish",
+            "Derazalarni yopib qo‘yish",
+            "Plastik soya qo‘yish"
+          ],
+          "correctIndex": 1,
+          "explanation": "Daraxt soyasi va transpiratsiya tabiiy konditsioner vazifasini bajaradi."
+        }
+      ],
+      "createdAt": "2026-11-17T20:19:07.689Z",
+      "createdByName": "ECO HERO Admin"
+    },
+    {
+      "id": "mission_channel_official_01",
+      "type": "channel_subscribe",
+      "title": "ECO HERO Rasmiy Kanaliga Obuna",
+      "description": "Rasmiy Telegram kanalimizga obuna bo'ling va tekshiruvdan so'ng 100 EcoCoin oling!",
+      "rewardCoins": 100,
+      "status": "active",
+      "category": "telegram",
+      "channelUsername": "@Ecoheros_uz",
+      "channelUrl": "https://t.me/Ecoheros_bot",
+      "createdAt": "2026-11-18T08:19:07.689Z",
+      "createdByName": "ECO HERO Admin"
+    },
+    {
+      "id": "mission_task_trees_10",
+      "type": "custom_task",
+      "title": "10 ta ko'chat eking — 500 EcoCoin oling!",
+      "description": "Maktab hovlisi yoki mahallangizda 10 ta daraxt ko'chati ekib, rasm dalilini yuklang. Admin tasdiqlagach mukofot beriladi.",
+      "rewardCoins": 500,
+      "status": "active",
+      "category": "greening",
+      "requiresProof": true,
+      "proofType": "image",
+      "createdAt": "2026-11-19T08:19:07.689Z",
+      "createdByName": "ECO HERO Admin"
+    }
+  ],
+  "missionSubmissions": [],
+  "missionCompletions": {},
   "registrationSessions": {
     "7269485983": {
       "step": "PHONE",
       "updatedAt": 1794567261053
-    },
-    "9999990001": {
-      "mode": "REGISTER",
-      "step": "PHONE",
-      "updatedAt": 1794644265736
     },
     "7606221120": {
       "mode": "REGISTER",
@@ -2745,7 +1205,8 @@
   "dailyQuizClaims": {},
   "meta": {
     "version": 1,
-    "updatedAt": "2026-11-16T12:22:14.108Z",
-    "lastTelegramUpdateId": 991795124
+    "updatedAt": "2026-11-20T08:27:10.668Z",
+    "lastTelegramUpdateId": 991795124,
+    "purgedDemoDataV2": true
   }
 }

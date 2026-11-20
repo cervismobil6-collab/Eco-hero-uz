@@ -31,19 +31,22 @@ import {
   Globe,
   Bot,
   Send,
+  Instagram,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import QRCode from 'qrcode';
 import { useEco } from '../context/EcoContext';
-import { EcoAd, ShopItem } from '../types/eco';
+import { EcoAd, ShopItem, ShopRedemptionGate } from '../types/eco';
 import { EcoAdBanner } from '../components/EcoAdBanner';
 import { AdPlayerModal } from '../components/AdPlayerModal';
+import { GiftGateConfigEditor } from '../components/shop/GiftGateConfigEditor';
 import { resolveMediaUrl, openAdTargetUrl } from '../utils/api';
 
 export const EcoShopPage: React.FC = () => {
   const {
     user,
     shopItems,
+    verifyGiftSubscriptions,
     redeemShopItem,
     shopOrders,
     updateShopItem,
@@ -95,6 +98,14 @@ export const EcoShopPage: React.FC = () => {
   const [giftImageUrl, setGiftImageUrl] = useState(
     'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&q=80&w=600'
   );
+  const [giftGate, setGiftGate] = useState<ShopRedemptionGate>({
+    mode: 'none',
+    adId: 'auto',
+    requiredSubscriptions: [],
+  });
+  const [subscriptionGateItem, setSubscriptionGateItem] = useState<ShopItem | null>(null);
+  const [visitedTargetIds, setVisitedTargetIds] = useState<string[]>([]);
+  const [verifyingSubscription, setVerifyingSubscription] = useState(false);
 
   // Super Admin quick ad create/edit modal inside shop
   const [showShopAdModal, setShowShopAdModal] = useState(false);
@@ -221,6 +232,7 @@ export const EcoShopPage: React.FC = () => {
     setGiftCategory('accessories');
     setGiftSponsor('ECO HERO');
     setGiftImageUrl('https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&q=80&w=600');
+    setGiftGate({ mode: 'none', adId: 'auto', requiredSubscriptions: [] });
     setShowCreateModal(true);
   };
 
@@ -233,6 +245,15 @@ export const EcoShopPage: React.FC = () => {
     setGiftCategory(item.category);
     setGiftSponsor(item.sponsorName || 'ECO HERO');
     setGiftImageUrl(item.imageUrl || '');
+    setGiftGate(
+      item.redemptionGate
+        ? {
+            mode: item.redemptionGate.mode || 'none',
+            adId: item.redemptionGate.adId || 'auto',
+            requiredSubscriptions: item.redemptionGate.requiredSubscriptions || [],
+          }
+        : { mode: 'none', adId: 'auto', requiredSubscriptions: [] }
+    );
     setShowCreateModal(true);
   };
 
@@ -251,6 +272,7 @@ export const EcoShopPage: React.FC = () => {
         imageUrl:
           giftImageUrl.trim() ||
           'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&q=80&w=600',
+        redemptionGate: giftGate,
       };
       if (editingItem) {
         const ok = await updateShopItem(editingItem.id, payload);
@@ -379,21 +401,29 @@ export const EcoShopPage: React.FC = () => {
     showNotification('Reklama muvaffaqiyatli qo‘shildi!', 'success');
   };
 
-  const handleConfirmRedeem = async () => {
-    if (!activeModalItem || savingLoading) return;
-    setSavingLoading(true);
-    try {
-      const result = await redeemShopItem(activeModalItem);
-      if (result.success && result.voucherCode) {
-        const wonVoucher = {
-          code: result.voucherCode,
-          title: activeModalItem.title,
-          itemImageUrl: result.itemImageUrl || activeModalItem.imageUrl,
-          sponsorName: activeModalItem.sponsorName,
-        };
-        setActiveModalItem(null);
+  const executeRedeemWithGate = async (item: ShopItem, confirmedSubscriptionIds: string[]) => {
+    const result = await redeemShopItem(item, { confirmedSubscriptionIds });
+    if (result.success && result.voucherCode) {
+      const wonVoucher = {
+        code: result.voucherCode,
+        title: item.title,
+        itemImageUrl: result.itemImageUrl || item.imageUrl,
+        sponsorName: item.sponsorName,
+      };
+      setActiveModalItem(null);
+      setSubscriptionGateItem(null);
 
+      const gate = item.redemptionGate;
+      const mode = gate?.mode || 'none';
+      const shouldShowAd = mode === 'ad' || mode === 'ad_and_subscription';
+
+      if (shouldShowAd) {
+        const specificAd =
+          gate?.adId && gate.adId !== 'auto'
+            ? ecoAds.find(a => a.id === gate.adId) || null
+            : null;
         const adToPlay =
+          specificAd ||
           activePostPurchaseAds[0] ||
           ecoAds.find(a => a.status === 'active') ||
           null;
@@ -402,16 +432,54 @@ export const EcoShopPage: React.FC = () => {
           setPendingVoucher(wonVoucher);
           setPostPurchaseAd(adToPlay);
           triggerHaptic('success');
-        } else {
-          setVoucherResult(wonVoucher);
-          triggerConfetti();
-          triggerHaptic('success');
+          return;
         }
-      } else {
-        triggerHaptic('error');
       }
+
+      setVoucherResult(wonVoucher);
+      triggerConfetti();
+      triggerHaptic('success');
+    } else {
+      triggerHaptic('error');
+    }
+  };
+
+  const handleConfirmRedeem = async () => {
+    if (!activeModalItem || savingLoading) return;
+    const gate = activeModalItem.redemptionGate;
+    const mode = gate?.mode || 'none';
+    const requiredSubs = gate?.requiredSubscriptions || [];
+
+    if ((mode === 'subscription' || mode === 'ad_and_subscription') && requiredSubs.length > 0) {
+      setVisitedTargetIds([]);
+      setSubscriptionGateItem(activeModalItem);
+      setActiveModalItem(null);
+      return;
+    }
+
+    setSavingLoading(true);
+    try {
+      await executeRedeemWithGate(activeModalItem, []);
     } finally {
       setSavingLoading(false);
+    }
+  };
+
+  const handleVerifyAndCompleteSubscriptionGate = async () => {
+    if (!subscriptionGateItem || verifyingSubscription) return;
+    setVerifyingSubscription(true);
+    try {
+      const verifyRes = await verifyGiftSubscriptions(subscriptionGateItem.id, visitedTargetIds);
+      if (!verifyRes.success) {
+        triggerHaptic('error');
+        return;
+      }
+      await executeRedeemWithGate(
+        subscriptionGateItem,
+        verifyRes.verifiedTargetIds || visitedTargetIds
+      );
+    } finally {
+      setVerifyingSubscription(false);
     }
   };
 
@@ -849,6 +917,15 @@ export const EcoShopPage: React.FC = () => {
                             <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium line-clamp-2 leading-relaxed">
                               {item.description}
                             </p>
+                            {item.redemptionGate?.mode && item.redemptionGate.mode !== 'none' && (
+                              <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 truncate">
+                                {item.redemptionGate.mode === 'ad'
+                                  ? 'Shart · Reklama bilan'
+                                  : item.redemptionGate.mode === 'subscription'
+                                  ? `Shart · Majburiy obuna (${item.redemptionGate.requiredSubscriptions?.length || 0})`
+                                  : `Shart · Reklama va obuna (${item.redemptionGate.requiredSubscriptions?.length || 0})`}
+                              </p>
+                            )}
                           </div>
 
                           <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-white/5">
@@ -1036,7 +1113,13 @@ export const EcoShopPage: React.FC = () => {
                   <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">{activeModalItem.sponsorName}</span>
                   <h3 className="text-3xl font-black uppercase tracking-tighter">{activeModalItem.title}</h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
-                    Ushbu sovg'ani olish uchun balansingizdan tangalar yechiladi va maxsus vaucher kodi taqdim etiladi.
+                    {activeModalItem.redemptionGate?.mode === 'subscription'
+                      ? "Ushbu sovg'a promokodini olish uchun belgilangan kanal yoki sahifalarga obuna bo'lish talab etiladi."
+                      : activeModalItem.redemptionGate?.mode === 'ad'
+                      ? "Ushbu sovg'ani olishda qisqa homiy reklamasi ko'rsatiladi va so'ng promokod beriladi."
+                      : activeModalItem.redemptionGate?.mode === 'ad_and_subscription'
+                      ? "Ushbu sovg'a uchun obuna shartini bajarib, homiy reklamasini ko'rgach promokod beriladi."
+                      : "Ushbu sovg'ani olish uchun balansingizdan tangalar yechiladi va to'g'ridan-to'g'ri vaucher kodi beriladi."}
                   </p>
                 </div>
 
@@ -1190,10 +1273,130 @@ export const EcoShopPage: React.FC = () => {
         />
       )}
 
+      {/* Mandatory Subscription Gate Modal (Before Deducting Coins / Showing Promo Code) */}
+      <AnimatePresence>
+        {subscriptionGateItem && (
+          <div className="fixed inset-0 z-[105] flex items-center justify-center p-4 overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => !verifyingSubscription && setSubscriptionGateItem(null)}
+              className="absolute inset-0 bg-black/70 backdrop-blur-xl"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.94, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: 16 }}
+              className="relative w-full max-w-lg bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-2xl space-y-5 my-6"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                    Majburiy obuna sharti
+                  </span>
+                  <h3 className="text-xl font-black tracking-tight text-slate-900 dark:text-white">
+                    {subscriptionGateItem.title}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Promokodni ochish uchun quyidagi manzillarga o&apos;tib obuna bo&apos;ling va so&apos;ng tekshirish tugmasini bosing.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={verifyingSubscription}
+                  onClick={() => setSubscriptionGateItem(null)}
+                  className="p-2 text-slate-400 hover:text-slate-600 rounded-xl cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-2.5">
+                {(subscriptionGateItem.redemptionGate?.requiredSubscriptions || []).map(target => {
+                  const visited = visitedTargetIds.includes(target.id);
+                  const platformIcon =
+                    target.platform === 'telegram_channel' ? (
+                      <Send className="w-4 h-4 text-sky-500 shrink-0" />
+                    ) : target.platform === 'telegram_bot' ? (
+                      <Bot className="w-4 h-4 text-emerald-500 shrink-0" />
+                    ) : target.platform === 'instagram' ? (
+                      <Instagram className="w-4 h-4 text-pink-500 shrink-0" />
+                    ) : (
+                      <Globe className="w-4 h-4 text-amber-500 shrink-0" />
+                    );
+                  const platformLabel =
+                    target.platform === 'telegram_channel'
+                      ? 'Telegram kanal'
+                      : target.platform === 'telegram_bot'
+                      ? 'Telegram bot'
+                      : target.platform === 'instagram'
+                      ? 'Instagram'
+                      : 'Veb-sayt';
+
+                  return (
+                    <div
+                      key={target.id}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        {platformIcon}
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                            {target.title}
+                          </div>
+                          <div className="text-[11px] text-slate-400 truncate">
+                            {platformLabel} · {target.handle || target.url}
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          openAdTargetUrl(target.url);
+                          setVisitedTargetIds(prev => (prev.includes(target.id) ? prev : [...prev, target.id]));
+                        }}
+                        className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shrink-0 transition-colors ${
+                          visited
+                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                            : 'bg-sky-600 text-white hover:bg-sky-500'
+                        }`}
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span>{visited ? "O'tildi" : "Obuna bo'lish"}</span>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  disabled={verifyingSubscription}
+                  onClick={() => setSubscriptionGateItem(null)}
+                  className="flex-1 py-3.5 bg-slate-100 dark:bg-white/5 rounded-2xl text-xs font-bold text-slate-600 dark:text-slate-300 cursor-pointer"
+                >
+                  Bekor qilish
+                </button>
+                <button
+                  type="button"
+                  disabled={verifyingSubscription}
+                  onClick={handleVerifyAndCompleteSubscriptionGate}
+                  className="flex-[2] py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-xs font-bold cursor-pointer disabled:opacity-50"
+                >
+                  {verifyingSubscription ? 'Tekshirilmoqda...' : 'Obunani tekshirish & Olish'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Super Admin Create / Edit Gift Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-[120] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#0f172a] w-full max-w-md rounded-3xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 shadow-2xl">
+        <div className="fixed inset-0 z-[120] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-[#0f172a] w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 shadow-2xl my-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-black uppercase">
                 {editingItem ? "Sovg'ani Tahrirlash" : "Yangi Sovg'a Qo'shish"}
@@ -1289,6 +1492,11 @@ export const EcoShopPage: React.FC = () => {
                   className="mt-2 w-full px-4 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
                 />
               </details>
+              <GiftGateConfigEditor
+                gate={giftGate}
+                onChange={setGiftGate}
+                ecoAds={ecoAds}
+              />
               <button
                 type="submit"
                 disabled={savingLoading || uploadingGiftImg}

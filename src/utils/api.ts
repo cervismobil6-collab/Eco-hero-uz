@@ -168,6 +168,9 @@ export async function parseApiJson<T = any>(res: Response): Promise<T> {
   const raw = await res.text();
   const trimmed = raw.trim();
   if (!trimmed) {
+    if (res.status === 404 && !getApiBaseUrl()) {
+      throw new Error(STATIC_HOSTING_API_ERROR_MESSAGE);
+    }
     return {} as T;
   }
   if (/^<!doctype\s+html|^<html[\s>]/i.test(trimmed)) {
@@ -176,6 +179,11 @@ export async function parseApiJson<T = any>(res: Response): Promise<T> {
   try {
     return JSON.parse(trimmed) as T;
   } catch {
+    if (res.status === 404 && !getApiBaseUrl()) {
+      throw new Error(
+        "Backend API topilmadi (404). Bu domen (masalan Vercel) faqat frontendni ochyapti — Vercel Environment Variables bo'limiga VITE_API_BASE_URL (Eskiz yoki Render backend manzili) ni qo'shib qayta deploy qiling."
+      );
+    }
     throw new Error(`Serverdan noto'g'ri javob formati keldi (${res.status}).`);
   }
 }

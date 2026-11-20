@@ -133,9 +133,32 @@ app.use(
   })
 );
 
+const BACKEND_PUBLIC_URL = String(
+  process.env.BACKEND_PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || ''
+)
+  .trim()
+  .replace(/\/+$/, '');
+
+function isFrontendOnlyStaticHost(url?: string): boolean {
+  if (!url) return false;
+  try {
+    const h = new URL(url).hostname.toLowerCase();
+    return (
+      h.endsWith('.vercel.app') ||
+      h.endsWith('.web.app') ||
+      h.endsWith('.firebaseapp.com') ||
+      h.endsWith('.netlify.app') ||
+      h.endsWith('.pages.dev')
+    );
+  } catch {
+    return false;
+  }
+}
+
 // Auto-detect public 24/7 production HTTPS URL (Cloud Run, Render, Railway, VPS) from real requests
 app.use((req, _res, next) => {
   try {
+    if (PERMANENT_PRODUCTION_URL) return next();
     const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'http').split(',')[0].trim();
     const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
     if (proto === 'https' && host) {
@@ -157,15 +180,18 @@ app.use((req, _res, next) => {
   next();
 });
 
-// Global CORS Middleware (Firebase Hosting *.web.app / *.firebaseapp.com, Telegram WebView, Eskiz/cPanel + SSE)
+// Global CORS Middleware (Vercel *.vercel.app, Firebase Hosting *.web.app, Telegram WebView, Eskiz/cPanel + SSE)
 function isAllowedCorsOrigin(origin?: string): boolean {
   if (!origin) return false;
   try {
     const u = new URL(origin);
     const host = u.hostname.toLowerCase();
     if (
+      host.endsWith('.vercel.app') ||
       host.endsWith('.web.app') ||
       host.endsWith('.firebaseapp.com') ||
+      host.endsWith('.netlify.app') ||
+      host.endsWith('.pages.dev') ||
       host.endsWith('.telegram.org') ||
       host === 'telegram.org' ||
       host.endsWith('.trycloudflare.com') ||
@@ -174,9 +200,10 @@ function isAllowedCorsOrigin(origin?: string): boolean {
     ) {
       return true;
     }
-    if (PERMANENT_PRODUCTION_URL) {
+    const extraOrigins = [PERMANENT_PRODUCTION_URL, process.env.FRONTEND_URL, BACKEND_PUBLIC_URL].filter(Boolean);
+    for (const candidate of extraOrigins) {
       try {
-        if (new URL(PERMANENT_PRODUCTION_URL).origin === u.origin) return true;
+        if (new URL(String(candidate)).origin === u.origin) return true;
       } catch {}
     }
   } catch {
@@ -7090,6 +7117,9 @@ app.get('/api/analytics', (req: AuthenticatedRequest, res) => {
       totals: {
         students: studentsTotal,
         schools: schools.length,
+        botUsersCount: computeLiveMetrics().botUsersCount,
+        districts: computeLiveMetrics().totalDistricts,
+        regions: computeLiveMetrics().totalRegions,
         ambassadors: (centralDb.ambassadors || []).filter((a) => a.status === 'active' && (!caller || hasAnyRole(caller, ['super_admin', 'moderator']) || schools.some((s) => s.id === a.schoolId))).length,
         reportsTotal: reports.length,
         reportsResolved: resolvedReports.length,
@@ -7119,13 +7149,152 @@ app.get('/api/analytics', (req: AuthenticatedRequest, res) => {
 // 8. ECO SHOP, ORDERS, PARTNERS, ADS, REFERRALS (UNIFIED DB)
 // ==========================================
 
+function sanitizeShopRedemptionGate(rawGate: any): {
+  mode: 'none' | 'ad' | 'subscription' | 'ad_and_subscription';
+  adId?: string;
+  requiredSubscriptions?: Array<{
+    id: string;
+    platform: 'telegram_channel' | 'telegram_bot' | 'instagram' | 'website';
+    title: string;
+    url: string;
+    handle?: string;
+  }>;
+} {
+  const validModes = ['none', 'ad', 'subscription', 'ad_and_subscription'];
+  const mode = validModes.includes(rawGate?.mode) ? rawGate.mode : 'none';
+  const validPlatforms = ['telegram_channel', 'telegram_bot', 'instagram', 'website'];
+
+  const subs = Array.isArray(rawGate?.requiredSubscriptions)
+    ? rawGate.requiredSubscriptions
+        .map((s: any, idx: number) => {
+          const platform = validPlatforms.includes(s?.platform) ? s.platform : 'telegram_channel';
+          let rawUrl = String(s?.url || '').trim();
+          let rawHandle = String(s?.handle || '').trim();
+          if (!rawUrl && rawHandle) {
+            const cleanH = rawHandle.replace(/^@/, '');
+            rawUrl = platform === 'instagram' ? `https://instagram.com/${cleanH}` : `https://t.me/${cleanH}`;
+          }
+          if (rawUrl && !rawHandle) {
+            if (rawUrl.startsWith('@')) {
+              rawHandle = rawUrl;
+              rawUrl = platform === 'instagram' ? `https://instagram.com/${rawHandle.slice(1)}` : `https://t.me/${rawHandle.slice(1)}`;
+            } else {
+              const tgMatch = rawUrl.match(/(?:https?:\/\/)?t\.me\/([A-Za-z0-9_]+)/i);
+              if (tgMatch) rawHandle = `@${tgMatch[1]}`;
+            }
+          }
+          if (!rawUrl) return null;
+          if (!/^https?:\/\//i.test(rawUrl)) rawUrl = `https://${rawUrl}`;
+          return {
+            id: String(s?.id || `sub_${Date.now()}_${idx}`),
+            platform,
+            title: String(s?.title || rawHandle || 'Rasmiy sahifa').trim(),
+            url: rawUrl,
+            ...(rawHandle ? { handle: rawHandle } : {}),
+          };
+        })
+        .filter(Boolean)
+    : [];
+
+  return {
+    mode,
+    ...(rawGate?.adId ? { adId: String(rawGate.adId).trim() } : {}),
+    requiredSubscriptions: subs,
+  };
+}
+
+async function checkGiftSubscriptionTargets(params: {
+  targets: Array<{
+    id: string;
+    platform: string;
+    title: string;
+    url: string;
+    handle?: string;
+  }>;
+  caller: any;
+  visitedTargetIds?: string[];
+}): Promise<{ ok: boolean; verifiedTargetIds: string[]; error?: string }> {
+  const { targets, caller, visitedTargetIds = [] } = params;
+  if (!targets || targets.length === 0) {
+    return { ok: true, verifiedTargetIds: [] };
+  }
+
+  const visitedSet = new Set(visitedTargetIds.map(String));
+  const verifiedTargetIds: string[] = [];
+
+  for (const target of targets) {
+    if (target.platform === 'telegram_channel') {
+      let handle = String(target.handle || '').trim();
+      if (!handle && target.url) {
+        const m = target.url.match(/t\.me\/([A-Za-z0-9_]+)/i);
+        if (m) handle = `@${m[1]}`;
+      }
+      if (handle && !handle.startsWith('@')) handle = `@${handle}`;
+
+      let checkedByApi = false;
+      if (activeBotToken && caller?.telegramId && handle.startsWith('@') && !handle.toLowerCase().endsWith('bot')) {
+        try {
+          const checkRes = await fetch(
+            `https://api.telegram.org/bot${activeBotToken}/getChatMember?chat_id=${encodeURIComponent(handle)}&user_id=${encodeURIComponent(String(caller.telegramId))}`,
+            { signal: AbortSignal.timeout(5000) }
+          );
+          const checkJson: any = await checkRes.json().catch(() => null);
+          if (checkJson?.ok && checkJson.result) {
+            checkedByApi = true;
+            const st = checkJson.result.status;
+            if (!['member', 'administrator', 'creator'].includes(st)) {
+              return {
+                ok: false,
+                verifiedTargetIds,
+                error: `Siz hali "${target.title}" (${handle}) Telegram kanaliga obuna bo'lmagansiz. Avval obuna bo'ling va qayta tekshiring!`,
+              };
+            }
+            verifiedTargetIds.push(target.id);
+          }
+        } catch {
+          // Fallback to visited confirmation if Bot API cannot inspect private/external channel
+        }
+      }
+
+      if (!checkedByApi) {
+        if (!visitedSet.has(target.id)) {
+          return {
+            ok: false,
+            verifiedTargetIds,
+            error: `Avval "${target.title}" sahifasiga o'tib obuna bo'ling!`,
+          };
+        }
+        verifiedTargetIds.push(target.id);
+      }
+    } else {
+      // telegram_bot, instagram, website
+      if (!visitedSet.has(target.id)) {
+        const label =
+          target.platform === 'instagram'
+            ? 'Instagram sahifasiga'
+            : target.platform === 'telegram_bot'
+            ? 'Telegram botga'
+            : 'veb-sahifaga';
+        return {
+          ok: false,
+          verifiedTargetIds,
+          error: `Sovg'a promokodini olish uchun avval "${target.title}" ${label} o'tib obuna bo'ling!`,
+        };
+      }
+      verifiedTargetIds.push(target.id);
+    }
+  }
+
+  return { ok: true, verifiedTargetIds };
+}
+
 app.get('/api/shop/items', (_req, res) => {
   res.json({ success: true, items: centralDb.shopItems });
 });
 
 app.post('/api/admin/shop/item-update', requireRoles('super_admin', 'moderator'), (req: AuthenticatedRequest, res) => {
   try {
-    const { itemId, title, description, imageUrl, category, sponsorName, newPriceCoins, newStock } = req.body;
+    const { itemId, title, description, imageUrl, category, sponsorName, newPriceCoins, newStock, redemptionGate } = req.body;
     const item = centralDb.shopItems.find((i) => i.id === itemId);
     if (!item) return res.status(404).json({ error: 'Mahsulot topilmadi' });
 
@@ -7136,6 +7305,9 @@ app.post('/api/admin/shop/item-update', requireRoles('super_admin', 'moderator')
     if (sponsorName) item.sponsorName = sponsorName;
     if (newPriceCoins !== undefined) item.priceCoins = Math.max(1, Number(newPriceCoins));
     if (newStock !== undefined) item.stock = Math.max(0, Number(newStock));
+    if (redemptionGate !== undefined) {
+      (item as any).redemptionGate = sanitizeShopRedemptionGate(redemptionGate);
+    }
 
     saveCentralDb();
     broadcastRealtimeEvent('db:updated', { scope: 'shop' });
@@ -7146,7 +7318,7 @@ app.post('/api/admin/shop/item-update', requireRoles('super_admin', 'moderator')
       action: 'update_shop_item',
       targetCollection: 'shop_items',
       targetId: itemId,
-      details: { title: item.title, priceCoins: item.priceCoins, stock: item.stock },
+      details: { title: item.title, priceCoins: item.priceCoins, stock: item.stock, gateMode: (item as any).redemptionGate?.mode || 'none' },
     });
 
     res.json({ success: true, item });
@@ -7157,11 +7329,12 @@ app.post('/api/admin/shop/item-update', requireRoles('super_admin', 'moderator')
 
 app.post('/api/admin/shop/item-create', requireRoles('super_admin', 'moderator'), (req: AuthenticatedRequest, res) => {
   try {
-    const { title, description, imageUrl, priceCoins, stock, category, sponsorName, features } = req.body;
+    const { title, description, imageUrl, priceCoins, stock, category, sponsorName, features, redemptionGate } = req.body;
     if (!title || !priceCoins) {
       return res.status(400).json({ error: 'Mahsulot nomi va narxi (EcoCoin) kiritilishi shart' });
     }
 
+    const sanitizedGate = sanitizeShopRedemptionGate(redemptionGate || { mode: 'none' });
     const newItem = {
       id: `shop_custom_${Date.now()}`,
       title,
@@ -7172,6 +7345,7 @@ app.post('/api/admin/shop/item-create', requireRoles('super_admin', 'moderator')
       category: category || 'accessories',
       sponsorName: sponsorName || 'ECO HERO Hamkorlari',
       features: Array.isArray(features) ? features : ['Sifatli mahsulot', 'Eko-qadoq'],
+      redemptionGate: sanitizedGate,
     };
 
     centralDb.shopItems.unshift(newItem);
@@ -7184,7 +7358,7 @@ app.post('/api/admin/shop/item-create', requireRoles('super_admin', 'moderator')
       action: 'create_shop_item',
       targetCollection: 'shop_items',
       targetId: newItem.id,
-      details: { title: newItem.title, priceCoins: newItem.priceCoins, stock: newItem.stock },
+      details: { title: newItem.title, priceCoins: newItem.priceCoins, stock: newItem.stock, gateMode: sanitizedGate.mode },
     });
 
     res.json({ success: true, item: newItem });
@@ -7222,15 +7396,44 @@ app.get('/api/shop/orders', requireAuth, (req: AuthenticatedRequest, res) => {
   res.json({ success: true, orders });
 });
 
-app.post('/api/shop/order', requireAuth, (req: AuthenticatedRequest, res) => {
+app.post('/api/shop/verify-subscriptions', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const { itemId, visitedTargetIds } = req.body || {};
+    if (!itemId) {
+      return res.status(400).json({ success: false, error: 'Mahsulot ID talab qilinadi' });
+    }
+    const item: any = centralDb.shopItems.find((i) => i.id === itemId);
+    if (!item) {
+      return res.status(404).json({ success: false, error: 'Sovg\'a topilmadi' });
+    }
+    const gate = item.redemptionGate;
+    const targets =
+      gate && (gate.mode === 'subscription' || gate.mode === 'ad_and_subscription')
+        ? gate.requiredSubscriptions || []
+        : [];
+    const check = await checkGiftSubscriptionTargets({
+      targets,
+      caller: req.authUser,
+      visitedTargetIds: Array.isArray(visitedTargetIds) ? visitedTargetIds : [],
+    });
+    if (!check.ok) {
+      return res.status(400).json({ success: false, error: check.error });
+    }
+    res.json({ success: true, verifiedTargetIds: check.verifiedTargetIds });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/shop/order', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const user = req.authUser;
-    const { itemId, itemTitle, priceCoins, sponsorName, itemImageUrl } = req.body;
+    const { itemId, itemTitle, priceCoins, sponsorName, itemImageUrl, confirmedSubscriptionIds } = req.body;
     if (!itemId) {
       return res.status(400).json({ error: 'Mahsulot ID talab qilinadi' });
     }
 
-    const item = centralDb.shopItems.find((i) => i.id === itemId);
+    const item: any = centralDb.shopItems.find((i) => i.id === itemId);
     if (item && item.stock <= 0) {
       return res.status(400).json({ error: 'Ushbu mahsulot omborda qolmagan' });
     }
@@ -7238,6 +7441,24 @@ app.post('/api/shop/order', requireAuth, (req: AuthenticatedRequest, res) => {
     const cost = item ? Number(item.priceCoins) : Number(priceCoins) || 100;
     if ((user.ecoCoins || 0) < cost) {
       return res.status(400).json({ error: `EcoCoin balansingiz yetarli emas (${user.ecoCoins}/${cost})` });
+    }
+
+    // Enforce Super Admin configured mandatory subscriptions before deducting coins
+    const gate = item?.redemptionGate;
+    if (
+      gate &&
+      (gate.mode === 'subscription' || gate.mode === 'ad_and_subscription') &&
+      Array.isArray(gate.requiredSubscriptions) &&
+      gate.requiredSubscriptions.length > 0
+    ) {
+      const subCheck = await checkGiftSubscriptionTargets({
+        targets: gate.requiredSubscriptions,
+        caller: user,
+        visitedTargetIds: Array.isArray(confirmedSubscriptionIds) ? confirmedSubscriptionIds : [],
+      });
+      if (!subCheck.ok) {
+        return res.status(400).json({ error: subCheck.error });
+      }
     }
 
     if (item) {
@@ -7300,6 +7521,7 @@ app.post('/api/shop/order', requireAuth, (req: AuthenticatedRequest, res) => {
       newBalance: user.ecoCoins,
       user: sanitizeSelfUser(user),
       updatedStock: item?.stock,
+      liveMetrics: computeLiveMetrics(),
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -11374,18 +11596,43 @@ async function startServer() {
     if (isHostedProd) {
       if (PERMANENT_PRODUCTION_URL) APP_URL = PERMANENT_PRODUCTION_URL;
       if (activeBotToken && !botListenerDisabled) {
-        if (APP_URL.startsWith('https://') && !isPrivateAiStudioOrLocalUrl(APP_URL)) {
+        const webhookBaseUrl = BACKEND_PUBLIC_URL || (isFrontendOnlyStaticHost(APP_URL) ? '' : APP_URL);
+        let canUseWebhook = Boolean(
+          webhookBaseUrl &&
+            webhookBaseUrl.startsWith('https://') &&
+            !isPrivateAiStudioOrLocalUrl(webhookBaseUrl) &&
+            !isFrontendOnlyStaticHost(webhookBaseUrl)
+        );
+        if (canUseWebhook && !BACKEND_PUBLIC_URL) {
+          try {
+            const probe = await fetch(`${webhookBaseUrl}/api/health`, { signal: AbortSignal.timeout(4000) });
+            const ct = String(probe.headers.get('content-type') || '').toLowerCase();
+            if (!probe.ok || !ct.includes('application/json')) {
+              canUseWebhook = false;
+            }
+          } catch {
+            canUseWebhook = false;
+          }
+        }
+
+        if (canUseWebhook) {
           try {
             isWebhookMode = true;
-            const webhookUrl = `${APP_URL}/api/telegram/webhook`;
+            const webhookUrl = `${webhookBaseUrl}/api/telegram/webhook`;
             await fetch(`https://api.telegram.org/bot${activeBotToken}/setWebhook?url=${encodeURIComponent(webhookUrl)}`);
             await syncTelegramBotProfile(activeBotToken, APP_URL);
-            console.log(`[Telegram Bot] 24/7 Production Webhook faollashtirildi: ${webhookUrl}`);
+            console.log(`[Telegram Bot] 24/7 Production Webhook faollashtirildi: ${webhookUrl} (Mini App: ${APP_URL})`);
           } catch {
             startTelegramPolling(activeBotToken);
           }
         } else {
+          isWebhookMode = false;
+          await fetch(`https://api.telegram.org/bot${activeBotToken}/deleteWebhook`).catch(() => {});
           startTelegramPolling(activeBotToken);
+          if (APP_URL.startsWith('https://') && !isPrivateAiStudioOrLocalUrl(APP_URL)) {
+            await syncTelegramBotProfile(activeBotToken, APP_URL).catch(() => {});
+          }
+          console.log(`[Telegram Bot] Polling rejimi faollashtirildi (Mini App: ${APP_URL})`);
         }
       } else if (botListenerDisabled) {
         console.log('[Telegram Bot] DISABLE_BOT_LISTENER=true — bot polling/webhook bu serverda o\'chirildi.');

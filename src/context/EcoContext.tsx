@@ -155,8 +155,13 @@ interface EcoContextType {
   appointAmbassador: (schoolId: string, fullName: string, email: string) => Promise<void>;
   shopItems: ShopItem[];
   transactions: CoinTransaction[];
+  verifyGiftSubscriptions: (
+    itemId: string,
+    visitedTargetIds: string[]
+  ) => Promise<{ success: boolean; verifiedTargetIds?: string[]; error?: string }>;
   redeemShopItem: (
-    item: ShopItem
+    item: ShopItem,
+    options?: { confirmedSubscriptionIds?: string[] }
   ) => Promise<{
     success: boolean;
     message: string;
@@ -782,13 +787,25 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
   const [liveMetrics, setLiveMetrics] = useState<LiveMetrics>(() => {
+    const empty: LiveMetrics = {
+      totalSchools: 0,
+      totalUsers: 0,
+      botUsersCount: 0,
+      totalDistricts: 0,
+      totalRegions: 0,
+      schoolCaptainsCount: 0,
+      pendingApplicationsCount: 0,
+      shopOrdersCount: 0,
+      resolvedReports: 0,
+      totalReports: 0,
+      treesPlanted: 0,
+      activeAmbassadors: 0,
+    };
     try {
       const saved = localStorage.getItem('ecohero_live_metrics');
-      return saved
-        ? JSON.parse(saved)
-        : { totalSchools: 0, totalUsers: 0, resolvedReports: 0, totalReports: 0, treesPlanted: 0, activeAmbassadors: 0 };
+      return saved ? { ...empty, ...JSON.parse(saved) } : empty;
     } catch {
-      return { totalSchools: 0, totalUsers: 0, resolvedReports: 0, totalReports: 0, treesPlanted: 0, activeAmbassadors: 0 };
+      return empty;
     }
   });
   const [ecoMissions, setEcoMissions] = useState<EcoMission[]>(() => {
@@ -2100,8 +2117,32 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const verifyGiftSubscriptions = async (
+    itemId: string,
+    visitedTargetIds: string[]
+  ): Promise<{ success: boolean; verifiedTargetIds?: string[]; error?: string }> => {
+    try {
+      const res = await apiFetch('/api/shop/verify-subscriptions', {
+        method: 'POST',
+        body: JSON.stringify({ itemId, visitedTargetIds }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        const msg = data.error || "Obunani tekshirishda xatolik";
+        showNotification(msg, 'warning');
+        return { success: false, error: msg };
+      }
+      return { success: true, verifiedTargetIds: data.verifiedTargetIds || visitedTargetIds };
+    } catch (e: any) {
+      const msg = e?.message || "Server bilan bog'lanishda xatolik";
+      showNotification(msg, 'warning');
+      return { success: false, error: msg };
+    }
+  };
+
   const redeemShopItem = async (
-    item: ShopItem
+    item: ShopItem,
+    options?: { confirmedSubscriptionIds?: string[] }
   ): Promise<{
     success: boolean;
     message: string;
@@ -2128,6 +2169,7 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           itemImageUrl: item.imageUrl,
           priceCoins: item.priceCoins,
           sponsorName: item.sponsorName,
+          confirmedSubscriptionIds: options?.confirmedSubscriptionIds || [],
         }),
       });
 
@@ -3625,6 +3667,7 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         appointAmbassador,
         shopItems,
         transactions,
+        verifyGiftSubscriptions,
         redeemShopItem,
         shopOrders,
         updateShopOrderStatus,

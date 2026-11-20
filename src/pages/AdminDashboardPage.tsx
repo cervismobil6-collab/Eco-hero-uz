@@ -50,7 +50,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useEco } from '../context/EcoContext';
-import { DistrictUserGrowthResponse, EcoAd, ShopItem } from '../types/eco';
+import { DistrictUserGrowthResponse, EcoAd, ShopItem, ShopRedemptionGate } from '../types/eco';
 import { resolveMediaUrl, openAdTargetUrl } from '../utils/api';
 import { EcoTelegramChatPanel } from '../components/chat/EcoTelegramChatPanel';
 import { StudentDashboardView } from '../components/dashboard/StudentDashboardView';
@@ -61,6 +61,7 @@ import { RegionalCoordinatorDashboardView } from '../components/dashboard/Region
 import { SuperAdminModerationView } from '../components/dashboard/SuperAdminModerationView';
 import { ModeratorDashboardView } from '../components/dashboard/ModeratorDashboardView';
 import { VoucherVerifierPanel } from '../components/shop/VoucherVerifierPanel';
+import { GiftGateConfigEditor } from '../components/shop/GiftGateConfigEditor';
 
 function getDefaultTabForRole(role: string): string {
   switch (role) {
@@ -112,6 +113,7 @@ export const AdminDashboardPage: React.FC = () => {
     apiFetch,
     fetchDistrictUserGrowth,
     liveSyncVersion,
+    liveMetrics,
   } = useEco();
 
   const [activeTab, setActiveTab] = useState<string>(() => getDefaultTabForRole(user.role));
@@ -134,6 +136,11 @@ export const AdminDashboardPage: React.FC = () => {
   const [newShopCategory, setNewShopCategory] = useState<'accessories' | 'stationery' | 'eco_home' | 'education'>('accessories');
   const [newShopSponsor, setNewShopSponsor] = useState('ECO HERO');
   const [newShopImageUrl, setNewShopImageUrl] = useState('https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&q=80&w=600');
+  const [newShopGate, setNewShopGate] = useState<ShopRedemptionGate>({
+    mode: 'none',
+    adId: 'auto',
+    requiredSubscriptions: [],
+  });
   const [savingShopItem, setSavingShopItem] = useState(false);
 
   const [newAdTitle, setNewAdTitle] = useState('');
@@ -164,6 +171,7 @@ export const AdminDashboardPage: React.FC = () => {
     setNewShopCategory('accessories');
     setNewShopSponsor('ECO HERO');
     setNewShopImageUrl('https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&q=80&w=600');
+    setNewShopGate({ mode: 'none', adId: 'auto', requiredSubscriptions: [] });
     setShowShopCreateModal(true);
   };
 
@@ -176,6 +184,15 @@ export const AdminDashboardPage: React.FC = () => {
     setNewShopCategory((item.category as any) || 'accessories');
     setNewShopSponsor(item.sponsorName || 'ECO HERO');
     setNewShopImageUrl(item.imageUrl || '');
+    setNewShopGate(
+      item.redemptionGate
+        ? {
+            mode: item.redemptionGate.mode || 'none',
+            adId: item.redemptionGate.adId || 'auto',
+            requiredSubscriptions: item.redemptionGate.requiredSubscriptions || [],
+          }
+        : { mode: 'none', adId: 'auto', requiredSubscriptions: [] }
+    );
     setShowShopCreateModal(true);
   };
 
@@ -598,6 +615,85 @@ export const AdminDashboardPage: React.FC = () => {
             )}
           </div>
         </div>
+
+        {user.role === 'super_admin' && (
+          <section
+            aria-label="Jonli platforma ko'rsatkichlari"
+            className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3"
+          >
+            <div className="p-4 rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-slate-800 space-y-1">
+              <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                Botdan foydalanuvchilar
+              </div>
+              <div className="text-2xl font-black font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
+                {liveMetrics.botUsersCount.toLocaleString()}
+              </div>
+              <div className="text-[10px] text-slate-400 tabular-nums">
+                Jami a&apos;zolar: {liveMetrics.totalUsers}
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-slate-800 space-y-1">
+              <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                Maktablar
+              </div>
+              <div className="text-2xl font-black font-mono tabular-nums text-slate-900 dark:text-white">
+                {(liveMetrics.totalSchools || schools.length).toLocaleString()}
+              </div>
+              <div className="text-[10px] text-slate-400 tabular-nums">
+                Sardorlar: {liveMetrics.schoolCaptainsCount}
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-slate-800 space-y-1">
+              <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                Tumanlar
+              </div>
+              <div className="text-2xl font-black font-mono tabular-nums text-slate-900 dark:text-white">
+                {liveMetrics.totalDistricts.toLocaleString()}
+              </div>
+              <div className="text-[10px] text-slate-400 tabular-nums">
+                Viloyatlar: {liveMetrics.totalRegions}
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-slate-800 space-y-1">
+              <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                Eko-Elchilar
+              </div>
+              <div className="text-2xl font-black font-mono tabular-nums text-slate-900 dark:text-white">
+                {liveMetrics.activeAmbassadors.toLocaleString()}
+              </div>
+              <div className="text-[10px] text-slate-400 tabular-nums">
+                Ko&apos;chatlar: {liveMetrics.treesPlanted}
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-slate-800 space-y-1">
+              <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                Ekologik holatlar
+              </div>
+              <div className="text-2xl font-black font-mono tabular-nums text-slate-900 dark:text-white">
+                {liveMetrics.totalReports.toLocaleString()}
+              </div>
+              <div className="text-[10px] text-slate-400 tabular-nums">
+                Hal etilgan: {liveMetrics.resolvedReports}
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-slate-800 space-y-1">
+              <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                Sovg&apos;a buyurtmalari
+              </div>
+              <div className="text-2xl font-black font-mono tabular-nums text-amber-600 dark:text-amber-400">
+                {(liveMetrics.shopOrdersCount || shopOrders.length).toLocaleString()}
+              </div>
+              <div className="text-[10px] text-slate-400 tabular-nums">
+                Kutilayotgan arizalar: {liveMetrics.pendingApplicationsCount}
+              </div>
+            </div>
+          </section>
+        )}
 
         <AnimatePresence mode="wait">
           <motion.div
@@ -1088,6 +1184,15 @@ export const AdminDashboardPage: React.FC = () => {
                             <span>Zaxira: {item.stock} ta</span>
                             <span className="text-emerald-500">{item.category}</span>
                           </div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 truncate">
+                            {item.redemptionGate?.mode === 'ad'
+                              ? 'Shart · Reklama bilan'
+                              : item.redemptionGate?.mode === 'subscription'
+                              ? `Shart · Majburiy obuna (${item.redemptionGate.requiredSubscriptions?.length || 0})`
+                              : item.redemptionGate?.mode === 'ad_and_subscription'
+                              ? `Shart · Reklama va obuna (${item.redemptionGate.requiredSubscriptions?.length || 0})`
+                              : 'To‘g‘ridan-to‘g‘ri promokod'}
+                          </div>
                         </div>
                         <div className="flex gap-2">
                           <button
@@ -1512,7 +1617,7 @@ export const AdminDashboardPage: React.FC = () => {
       {/* Create / Edit Shop Item Modal */}
       {showShopCreateModal && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-[#0f172a] w-full max-w-md rounded-3xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 shadow-2xl my-8">
+          <div className="bg-white dark:bg-[#0f172a] w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 shadow-2xl my-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-black uppercase">
                 {editingShopItem ? "Sovg'ani Tahrirlash" : "Yangi Sovg'a Qo'shish"}
@@ -1602,6 +1707,11 @@ export const AdminDashboardPage: React.FC = () => {
                 onChange={e => setNewShopImageUrl(e.target.value)}
                 className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
               />
+              <GiftGateConfigEditor
+                gate={newShopGate}
+                onChange={setNewShopGate}
+                ecoAds={ecoAds}
+              />
             </div>
             <button
               disabled={savingShopItem || uploadingShopImg}
@@ -1619,6 +1729,7 @@ export const AdminDashboardPage: React.FC = () => {
                     imageUrl:
                       newShopImageUrl.trim() ||
                       'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&q=80&w=600',
+                    redemptionGate: newShopGate,
                   };
                   if (editingShopItem) {
                     const ok = await updateShopItem(editingShopItem.id, payload);

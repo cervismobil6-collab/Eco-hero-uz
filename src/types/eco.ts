@@ -430,6 +430,22 @@ export interface Notification {
   createdAt: string;
 }
 
+export type ShopSubscriptionPlatform = 'telegram_channel' | 'telegram_bot' | 'instagram' | 'website';
+
+export interface ShopSubscriptionTarget {
+  id: string;
+  platform: ShopSubscriptionPlatform;
+  title: string;
+  url: string;
+  handle?: string;
+}
+
+export interface ShopRedemptionGate {
+  mode: 'none' | 'ad' | 'subscription' | 'ad_and_subscription';
+  adId?: string;
+  requiredSubscriptions?: ShopSubscriptionTarget[];
+}
+
 export interface ShopItem {
   id: string;
   title: string;
@@ -440,6 +456,7 @@ export interface ShopItem {
   imageUrl: string;
   sponsorName: string;
   features?: string[];
+  redemptionGate?: ShopRedemptionGate;
 }
 
 export interface CoinTransaction {
@@ -1022,6 +1039,12 @@ export interface DistrictUserGrowthResponse {
 export interface LiveMetrics {
   totalSchools: number;
   totalUsers: number;
+  botUsersCount: number;
+  totalDistricts: number;
+  totalRegions: number;
+  schoolCaptainsCount: number;
+  pendingApplicationsCount: number;
+  shopOrdersCount: number;
   resolvedReports: number;
   totalReports: number;
   treesPlanted: number;

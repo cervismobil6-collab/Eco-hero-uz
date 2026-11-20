@@ -1,0 +1,26 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "rewrites": [
+    {
+      "source": "/((?!api/|assets/|cesium/|uploads/|sw\\.js|manifest\\.webmanifest|manifest\\.json|robots\\.txt|favicon\\.ico|.*\\..*).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/sw.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/cesium/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=604800, immutable" }
+      ]
+    }
+  ]
+}

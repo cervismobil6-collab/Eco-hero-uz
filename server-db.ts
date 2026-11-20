@@ -1224,6 +1224,10 @@ export function computeLiveMetrics() {
   const reportsList = centralDb.reports || [];
   const mediaList = centralDb.mediaSubmissions || [];
   const ambassadorsList = centralDb.ambassadors || [];
+  const roleRequestsList = centralDb.roleRequests || [];
+  const regAppsList = centralDb.registrationApplications || [];
+  const shopOrdersList = centralDb.shopOrders || [];
+  const regSessions = centralDb.registrationSessions || {};
 
   const resolvedReports = reportsList.filter((r: any) =>
     ['resolved', 'RESOLVED'].includes(String(r?.status || ''))
@@ -1243,9 +1247,46 @@ export function computeLiveMetrics() {
     ...usersList.filter((u: any) => u?.role === 'ambassador').map((u: any) => u.uid),
   ]).size;
 
+  const botUserIds = new Set<string>();
+  for (const u of usersList as any[]) {
+    if (u?.telegramId || u?.telegramChatId || u?.chatId || u?.telegramAuth || u?.telegramUsername) {
+      const key = String(u.telegramId || u.telegramChatId || u.chatId || u.uid);
+      botUserIds.add(key);
+    }
+  }
+  for (const chatKey of Object.keys(regSessions)) {
+    if (chatKey) botUserIds.add(String(chatKey));
+  }
+
+  const districtKeys = new Set<string>();
+  const regionKeys = new Set<string>();
+  for (const s of schoolsList as any[]) {
+    const reg = String(s?.region || '').trim();
+    const dist = String(s?.district || '').trim();
+    if (reg) regionKeys.add(reg.toLowerCase());
+    if (dist) districtKeys.add(`${reg.toLowerCase()}__${dist.toLowerCase()}`);
+  }
+  for (const u of usersList as any[]) {
+    const reg = String(u?.region || '').trim();
+    const dist = String(u?.district || '').trim();
+    if (reg) regionKeys.add(reg.toLowerCase());
+    if (dist) districtKeys.add(`${reg.toLowerCase()}__${dist.toLowerCase()}`);
+  }
+
+  const schoolCaptainsCount = (usersList as any[]).filter((u: any) => u?.role === 'school_admin').length;
+  const pendingApplicationsCount =
+    roleRequestsList.filter((r: any) => r?.status === 'pending').length +
+    regAppsList.filter((a: any) => a?.status === 'pending').length;
+
   return {
     totalSchools: schoolsList.length,
     totalUsers: usersList.length,
+    botUsersCount: botUserIds.size,
+    totalDistricts: districtKeys.size,
+    totalRegions: regionKeys.size,
+    schoolCaptainsCount,
+    pendingApplicationsCount,
+    shopOrdersCount: shopOrdersList.length,
     resolvedReports,
     totalReports: reportsList.length,
     treesPlanted,
