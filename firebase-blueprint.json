@@ -1,0 +1,633 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "ECO HERO foydalanuvchi profili (8 ta tasdiqlangan rol bilan)",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$", "description": "Foydalanuvchi ID" },
+        "fullName": { "type": "string", "minLength": 2, "maxLength": 150, "description": "To'liq ism va familiya" },
+        "email": { "type": "string", "maxLength": 180, "description": "Elektron pochta (PII)" },
+        "profileImage": { "type": "string", "maxLength": 1024, "description": "Profil fotosurati" },
+        "role": {
+          "type": "string",
+          "enum": ["student", "ambassador", "school_admin", "district_coordinator", "regional_coordinator", "moderator", "super_admin", "sponsor"],
+          "description": "Foydalanuvchining joriy roli"
+        },
+        "approvedRoles": {
+          "type": "array",
+          "description": "Tasdiqlangan rollar ro'yxati"
+        },
+        "schoolId": { "type": "string", "maxLength": 128, "description": "Biriktirilgan maktab IDsi" },
+        "schoolName": { "type": "string", "maxLength": 200, "description": "Maktab nomi" },
+        "schoolNumber": { "type": "string", "maxLength": 40, "description": "Maktab raqami" },
+        "region": { "type": "string", "maxLength": 100, "description": "Viloyat" },
+        "district": { "type": "string", "maxLength": 100, "description": "Tuman/shahar" },
+        "ecoCoins": { "type": "number", "description": "Joriy EcoCoin balansi" },
+        "registrationDate": { "type": "string", "maxLength": 64, "description": "Ro'yxatdan o'tgan sana" },
+        "isVerified": { "type": "boolean", "description": "Tasdiqlangan foydalanuvchi" },
+        "badge": { "type": "string", "maxLength": 100, "description": "Eko-daraja nishoni" },
+        "telegramUsername": { "type": "string", "maxLength": 80, "description": "Telegram foydalanuvchi nomi" },
+        "allowStudentMessages": { "type": "boolean", "description": "O'quvchilararo chat ruxsati sozlamasi" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Yaratilgan vaqt" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Yangilangan vaqt" },
+        "activityStats": {
+          "type": "object",
+          "description": "Faollik statistikasi",
+          "properties": {
+            "reportsCount": { "type": "number" },
+            "cleanupsCount": { "type": "number" },
+            "treesPlanted": { "type": "number" },
+            "streakDays": { "type": "number" },
+            "totalCoinsEarned": { "type": "number" }
+          }
+        }
+      },
+      "required": ["uid", "fullName", "role", "region", "district", "ecoCoins", "registrationDate"]
+    },
+    "School": {
+      "title": "School",
+      "description": "Umumta'lim maktabi yoki ixtisoslashtirilgan maktab profili",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$", "description": "Maktab IDsi" },
+        "name": { "type": "string", "minLength": 2, "maxLength": 200, "description": "Maktab to'liq nomi" },
+        "number": { "type": "string", "maxLength": 40, "description": "Maktab raqami" },
+        "region": { "type": "string", "minLength": 2, "maxLength": 100, "description": "Viloyat" },
+        "district": { "type": "string", "minLength": 2, "maxLength": 100, "description": "Tuman/shahar" },
+        "address": { "type": "string", "maxLength": 300, "description": "Maktab manzili" },
+        "lat": { "type": "number", "description": "Geografik kenglik" },
+        "lng": { "type": "number", "description": "Geografik uzunlik" },
+        "logoUrl": { "type": "string", "maxLength": 1024, "description": "Maktab logotipi" },
+        "verifiedPhotos": { "type": "array", "description": "Tasdiqlangan fotosuratlar ro'yxati" },
+        "glbModelUrl": { "type": "string", "maxLength": 1024, "description": "Ixtiyoriy 3D GLB model havolasi" },
+        "environmentalScore": { "type": "number", "description": "Ekologik ball" },
+        "greenAreaSqm": { "type": "number", "description": "Yashil hudud maydoni (m2)" },
+        "ambassadorId": { "type": "string", "maxLength": 128, "description": "Mas'ul Eko-Elchi IDsi" },
+        "ambassadorName": { "type": "string", "maxLength": 150, "description": "Mas'ul Eko-Elchi ismi" },
+        "captainId": { "type": "string", "maxLength": 128, "description": "Maktab sardori UIDsi" },
+        "registeredStudentsCount": { "type": "number", "description": "Ro'yxatdan o'tgan o'quvchilar soni" },
+        "totalCoins": { "type": "number", "description": "Jami tasdiqlangan eko-tangalar" },
+        "treesPlanted": { "type": "number", "description": "Ekilgan daraxtlar" },
+        "cleanupsCompleted": { "type": "number", "description": "Yakunlangan hasharlar" },
+        "ratingRank": { "type": "number", "description": "Umumiy reytingdagi o'rni" },
+        "status": { "type": "string", "enum": ["active", "pending", "verified"], "description": "Tasdiq holati" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Qo'shilgan sana" }
+      },
+      "required": ["id", "name", "number", "region", "district", "totalCoins", "status"]
+    },
+    "EcoReport": {
+      "title": "EcoReport",
+      "description": "6 bosqichli ekologik muammo xabarnomasi va bartaraf etish jarayoni",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$", "description": "Ariza IDsi" },
+        "title": { "type": "string", "minLength": 3, "maxLength": 200, "description": "Muammo sarlavhasi" },
+        "description": { "type": "string", "maxLength": 2000, "description": "Muammo tavsifi" },
+        "category": {
+          "type": "string",
+          "enum": ["waste", "water", "deforestation", "air", "greening_needed", "electrical_hazard", "chemical_hazard"],
+          "description": "Muammo toifasi"
+        },
+        "severity": { "type": "string", "enum": ["low", "medium", "high"], "description": "Xavflilik darajasi" },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "verified", "in_progress", "resolved", "rejected", "PENDING_REVIEW", "APPROVED", "NEEDS_INFO", "ASSIGNED", "IN_PROGRESS", "ESCALATED", "RESOLVED", "REJECTED"],
+          "description": "6 bosqichli muammo holati"
+        },
+        "region": { "type": "string", "minLength": 2, "maxLength": 100, "description": "Viloyat" },
+        "district": { "type": "string", "minLength": 2, "maxLength": 100, "description": "Tuman/shahar" },
+        "address": { "type": "string", "maxLength": 300, "description": "Manzil" },
+        "lat": { "type": "number", "description": "Kenglik" },
+        "lng": { "type": "number", "description": "Uzunlik" },
+        "imageUrl": { "type": "string", "maxLength": 1024, "description": "Muammo fotosurati" },
+        "videoUrl": { "type": "string", "maxLength": 1024, "description": "Muammo videosi" },
+        "resolvedImageUrl": { "type": "string", "maxLength": 1024, "description": "Hal etilganidan keyingi dalil" },
+        "reporterUid": { "type": "string", "minLength": 1, "maxLength": 128, "description": "Yuborgan o'quvchi UIDsi" },
+        "reporterName": { "type": "string", "maxLength": 150, "description": "Arizachi ismi" },
+        "schoolId": { "type": "string", "maxLength": 128, "description": "Maktab IDsi" },
+        "schoolName": { "type": "string", "maxLength": 200, "description": "Maktab nomi" },
+        "assignedAmbassadorUid": { "type": "string", "maxLength": 128, "description": "Biriktirilgan Eko-Elchi UIDsi" },
+        "captainInstructions": { "type": "string", "maxLength": 1000, "description": "Maktab sardori ko'rsatmasi" },
+        "escalationTarget": { "type": "string", "maxLength": 200, "description": "Eskalatsiya qilingan tashkilot" },
+        "isHazardous": { "type": "boolean", "description": "O'quvchilar uchun xavfli vaziyat belgisi" },
+        "rewardCoins": { "type": "number", "description": "Tasdiqlangan mukofot tangalari" },
+        "upvotes": { "type": "number", "description": "Ovozlar soni" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Yaratilgan vaqt" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Yangilangan vaqt" },
+        "resolvedAt": { "type": "string", "format": "date-time", "description": "Yakunlangan vaqt" }
+      },
+      "required": ["id", "title", "category", "region", "district", "status", "reporterUid", "createdAt"]
+    },
+    "RegistrationApplication": {
+      "title": "RegistrationApplication",
+      "description": "Maktab Sardori va Eko-Elchi lavozimlariga rasmiy ariza",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "fullName": { "type": "string", "minLength": 2, "maxLength": 150 },
+        "telegramId": { "type": "string", "maxLength": 64 },
+        "telegramUsername": { "type": "string", "maxLength": 80 },
+        "region": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "district": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "schoolId": { "type": "string", "maxLength": 128 },
+        "schoolNumber": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "officialSchoolName": { "type": "string", "minLength": 2, "maxLength": 200 },
+        "requestedRole": { "type": "string", "enum": ["ambassador", "school_admin", "district_coordinator", "regional_coordinator"] },
+        "contactInfo": { "type": "string", "minLength": 5, "maxLength": 150 },
+        "verificationDetails": { "type": "string", "minLength": 5, "maxLength": 1500 },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected", "needs_info", "revoked"] },
+        "adminNote": { "type": "string", "maxLength": 1000 },
+        "reviewedBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "fullName", "region", "district", "schoolNumber", "officialSchoolName", "requestedRole", "contactInfo", "status", "createdAt"]
+    },
+    "MediaSubmission": {
+      "title": "MediaSubmission",
+      "description": "Ekologik foto va video faoliyat yuborilishi hamda moderatsiya holati",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "userName": { "type": "string", "maxLength": 150 },
+        "schoolId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "schoolName": { "type": "string", "maxLength": 200 },
+        "region": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "district": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "activityCategory": {
+          "type": "string",
+          "enum": ["tree_planting", "tree_care", "school_garden", "awareness_video", "waste_sorting", "school_improvement", "environmental_campaign"]
+        },
+        "mediaType": { "type": "string", "enum": ["image", "video"] },
+        "mediaUrl": { "type": "string", "minLength": 5, "maxLength": 1024 },
+        "fileHash": { "type": "string", "maxLength": 128 },
+        "description": { "type": "string", "minLength": 5, "maxLength": 1500 },
+        "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED", "NEEDS_REVISION"] },
+        "awardedCoins": { "type": "number" },
+        "moderatorNote": { "type": "string", "maxLength": 1000 },
+        "moderatedBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "schoolId", "region", "district", "activityCategory", "mediaType", "mediaUrl", "description", "status", "awardedCoins", "createdAt"]
+    },
+    "EcoTask": {
+      "title": "EcoTask",
+      "description": "Maktab sardori tomonidan Eko-Elchilarga biriktiriladigan vazifalar",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "region": { "type": "string", "maxLength": 100 },
+        "district": { "type": "string", "maxLength": 100 },
+        "title": { "type": "string", "minLength": 3, "maxLength": 200 },
+        "instructions": { "type": "string", "maxLength": 1500 },
+        "assignedByUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "assigneeUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "relatedReportId": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "enum": ["assigned", "in_progress", "submitted", "verified", "needs_revision"] },
+        "evidenceUrl": { "type": "string", "maxLength": 1024 },
+        "completionNote": { "type": "string", "maxLength": 1000 },
+        "rewardCoins": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "schoolId", "title", "assignedByUid", "assigneeUid", "status", "createdAt"]
+    },
+    "RewardSettings": {
+      "title": "RewardSettings",
+      "description": "Super Admin tomonidan boshqariladigan Eko-Tanga mukofot sozlamalari",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "welcomeBonus": { "type": "number" },
+        "dailyQuiz": { "type": "number" },
+        "referralInviter": { "type": "number" },
+        "referralInvitee": { "type": "number" },
+        "awarenessPost": { "type": "number" },
+        "wasteSorting": { "type": "number" },
+        "treeCareWatering": { "type": "number" },
+        "treePlanting": { "type": "number" },
+        "gardenProject": { "type": "number" },
+        "environmentalCampaign": { "type": "number" },
+        "schoolImprovement": { "type": "number" },
+        "problemVerified": { "type": "number" },
+        "problemResolved": { "type": "number" },
+        "ambassadorTaskBonus": { "type": "number" },
+        "duplicateWindowHours": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "awarenessPost", "wasteSorting", "treeCareWatering", "treePlanting", "gardenProject", "problemResolved", "updatedAt"]
+    },
+    "CoinTransaction": {
+      "title": "CoinTransaction",
+      "description": "EcoCoin tranzaksiya va mukofotlar tarixi",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "amount": { "type": "number" },
+        "type": { "type": "string", "enum": ["earn", "spend", "bonus", "adjustment"] },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "reason": { "type": "string", "maxLength": 500 },
+        "adjustedBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "amount", "type", "reason", "createdAt"]
+    },
+    "Ambassador": {
+      "title": "Ambassador",
+      "description": "Maktabdagi tasdiqlangan Eko-Elchi tizimi",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "schoolId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "schoolName": { "type": "string", "maxLength": 200 },
+        "fullName": { "type": "string", "maxLength": 150 },
+        "status": { "type": "string", "enum": ["active", "pending", "revoked"] },
+        "approvedBy": { "type": "string", "maxLength": 128 },
+        "appointedAt": { "type": "string", "format": "date-time" },
+        "permissions": { "type": "array" }
+      },
+      "required": ["id", "schoolId", "fullName", "status", "appointedAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Foydalanuvchiga yuboriladigan tizim xabarnomasi",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 200 },
+        "message": { "type": "string", "maxLength": 1000 },
+        "type": { "type": "string", "enum": ["coin", "status", "ambassador", "system", "role", "media", "task"] },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "title", "message", "type", "read", "createdAt"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Administratorlar va moderatorlar bajargan amallar jurnali (o'zgarmas)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "actorUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "actorName": { "type": "string", "maxLength": 150 },
+        "actorRole": { "type": "string", "maxLength": 64 },
+        "action": { "type": "string", "maxLength": 120 },
+        "targetCollection": { "type": "string", "maxLength": 80 },
+        "targetId": { "type": "string", "maxLength": 128 },
+        "details": { "type": "object" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "actorUid", "actorRole", "action", "targetCollection", "timestamp"]
+    },
+    "RoleRequest": {
+      "title": "RoleRequest",
+      "description": "Merosiy rol o'zgartirish so'rovlari (Super Admin tasdiqlaydi)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "userName": { "type": "string", "maxLength": 150 },
+        "requestedRole": { "type": "string", "maxLength": 64 },
+        "reason": { "type": "string", "maxLength": 1500 },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected", "needs_info"] },
+        "requestedAt": { "type": "string", "format": "date-time" },
+        "reviewedBy": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "userId", "requestedRole", "status", "requestedAt"]
+    },
+    "ShopItem": {
+      "title": "ShopItem",
+      "description": "EcoShop sovrin mahsuloti",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 200 },
+        "priceCoins": { "type": "number" },
+        "stock": { "type": "number" },
+        "sponsorName": { "type": "string", "maxLength": 150 }
+      },
+      "required": ["id", "title", "priceCoins", "stock"]
+    },
+    "ShopOrder": {
+      "title": "ShopOrder",
+      "description": "EcoShop buyurtmalari va vaucher/QR tasdiqlash holati",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "itemId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "itemTitle": { "type": "string", "maxLength": 200 },
+        "itemImageUrl": { "type": "string", "maxLength": 1024 },
+        "voucherCode": { "type": "string", "maxLength": 64 },
+        "priceCoins": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "approved", "delivered", "cancelled"] },
+        "verifiedBySchoolAdmin": { "type": "boolean" },
+        "verifiedByUid": { "type": "string", "maxLength": 128 },
+        "verifiedByName": { "type": "string", "maxLength": 150 },
+        "verifiedAt": { "type": "string", "format": "date-time" },
+        "forwardedToSuperAdminAt": { "type": "string", "format": "date-time" },
+        "verificationNote": { "type": "string", "maxLength": 500 },
+        "qrToken": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "itemId", "priceCoins", "status", "createdAt"]
+    },
+    "EcoAd": {
+      "title": "EcoAd",
+      "description": "Super Admin tomonidan boshqariladigan reklama va +100 EcoCoin kampaniyalari",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 2, "maxLength": 200 },
+        "sponsorName": { "type": "string", "maxLength": 150 },
+        "type": { "type": "string", "enum": ["banner", "video", "card"] },
+        "placement": { "type": "string", "enum": ["home_top", "home_middle", "shop_top", "map_banner", "media_sidebar", "post_purchase", "earn_coins"] },
+        "headline": { "type": "string", "maxLength": 300 },
+        "subheadline": { "type": "string", "maxLength": 500 },
+        "imageUrl": { "type": "string", "maxLength": 1024 },
+        "videoUrl": { "type": "string", "maxLength": 1024 },
+        "ctaText": { "type": "string", "maxLength": 80 },
+        "ctaUrl": { "type": "string", "maxLength": 1024 },
+        "rewardCoins": { "type": "number" },
+        "skipAfterSeconds": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "paused", "pending", "expired"] },
+        "impressionsCount": { "type": "number" },
+        "clicksCount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "placement", "headline", "status"]
+    },
+    "AdRewardClaim": {
+      "title": "AdRewardClaim",
+      "description": "Foydalanuvchining reklama ko'rib +100 EcoCoin olganligi haqidagi tasdiq yozuvi",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "adId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "amount": { "type": "number" },
+        "claimedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "adId", "amount", "claimedAt"]
+    },
+    "Referral": {
+      "title": "Referral",
+      "description": "Referal taklif yozuvi",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "referrerUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "referredUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "status": { "type": "string", "enum": ["pending", "verified", "rewarded"] },
+        "rewardCoins": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "referrerUid", "referredUid", "status"]
+    },
+    "District": {
+      "title": "District",
+      "description": "O'zbekiston viloyat va tumanlari ma'muriy chegaralari",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "region": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "centerLat": { "type": "number" },
+        "centerLng": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "region", "centerLat", "centerLng", "isActive"]
+    },
+    "SchoolRanking": {
+      "title": "SchoolRanking",
+      "description": "Maktablarning ekologik ball va reyting jadvali",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "schoolName": { "type": "string", "minLength": 2, "maxLength": 200 },
+        "region": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "district": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "rank": { "type": "number" },
+        "environmentalScore": { "type": "number" },
+        "totalCoins": { "type": "number" },
+        "treesPlanted": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "schoolId", "schoolName", "rank", "environmentalScore", "updatedAt"]
+    },
+    "MapLayer": {
+      "title": "MapLayer",
+      "description": "Gibrid xarita qatlamlari va ruxsat etilgan provayder sozlamalari",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "label": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "category": { "type": "string", "enum": ["infrastructure", "ecology", "reports", "analytics"] },
+        "enabledByDefault": { "type": "boolean" },
+        "isActive": { "type": "boolean" },
+        "requiresPaidApi": { "type": "boolean" },
+        "updatedBy": { "type": "string", "maxLength": 128 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "label", "category", "enabledByDefault", "isActive", "updatedAt"]
+    },
+    "HomePost": {
+      "title": "HomePost",
+      "description": "Maktab Sardori, Koordinatorlar va Super Admin boshqaradigan bosh sahifa postlari, bot yangiliklari va reklamalari",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 2, "maxLength": 200 },
+        "content": { "type": "string", "minLength": 2, "maxLength": 2000 },
+        "category": { "type": "string", "enum": ["bot_news", "website", "channel_ad", "news", "school_event"] },
+        "imageUrl": { "type": "string", "maxLength": 1024 },
+        "ctaText": { "type": "string", "maxLength": 80 },
+        "ctaUrl": { "type": "string", "maxLength": 1024 },
+        "authorUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "authorName": { "type": "string", "maxLength": 150 },
+        "authorRole": { "type": "string", "maxLength": 64 },
+        "schoolId": { "type": "string", "maxLength": 128 },
+        "schoolName": { "type": "string", "maxLength": 200 },
+        "region": { "type": "string", "maxLength": 100 },
+        "district": { "type": "string", "maxLength": 100 },
+        "isPinned": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["active", "paused"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "content", "category", "authorUid", "status", "createdAt"]
+    },
+    "MonthlyAward": {
+      "title": "MonthlyAward",
+      "description": "Oy yakunida tumandagi eng faol TOP-3 maktab va TOP-3 Eko-Elchi mukofotlari tarixi",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "periodKey": { "type": "string", "maxLength": 32 },
+        "periodLabel": { "type": "string", "maxLength": 64 },
+        "region": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "district": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "topSchools": { "type": "array" },
+        "topAmbassadors": { "type": "array" },
+        "awardedByUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "awardedByName": { "type": "string", "maxLength": 150 },
+        "awardedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "periodKey", "region", "district", "awardedByUid", "awardedAt"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Rollararo Telegram uslubidagi real-vaqt suhbat, topshiriq, g'oya va bot xabarlari",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "channelId": { "type": "string", "minLength": 3, "maxLength": 160 },
+        "scope": { "type": "string", "enum": ["school_ambassadors", "district_captains", "regional_coordinators", "student_dm"] },
+        "messageKind": { "type": "string", "enum": ["chat", "command", "idea", "bot_notice"] },
+        "senderUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "senderName": { "type": "string", "maxLength": 150 },
+        "senderRole": { "type": "string", "maxLength": 64 },
+        "recipientUid": { "type": "string", "maxLength": 128 },
+        "recipientName": { "type": "string", "maxLength": 150 },
+        "schoolId": { "type": "string", "maxLength": 128 },
+        "region": { "type": "string", "maxLength": 100 },
+        "district": { "type": "string", "maxLength": 100 },
+        "text": { "type": "string", "maxLength": 3000 },
+        "imageUrl": { "type": "string", "maxLength": 1024 },
+        "viaBot": { "type": "boolean" },
+        "botHandle": { "type": "string", "maxLength": 64 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "channelId", "scope", "messageKind", "senderUid", "createdAt"]
+    },
+    "ChatPermission": {
+      "title": "ChatPermission",
+      "description": "O'quvchilar bir-biriga yozishi uchun ruxsat so'rovi va holati",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "requesterUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "requesterName": { "type": "string", "maxLength": 150 },
+        "targetUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "targetName": { "type": "string", "maxLength": 150 },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected", "blocked"] },
+        "note": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "respondedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "requesterUid", "targetUid", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Foydalanuvchilarning PII himoyalangan profillari"
+    },
+    "/schools/{schoolId}": {
+      "schema": "School",
+      "description": "Tasdiqlangan maktablar katalogi va Digital Twin ma'lumotlari"
+    },
+    "/reports/{reportId}": {
+      "schema": "EcoReport",
+      "description": "Ekologik muammo hisobotlari (6 bosqichli)"
+    },
+    "/eco_reports/{reportId}": {
+      "schema": "EcoReport",
+      "description": "Gibrid xarita uchun ekologik muammo hisobotlari"
+    },
+    "/districts/{districtId}": {
+      "schema": "District",
+      "description": "Viloyat va tumanlar geofazoviy ma'lumotlari"
+    },
+    "/school_rankings/{rankingId}": {
+      "schema": "SchoolRanking",
+      "description": "Maktablarning ekologik reyting ko'rsatkichlari"
+    },
+    "/map_layers/{layerId}": {
+      "schema": "MapLayer",
+      "description": "Ekologik xarita qatlamlari konfiguratsiyasi"
+    },
+    "/registration_applications/{applicationId}": {
+      "schema": "RegistrationApplication",
+      "description": "Maktab Sardori va Eko-Elchi lavozimlariga arizalar"
+    },
+    "/media_submissions/{submissionId}": {
+      "schema": "MediaSubmission",
+      "description": "Ekologik foto va video faoliyat dalillari"
+    },
+    "/eco_tasks/{taskId}": {
+      "schema": "EcoTask",
+      "description": "Maktab sardoridan Eko-Elchilarga topshiriqlar"
+    },
+    "/reward_settings/{settingId}": {
+      "schema": "RewardSettings",
+      "description": "Super Admin sozlaydigan mukofot tariflari"
+    },
+    "/ambassadors/{ambassadorId}": {
+      "schema": "Ambassador",
+      "description": "Tasdiqlangan Eko-Elchilar ro'yxati"
+    },
+    "/audit_logs/{logId}": {
+      "schema": "AuditLog",
+      "description": "O'zgarmas xavfsizlik va rol boshqaruvi jurnali"
+    },
+    "/shopItems/{itemId}": {
+      "schema": "ShopItem",
+      "description": "EcoShop mahsulotlari"
+    },
+    "/transactions/{transactionId}": {
+      "schema": "CoinTransaction",
+      "description": "EcoCoin tranzaksiyalari"
+    },
+    "/shop_orders/{orderId}": {
+      "schema": "ShopOrder",
+      "description": "EcoShop buyurtmalari"
+    },
+    "/referrals/{referralId}": {
+      "schema": "Referral",
+      "description": "Referal yozuvlari"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "Foydalanuvchi xabarnomalari"
+    },
+    "/role_requests/{requestId}": {
+      "schema": "RoleRequest",
+      "description": "Lavozim o'zgartirish so'rovlari"
+    },
+    "/eco_ads/{adId}": {
+      "schema": "EcoAd",
+      "description": "Hamkorlik reklamalari va 15 soniyalik +100 EcoCoin kampaniyalari"
+    },
+    "/ad_reward_claims/{claimId}": {
+      "schema": "AdRewardClaim",
+      "description": "Reklama ko'rish mukofoti yozuvlari"
+    },
+    "/home_posts/{postId}": {
+      "schema": "HomePost",
+      "description": "Maktab sardorlari va koordinatorlar boshqaradigan bosh sahifa yangilik va reklama postlari"
+    },
+    "/monthly_awards/{awardId}": {
+      "schema": "MonthlyAward",
+      "description": "Tuman bo'yicha oy yakuni TOP-3 maktab va Eko-Elchi taqdirlash yozuvlari"
+    },
+    "/chat_messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Telegram uslubidagi rol suhbatlari va topshiriq xabarlari"
+    },
+    "/chat_permissions/{permissionId}": {
+      "schema": "ChatPermission",
+      "description": "O'quvchilararo yozishish ruxsatlari"
+    }
+  }
+}

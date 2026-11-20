@@ -1,0 +1,13 @@
+{
+  "ignore": [
+    "server-unified-db.json",
+    "server-unified-db.backup.json",
+    "server-bot-config.json",
+    "public-tunnel-url.txt",
+    "public/uploads/*",
+    "dist/*",
+    "bin/*",
+    ".session-secret",
+    "*.log"
+  ]
+}

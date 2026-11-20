@@ -1,0 +1,6 @@
+{
+  "name": "ECO HERO - O'zbekiston Yoshlari Ekologik Ekotizimi",
+  "description": "Maktab o'quvchilari uchun sun'iy intellektga asoslangan ekologik platforma: muammolar xaritasi, ekomukofotlar, AI tahlil va eko-maktablar tarmog'i.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

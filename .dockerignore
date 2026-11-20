@@ -1,0 +1,8 @@
+node_modules
+dist
+.git
+.env
+public-tunnel-url.txt
+bin
+tmp
+*.log

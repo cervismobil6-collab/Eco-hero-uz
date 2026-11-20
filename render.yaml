@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: ecohero-uz
+    runtime: node
+    plan: free
+    buildCommand: NODE_OPTIONS=--max-old-space-size=448 npm install --include=dev --include=optional && NODE_OPTIONS=--max-old-space-size=448 npm run build
+    startCommand: node index.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: USE_QUICK_TUNNEL
+        value: "false"
+      - key: SKIP_AUTO_BUILD
+        value: "true"
+      - key: PORT
+        value: "3000"
+      - key: PUBLIC_APP_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_BOT_USERNAME
+        value: Ecoheros_bot
+      - key: VITE_GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: CESIUM_ION_TOKEN
+        sync: false
+      - key: GOOGLE_SITE_VERIFICATION
+        sync: false

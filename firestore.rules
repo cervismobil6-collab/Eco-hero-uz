@@ -1,0 +1,1012 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ========================================================
+    // Core Primitives
+    // ========================================================
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isVerifiedEmail() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function userDocExists() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isBootstrappedAdmin() {
+      return isSignedIn() && (
+        request.auth.uid == '8832599080' ||
+        (isVerifiedEmail() && request.auth.token.email == 'diyorbekormonov44@gmail.com')
+      );
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && (
+        isBootstrappedAdmin() ||
+        (userDocExists() && (
+          getUserData().role == 'super_admin' ||
+          getUserData().telegramId == '8832599080'
+        ))
+      );
+    }
+
+    function isModerator() {
+      return isSignedIn() && (
+        isSuperAdmin() ||
+        (userDocExists() && getUserData().role == 'moderator')
+      );
+    }
+
+    function isRegionalCoordinator(region) {
+      return isSignedIn() && (
+        isSuperAdmin() ||
+        (userDocExists() && getUserData().role == 'regional_coordinator' && getUserData().region == region)
+      );
+    }
+
+    function isDistrictCoordinator(district) {
+      return isSignedIn() && (
+        isSuperAdmin() ||
+        (userDocExists() && getUserData().role == 'district_coordinator' && getUserData().district == district)
+      );
+    }
+
+    function isSchoolAdmin(schoolId) {
+      return isSignedIn() && (
+        isSuperAdmin() ||
+        (userDocExists() && getUserData().role == 'school_admin' && getUserData().schoolId == schoolId)
+      );
+    }
+
+    function isAmbassador(schoolId) {
+      return isSignedIn() && (
+        isSuperAdmin() ||
+        isSchoolAdmin(schoolId) ||
+        (userDocExists() && getUserData().role == 'ambassador' && getUserData().schoolId == schoolId)
+      );
+    }
+
+    // ========================================================
+    // Entity Validation Blueprints (Anti-Update-Gap)
+    // ========================================================
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'fullName', 'role', 'region', 'district', 'ecoCoins', 'registrationDate', 'createdAt']) &&
+        data.keys().hasOnly([
+          'uid', 'fullName', 'email', 'phoneNumber', 'profileImage', 'avatarUrl',
+          'role', 'approvedRoles', 'schoolId', 'schoolName', 'schoolNumber',
+          'region', 'district', 'grade', 'ecoCoins', 'registrationDate',
+          'isVerified', 'badge', 'telegramUsername', 'telegramId',
+          'allowStudentMessages', 'activityStats', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.uid) &&
+        data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 150 &&
+        data.role is string && data.role in ['student', 'ambassador', 'school_admin', 'district_coordinator', 'regional_coordinator', 'moderator', 'super_admin', 'sponsor'] &&
+        data.region is string && data.region.size() >= 2 && data.region.size() <= 100 &&
+        data.district is string && data.district.size() >= 2 && data.district.size() <= 100 &&
+        data.ecoCoins is number && data.ecoCoins >= 0 &&
+        data.registrationDate is string && data.registrationDate.size() <= 64 &&
+        data.createdAt is timestamp &&
+        (!('email' in data) || (data.email is string && data.email.size() <= 180)) &&
+        (!('schoolId' in data) || (data.schoolId is string && data.schoolId.size() <= 128)) &&
+        (!('schoolName' in data) || (data.schoolName is string && data.schoolName.size() <= 200)) &&
+        (!('schoolNumber' in data) || (data.schoolNumber is string && data.schoolNumber.size() <= 40)) &&
+        (!('profileImage' in data) || (data.profileImage is string && data.profileImage.size() <= 1024)) &&
+        (!('badge' in data) || (data.badge is string && data.badge.size() <= 100)) &&
+        (!('allowStudentMessages' in data) || data.allowStudentMessages is bool) &&
+        (!('approvedRoles' in data) || (data.approvedRoles is list && data.approvedRoles.size() <= 8));
+    }
+
+    function isValidSchool(data) {
+      return data.keys().hasAll(['id', 'name', 'number', 'region', 'district', 'totalCoins', 'status', 'createdAt']) &&
+        data.keys().hasOnly([
+          'id', 'name', 'number', 'region', 'district', 'address', 'lat', 'lng', 'logoUrl',
+          'verifiedPhotos', 'glbModelUrl', 'environmentalScore', 'greenAreaSqm',
+          'ambassadorId', 'ambassadorName', 'captainId',
+          'registeredStudentsCount', 'totalCoins', 'treesPlanted',
+          'cleanupsCompleted', 'ratingRank', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        data.name is string && data.name.size() >= 2 && data.name.size() <= 200 &&
+        data.number is string && data.number.size() >= 1 && data.number.size() <= 40 &&
+        data.region is string && data.region.size() >= 2 && data.region.size() <= 100 &&
+        data.district is string && data.district.size() >= 2 && data.district.size() <= 100 &&
+        (!('address' in data) || (data.address is string && data.address.size() <= 300)) &&
+        (!('lat' in data) || (data.lat is number && data.lat >= 36 && data.lat <= 47)) &&
+        (!('lng' in data) || (data.lng is number && data.lng >= 54 && data.lng <= 75)) &&
+        (!('logoUrl' in data) || (data.logoUrl is string && data.logoUrl.size() <= 1024)) &&
+        (!('glbModelUrl' in data) || (data.glbModelUrl is string && data.glbModelUrl.size() <= 1024)) &&
+        (!('environmentalScore' in data) || (data.environmentalScore is number && data.environmentalScore >= 0 && data.environmentalScore <= 100000)) &&
+        (!('greenAreaSqm' in data) || (data.greenAreaSqm is number && data.greenAreaSqm >= 0 && data.greenAreaSqm <= 1000000)) &&
+        (!('verifiedPhotos' in data) || (data.verifiedPhotos is list && data.verifiedPhotos.size() <= 12 && (data.verifiedPhotos.size() == 0 || (data.verifiedPhotos[0] is string && data.verifiedPhotos[0].size() <= 1024)))) &&
+        data.totalCoins is number && data.totalCoins >= 0 &&
+        data.status in ['active', 'pending', 'verified'] &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidDistrict(data) {
+      return data.keys().hasAll(['id', 'name', 'region', 'centerLat', 'centerLng', 'isActive']) &&
+        data.keys().hasOnly(['id', 'name', 'region', 'centerLat', 'centerLng', 'isActive', 'updatedAt']) &&
+        isValidId(data.id) &&
+        data.name is string && data.name.size() >= 2 && data.name.size() <= 120 &&
+        data.region is string && data.region.size() >= 2 && data.region.size() <= 120 &&
+        data.centerLat is number && data.centerLat >= 36 && data.centerLat <= 47 &&
+        data.centerLng is number && data.centerLng >= 54 && data.centerLng <= 75 &&
+        data.isActive is bool &&
+        (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+
+    function isValidSchoolRanking(data) {
+      return data.keys().hasAll(['id', 'schoolId', 'schoolName', 'rank', 'environmentalScore', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'schoolId', 'schoolName', 'region', 'district', 'rank', 'environmentalScore', 'totalCoins', 'treesPlanted', 'updatedAt']) &&
+        isValidId(data.id) &&
+        isValidId(data.schoolId) &&
+        data.schoolName is string && data.schoolName.size() >= 2 && data.schoolName.size() <= 200 &&
+        (!('region' in data) || (data.region is string && data.region.size() <= 100)) &&
+        (!('district' in data) || (data.district is string && data.district.size() <= 100)) &&
+        data.rank is number && data.rank >= 1 &&
+        data.environmentalScore is number && data.environmentalScore >= 0 &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidMapLayer(data) {
+      return data.keys().hasAll(['id', 'label', 'category', 'enabledByDefault', 'isActive', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'label', 'category', 'enabledByDefault', 'isActive', 'requiresPaidApi', 'updatedBy', 'updatedAt']) &&
+        isValidId(data.id) &&
+        data.label is string && data.label.size() >= 2 && data.label.size() <= 120 &&
+        data.category in ['infrastructure', 'ecology', 'reports', 'analytics'] &&
+        data.enabledByDefault is bool &&
+        data.isActive is bool &&
+        (!('requiresPaidApi' in data) || data.requiresPaidApi is bool) &&
+        (!('updatedBy' in data) || (data.updatedBy is string && data.updatedBy.size() <= 128)) &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidEcoReport(data) {
+      return data.keys().hasAll(['id', 'title', 'category', 'region', 'district', 'status', 'reporterUid', 'createdAt']) &&
+        data.keys().hasOnly([
+          'id', 'title', 'description', 'category', 'severity', 'status',
+          'region', 'district', 'address', 'lat', 'lng',
+          'imageUrl', 'videoUrl', 'resolvedImageUrl',
+          'reporterUid', 'reporterName', 'schoolId', 'schoolName',
+          'assignedAmbassadorUid', 'captainInstructions', 'escalationTarget',
+          'isHazardous', 'rewardCoins', 'upvotes', 'createdAt', 'updatedAt', 'resolvedAt'
+        ]) &&
+        isValidId(data.id) &&
+        data.title is string && data.title.size() >= 3 && data.title.size() <= 200 &&
+        (!('description' in data) || (data.description is string && data.description.size() <= 2000)) &&
+        data.category in ['waste', 'water', 'deforestation', 'air', 'greening_needed', 'electrical_hazard', 'chemical_hazard'] &&
+        data.region is string && data.region.size() >= 2 && data.region.size() <= 100 &&
+        data.district is string && data.district.size() >= 2 && data.district.size() <= 100 &&
+        data.status in ['pending', 'verified', 'in_progress', 'resolved', 'rejected', 'PENDING_REVIEW', 'APPROVED', 'NEEDS_INFO', 'ASSIGNED', 'IN_PROGRESS', 'ESCALATED', 'RESOLVED', 'REJECTED'] &&
+        isValidId(data.reporterUid) &&
+        data.createdAt is timestamp &&
+        (!('rewardCoins' in data) || (data.rewardCoins is number && data.rewardCoins >= 0)) &&
+        (!('captainInstructions' in data) || (data.captainInstructions is string && data.captainInstructions.size() <= 1000)) &&
+        (!('escalationTarget' in data) || (data.escalationTarget is string && data.escalationTarget.size() <= 200));
+    }
+
+    function isValidRegistrationApplication(data) {
+      return data.keys().hasAll(['id', 'userId', 'fullName', 'region', 'district', 'schoolNumber', 'officialSchoolName', 'requestedRole', 'contactInfo', 'status', 'createdAt']) &&
+        data.keys().hasOnly([
+          'id', 'userId', 'fullName', 'telegramId', 'telegramUsername',
+          'region', 'district', 'schoolId', 'schoolNumber', 'officialSchoolName',
+          'requestedRole', 'contactInfo', 'verificationDetails',
+          'status', 'adminNote', 'reviewedBy', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.userId) &&
+        data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 150 &&
+        data.region is string && data.region.size() >= 2 && data.region.size() <= 100 &&
+        data.district is string && data.district.size() >= 2 && data.district.size() <= 100 &&
+        data.schoolNumber is string && data.schoolNumber.size() >= 1 && data.schoolNumber.size() <= 40 &&
+        data.officialSchoolName is string && data.officialSchoolName.size() >= 2 && data.officialSchoolName.size() <= 200 &&
+        data.requestedRole in ['ambassador', 'school_admin', 'district_coordinator', 'regional_coordinator'] &&
+        data.contactInfo is string && data.contactInfo.size() >= 5 && data.contactInfo.size() <= 150 &&
+        (!('verificationDetails' in data) || (data.verificationDetails is string && data.verificationDetails.size() <= 1500)) &&
+        data.status in ['pending', 'approved', 'rejected', 'needs_info', 'revoked'] &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidMediaSubmission(data) {
+      return data.keys().hasAll(['id', 'userId', 'schoolId', 'region', 'district', 'activityCategory', 'mediaType', 'mediaUrl', 'description', 'status', 'awardedCoins', 'createdAt']) &&
+        data.keys().hasOnly([
+          'id', 'userId', 'userName', 'schoolId', 'schoolName', 'region', 'district',
+          'activityCategory', 'mediaType', 'mediaUrl', 'fileHash', 'description',
+          'status', 'awardedCoins', 'moderatorNote', 'moderatedBy', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.userId) &&
+        isValidId(data.schoolId) &&
+        data.region is string && data.region.size() >= 2 && data.region.size() <= 100 &&
+        data.district is string && data.district.size() >= 2 && data.district.size() <= 100 &&
+        data.activityCategory in ['tree_planting', 'tree_care', 'school_garden', 'awareness_video', 'waste_sorting', 'school_improvement', 'environmental_campaign'] &&
+        data.mediaType in ['image', 'video'] &&
+        data.mediaUrl is string && data.mediaUrl.size() >= 5 && data.mediaUrl.size() <= 1024 &&
+        data.description is string && data.description.size() >= 5 && data.description.size() <= 1500 &&
+        data.status in ['PENDING', 'APPROVED', 'REJECTED', 'NEEDS_REVISION'] &&
+        data.awardedCoins is number && data.awardedCoins >= 0 &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidEcoTask(data) {
+      return data.keys().hasAll(['id', 'schoolId', 'title', 'assignedByUid', 'assigneeUid', 'status', 'createdAt']) &&
+        data.keys().hasOnly([
+          'id', 'schoolId', 'region', 'district', 'title', 'instructions',
+          'assignedByUid', 'assigneeUid', 'relatedReportId', 'status',
+          'evidenceUrl', 'completionNote', 'rewardCoins', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.schoolId) &&
+        isValidId(data.assignedByUid) &&
+        isValidId(data.assigneeUid) &&
+        data.title is string && data.title.size() >= 3 && data.title.size() <= 200 &&
+        data.status in ['assigned', 'in_progress', 'submitted', 'verified', 'needs_revision'] &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidRewardSettings(data) {
+      return data.keys().hasAll(['id', 'awarenessPost', 'wasteSorting', 'treeCareWatering', 'treePlanting', 'gardenProject', 'problemResolved', 'updatedAt']) &&
+        data.keys().hasOnly([
+          'id', 'welcomeBonus', 'dailyQuiz', 'referralInviter', 'referralInvitee',
+          'awarenessPost', 'wasteSorting', 'treeCareWatering', 'treePlanting',
+          'gardenProject', 'environmentalCampaign', 'schoolImprovement',
+          'problemVerified', 'problemResolved', 'ambassadorTaskBonus',
+          'duplicateWindowHours', 'updatedAt', 'updatedBy'
+        ]) &&
+        isValidId(data.id) &&
+        data.awarenessPost is number && data.awarenessPost >= 0 &&
+        data.wasteSorting is number && data.wasteSorting >= 0 &&
+        data.treeCareWatering is number && data.treeCareWatering >= 0 &&
+        data.treePlanting is number && data.treePlanting >= 0 &&
+        data.gardenProject is number && data.gardenProject >= 0 &&
+        data.problemResolved is number && data.problemResolved >= 0 &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidRoleRequest(data) {
+      return data.keys().hasAll(['id', 'userId', 'requestedRole', 'status', 'requestedAt']) &&
+        data.keys().hasOnly([
+          'id', 'userId', 'userName', 'userPhone', 'userSchool', 'schoolId',
+          'currentRole', 'requestedRole', 'requestedRoleName', 'reason',
+          'status', 'requestedAt', 'reviewedAt', 'reviewedBy', 'adminNotes'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.userId) &&
+        data.requestedRole is string && data.requestedRole.size() <= 64 &&
+        data.status in ['pending', 'approved', 'rejected', 'needs_info'] &&
+        data.requestedAt is timestamp;
+    }
+
+    function isValidAmbassador(data) {
+      return data.keys().hasAll(['id', 'schoolId', 'fullName', 'status', 'appointedAt']) &&
+        data.keys().hasOnly([
+          'id', 'schoolId', 'schoolName', 'region', 'district', 'fullName',
+          'email', 'phone', 'telegramUsername', 'grade', 'status', 'approvedBy',
+          'appointedBy', 'appointedAt', 'permissions', 'ecoCoins',
+          'verifiedActivitiesCount', 'tasksCompletedCount'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.schoolId) &&
+        data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 150 &&
+        data.status in ['active', 'pending', 'revoked'] &&
+        data.appointedAt is timestamp &&
+        (!('permissions' in data) || (data.permissions is list && data.permissions.size() <= 20));
+    }
+
+    function isValidAuditLog(data) {
+      return data.keys().hasAll(['id', 'actorUid', 'actorRole', 'action', 'targetCollection', 'timestamp']) &&
+        data.keys().hasOnly(['id', 'actorUid', 'actorName', 'actorRole', 'action', 'targetCollection', 'targetId', 'details', 'timestamp']) &&
+        isValidId(data.id) &&
+        isValidId(data.actorUid) &&
+        data.actorRole is string && data.actorRole.size() <= 64 &&
+        data.action is string && data.action.size() <= 120 &&
+        data.targetCollection is string && data.targetCollection.size() <= 80 &&
+        data.timestamp is timestamp;
+    }
+
+    function isValidTransaction(data) {
+      return data.keys().hasAll(['id', 'userId', 'amount', 'type', 'reason', 'createdAt']) &&
+        data.keys().hasOnly(['id', 'userId', 'amount', 'type', 'status', 'reason', 'adjustedBy', 'createdAt']) &&
+        isValidId(data.id) &&
+        isValidId(data.userId) &&
+        data.amount is number &&
+        data.type in ['earn', 'spend', 'bonus', 'adjustment'] &&
+        data.reason is string && data.reason.size() <= 500 &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidShopOrder(data) {
+      return data.keys().hasAll(['id', 'userId', 'itemId', 'priceCoins', 'status', 'createdAt']) &&
+        data.keys().hasOnly([
+          'id', 'userId', 'userName', 'schoolId', 'schoolName', 'itemId', 'itemTitle',
+          'itemImageUrl', 'priceCoins', 'voucherCode', 'status', 'createdAt', 'approvedAt',
+          'sponsorName', 'verifiedBySchoolAdmin', 'verifiedByUid', 'verifiedByName',
+          'verifiedAt', 'forwardedToSuperAdminAt', 'verificationNote', 'qrToken'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.userId) &&
+        isValidId(data.itemId) &&
+        (!('itemTitle' in data) || (data.itemTitle is string && data.itemTitle.size() <= 200)) &&
+        (!('itemImageUrl' in data) || (data.itemImageUrl is string && data.itemImageUrl.size() <= 1024)) &&
+        (!('voucherCode' in data) || (data.voucherCode is string && data.voucherCode.size() <= 64)) &&
+        (!('verifiedBySchoolAdmin' in data) || data.verifiedBySchoolAdmin is bool) &&
+        (!('verifiedByUid' in data) || (data.verifiedByUid is string && data.verifiedByUid.size() <= 128)) &&
+        (!('verifiedByName' in data) || (data.verifiedByName is string && data.verifiedByName.size() <= 150)) &&
+        (!('verificationNote' in data) || (data.verificationNote is string && data.verificationNote.size() <= 500)) &&
+        (!('qrToken' in data) || (data.qrToken is string && data.qrToken.size() <= 128)) &&
+        data.priceCoins is number && data.priceCoins >= 0 &&
+        data.status in ['pending', 'approved', 'delivered', 'cancelled'] &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidEcoAd(data) {
+      return data.keys().hasAll(['id', 'title', 'placement', 'headline', 'status']) &&
+        data.keys().hasOnly([
+          'id', 'title', 'sponsorId', 'sponsorName', 'sponsorLogo', 'type', 'placement',
+          'headline', 'subheadline', 'imageUrl', 'videoUrl', 'ctaText', 'ctaUrl',
+          'rewardCoins', 'skipAfterSeconds', 'isVerifiedSponsor', 'startDate', 'endDate',
+          'status', 'impressionsCount', 'clicksCount', 'complianceNote', 'createdAt'
+        ]) &&
+        isValidId(data.id) &&
+        data.title is string && data.title.size() >= 2 && data.title.size() <= 200 &&
+        data.placement in ['home_top', 'home_middle', 'shop_top', 'map_banner', 'media_sidebar', 'post_purchase', 'earn_coins'] &&
+        data.headline is string && data.headline.size() <= 300 &&
+        (!('subheadline' in data) || (data.subheadline is string && data.subheadline.size() <= 500)) &&
+        (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 1024)) &&
+        (!('videoUrl' in data) || (data.videoUrl is string && data.videoUrl.size() <= 1024)) &&
+        (!('ctaText' in data) || (data.ctaText is string && data.ctaText.size() <= 80)) &&
+        (!('ctaUrl' in data) || (data.ctaUrl is string && data.ctaUrl.size() <= 1024)) &&
+        (!('rewardCoins' in data) || (data.rewardCoins is number && data.rewardCoins >= 0 && data.rewardCoins <= 1000)) &&
+        (!('skipAfterSeconds' in data) || (data.skipAfterSeconds is number && data.skipAfterSeconds >= 0 && data.skipAfterSeconds <= 120)) &&
+        data.status in ['active', 'paused', 'pending', 'expired'];
+    }
+
+    function isValidAdRewardClaim(data) {
+      return data.keys().hasAll(['id', 'userId', 'adId', 'amount', 'claimedAt']) &&
+        data.keys().hasOnly(['id', 'userId', 'adId', 'amount', 'claimedAt']) &&
+        isValidId(data.id) &&
+        isValidId(data.userId) &&
+        isValidId(data.adId) &&
+        data.amount is number && data.amount > 0 && data.amount <= 500 &&
+        data.claimedAt is timestamp;
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll(['id', 'userId', 'title', 'message', 'type', 'read', 'createdAt']) &&
+        data.keys().hasOnly(['id', 'userId', 'title', 'message', 'type', 'read', 'createdAt']) &&
+        isValidId(data.id) &&
+        isValidId(data.userId) &&
+        data.title is string && data.title.size() <= 200 &&
+        data.message is string && data.message.size() <= 1000 &&
+        data.type in ['coin', 'status', 'ambassador', 'system', 'role', 'media', 'task', 'award'] &&
+        data.read is bool &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidReferral(data) {
+      return data.keys().hasAll(['id', 'referrerUid', 'referredUid', 'status']) &&
+        data.keys().hasOnly(['id', 'referrerUid', 'referredUid', 'referredName', 'referredSchool', 'status', 'rewardCoins', 'createdAt']) &&
+        isValidId(data.id) &&
+        isValidId(data.referrerUid) &&
+        isValidId(data.referredUid) &&
+        data.status in ['pending', 'verified', 'rewarded'];
+    }
+
+    function isValidShopItem(data) {
+      return data.keys().hasAll(['id', 'title', 'priceCoins', 'stock']) &&
+        data.keys().hasOnly(['id', 'title', 'description', 'priceCoins', 'category', 'stock', 'imageUrl', 'sponsorName']) &&
+        isValidId(data.id) &&
+        data.title is string && data.title.size() <= 200 &&
+        data.priceCoins is number && data.priceCoins >= 0 &&
+        data.stock is number && data.stock >= 0;
+    }
+
+    function isValidHomePost(data) {
+      return data.keys().hasAll(['id', 'title', 'content', 'category', 'authorUid', 'status', 'createdAt']) &&
+        data.keys().hasOnly([
+          'id', 'title', 'content', 'category', 'imageUrl', 'ctaText', 'ctaUrl',
+          'authorUid', 'authorName', 'authorRole', 'schoolId', 'schoolName',
+          'region', 'district', 'isPinned', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        data.title is string && data.title.size() >= 2 && data.title.size() <= 200 &&
+        data.content is string && data.content.size() >= 2 && data.content.size() <= 2000 &&
+        data.category in ['bot_news', 'website', 'channel_ad', 'news', 'school_event'] &&
+        isValidId(data.authorUid) &&
+        (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 1024)) &&
+        (!('ctaText' in data) || (data.ctaText is string && data.ctaText.size() <= 80)) &&
+        (!('ctaUrl' in data) || (data.ctaUrl is string && data.ctaUrl.size() <= 1024)) &&
+        data.status in ['active', 'paused'] &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidMonthlyAward(data) {
+      return data.keys().hasAll(['id', 'periodKey', 'region', 'district', 'awardedByUid', 'awardedAt']) &&
+        data.keys().hasOnly([
+          'id', 'periodKey', 'periodLabel', 'region', 'district',
+          'topSchools', 'topAmbassadors', 'awardedByUid', 'awardedByName', 'awardedAt'
+        ]) &&
+        isValidId(data.id) &&
+        data.periodKey is string && data.periodKey.size() >= 4 && data.periodKey.size() <= 32 &&
+        data.region is string && data.region.size() >= 2 && data.region.size() <= 100 &&
+        data.district is string && data.district.size() >= 2 && data.district.size() <= 100 &&
+        isValidId(data.awardedByUid) &&
+        data.awardedAt is timestamp &&
+        (!('topSchools' in data) || (data.topSchools is list && data.topSchools.size() <= 5)) &&
+        (!('topAmbassadors' in data) || (data.topAmbassadors is list && data.topAmbassadors.size() <= 5));
+    }
+
+    function isValidChatMessage(data) {
+      return data.keys().hasAll(['id', 'channelId', 'scope', 'messageKind', 'senderUid', 'createdAt']) &&
+        data.keys().hasOnly([
+          'id', 'channelId', 'scope', 'messageKind', 'senderUid', 'senderName',
+          'senderRole', 'recipientUid', 'recipientName', 'schoolId', 'region',
+          'district', 'text', 'imageUrl', 'viaBot', 'botHandle', 'createdAt'
+        ]) &&
+        isValidId(data.id) &&
+        data.channelId is string && data.channelId.size() >= 3 && data.channelId.size() <= 160 &&
+        data.scope in ['school_ambassadors', 'district_captains', 'regional_coordinators', 'student_dm'] &&
+        data.messageKind in ['chat', 'command', 'idea', 'bot_notice'] &&
+        isValidId(data.senderUid) &&
+        (!('recipientUid' in data) || (data.recipientUid is string && data.recipientUid.size() <= 128)) &&
+        (!('text' in data) || (data.text is string && data.text.size() <= 3000)) &&
+        (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 1024)) &&
+        (!('viaBot' in data) || data.viaBot is bool) &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidChatPermission(data) {
+      return data.keys().hasAll(['id', 'requesterUid', 'targetUid', 'status', 'createdAt']) &&
+        data.keys().hasOnly([
+          'id', 'requesterUid', 'requesterName', 'targetUid', 'targetName',
+          'status', 'note', 'createdAt', 'respondedAt'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.requesterUid) &&
+        isValidId(data.targetUid) &&
+        data.status in ['pending', 'approved', 'rejected', 'blocked'] &&
+        (!('note' in data) || (data.note is string && data.note.size() <= 500)) &&
+        data.createdAt is timestamp;
+    }
+
+    // ========================================================
+    // Collections
+    // ========================================================
+
+    match /test/connection {
+      allow get: if isSignedIn();
+    }
+
+    // 1. Users (Strict PII Protection)
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isSuperAdmin());
+      allow list: if isBootstrappedAdmin();
+      allow create: if isValidId(userId) && isOwner(userId) &&
+        isValidUser(incoming()) &&
+        incoming().uid == request.auth.uid &&
+        incoming().role == 'student' &&
+        incoming().ecoCoins == 0 &&
+        incoming().createdAt == request.time;
+      allow update: if isValidId(userId) && isSignedIn() && isValidUser(incoming()) && (
+        isSuperAdmin() || (
+          isOwner(userId) &&
+          incoming().uid == existing().uid &&
+          incoming().role == existing().role &&
+          incoming().ecoCoins == existing().ecoCoins &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'phoneNumber', 'region', 'district', 'schoolId', 'schoolName', 'schoolNumber', 'grade', 'profileImage', 'avatarUrl', 'badge', 'allowStudentMessages', 'updatedAt'])
+        )
+      );
+      allow delete: if isValidId(userId) && isSuperAdmin();
+    }
+
+    // 2. Schools Catalog & Digital Twin
+    match /schools/{schoolId} {
+      allow get: if isValidId(schoolId);
+      allow list: if existing().status in ['active', 'verified'] || isBootstrappedAdmin();
+      allow create: if isValidId(schoolId) && isSuperAdmin() && isValidSchool(incoming()) && incoming().createdAt == request.time;
+      allow update: if isValidId(schoolId) && isSignedIn() && isValidSchool(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().createdAt == existing().createdAt && (
+        isSuperAdmin() ||
+        isRegionalCoordinator(existing().region) ||
+        isDistrictCoordinator(existing().district) ||
+        (isSchoolAdmin(schoolId) &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['logoUrl', 'address', 'lat', 'lng', 'verifiedPhotos', 'glbModelUrl', 'greenAreaSqm', 'ambassadorId', 'ambassadorName', 'updatedAt']) &&
+          incoming().updatedAt == request.time)
+      );
+      allow delete: if isValidId(schoolId) && isSuperAdmin();
+    }
+
+    // 3. Ecological Problem Reports (6-Step Workflow)
+    match /reports/{reportId} {
+      allow get: if isValidId(reportId) && (
+        existing().status in ['APPROVED', 'ASSIGNED', 'IN_PROGRESS', 'ESCALATED', 'RESOLVED', 'verified', 'in_progress', 'resolved'] ||
+        (isSignedIn() && (
+          existing().reporterUid == request.auth.uid ||
+          isSuperAdmin() ||
+          isModerator() ||
+          isRegionalCoordinator(existing().region) ||
+          isDistrictCoordinator(existing().district) ||
+          isSchoolAdmin(existing().schoolId) ||
+          isAmbassador(existing().schoolId)
+        ))
+      );
+      allow list: if existing().status in ['APPROVED', 'ASSIGNED', 'IN_PROGRESS', 'ESCALATED', 'RESOLVED', 'verified', 'in_progress', 'resolved'] ||
+        (isSignedIn() && existing().reporterUid == request.auth.uid) ||
+        isBootstrappedAdmin();
+      allow create: if isValidId(reportId) && isSignedIn() && isValidEcoReport(incoming()) &&
+        incoming().reporterUid == request.auth.uid &&
+        incoming().status in ['pending', 'PENDING_REVIEW'] &&
+        incoming().createdAt == request.time &&
+        (!('rewardCoins' in incoming()) || incoming().rewardCoins == 0);
+      allow update: if isValidId(reportId) && isSignedIn() && isValidEcoReport(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().reporterUid == existing().reporterUid &&
+        incoming().createdAt == existing().createdAt && (
+        isSuperAdmin() ||
+        (existing().status != 'RESOLVED' && existing().status != 'resolved' && existing().status != 'REJECTED' && existing().status != 'rejected' && (
+          isModerator() ||
+          (isSchoolAdmin(existing().schoolId) &&
+            existing().status in ['APPROVED', 'ASSIGNED', 'IN_PROGRESS', 'verified', 'in_progress'] &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['assignedAmbassadorUid', 'captainInstructions', 'status', 'escalationTarget', 'isHazardous', 'updatedAt']) &&
+            incoming().updatedAt == request.time) ||
+          (isAmbassador(existing().schoolId) &&
+            existing().assignedAmbassadorUid == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'resolvedImageUrl', 'updatedAt']) &&
+            incoming().updatedAt == request.time) ||
+          (existing().reporterUid == request.auth.uid &&
+            existing().status in ['pending', 'PENDING_REVIEW', 'NEEDS_INFO'] &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'address', 'imageUrl', 'videoUrl', 'updatedAt']) &&
+            incoming().updatedAt == request.time)
+        ))
+      );
+      allow delete: if isValidId(reportId) && (isSuperAdmin() || isModerator());
+    }
+
+    // 4. Advanced Registration Applications — Hierarchical Approval (School Captain -> Ambassador, District -> Captain, Regional -> District, Super Admin -> All)
+    match /registration_applications/{applicationId} {
+      allow get: if isValidId(applicationId) && isSignedIn() && (
+        isSuperAdmin() ||
+        existing().userId == request.auth.uid ||
+        isRegionalCoordinator(existing().region) ||
+        isDistrictCoordinator(existing().district) ||
+        (existing().requestedRole == 'ambassador' && 'schoolId' in existing() && isSchoolAdmin(existing().schoolId))
+      );
+      allow list: if isSignedIn() && (
+        existing().userId == request.auth.uid ||
+        isBootstrappedAdmin() ||
+        isRegionalCoordinator(existing().region) ||
+        isDistrictCoordinator(existing().district) ||
+        (existing().requestedRole == 'ambassador' && 'schoolId' in existing() && isSchoolAdmin(existing().schoolId))
+      );
+      allow create: if isValidId(applicationId) && isSignedIn() &&
+        isValidRegistrationApplication(incoming()) &&
+        incoming().userId == request.auth.uid &&
+        incoming().status == 'pending' &&
+        incoming().createdAt == request.time;
+      allow update: if isValidId(applicationId) && isSignedIn() && isValidRegistrationApplication(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt && (
+        isSuperAdmin() ||
+        (existing().status in ['pending', 'needs_info'] && (
+          (isRegionalCoordinator(existing().region) && existing().requestedRole in ['district_coordinator', 'school_admin', 'ambassador']) ||
+          (isDistrictCoordinator(existing().district) && existing().requestedRole in ['school_admin', 'ambassador']) ||
+          (existing().requestedRole == 'ambassador' && 'schoolId' in existing() && isSchoolAdmin(existing().schoolId))
+        ) &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'adminNote', 'reviewedBy', 'updatedAt']) &&
+          incoming().updatedAt == request.time) ||
+        (existing().userId == request.auth.uid &&
+          existing().status == 'needs_info' &&
+          incoming().status == 'pending' &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['verificationDetails', 'contactInfo', 'status', 'updatedAt']) &&
+          incoming().updatedAt == request.time)
+      );
+      allow delete: if isValidId(applicationId) && isSuperAdmin();
+    }
+
+    // 5. Ecological Media Submissions (Photo & Video Moderation)
+    match /media_submissions/{submissionId} {
+      allow get: if isValidId(submissionId) && (
+        existing().status == 'APPROVED' ||
+        (isSignedIn() && (
+          existing().userId == request.auth.uid ||
+          isSuperAdmin() ||
+          isModerator() ||
+          isSchoolAdmin(existing().schoolId) ||
+          isDistrictCoordinator(existing().district) ||
+          isRegionalCoordinator(existing().region)
+        ))
+      );
+      allow list: if existing().status == 'APPROVED' ||
+        (isSignedIn() && existing().userId == request.auth.uid) ||
+        isBootstrappedAdmin();
+      allow create: if isValidId(submissionId) && isSignedIn() &&
+        isValidMediaSubmission(incoming()) &&
+        incoming().userId == request.auth.uid &&
+        incoming().status == 'PENDING' &&
+        incoming().awardedCoins == 0 &&
+        incoming().createdAt == request.time;
+      allow update: if isValidId(submissionId) && isSignedIn() && isValidMediaSubmission(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt && (
+        isSuperAdmin() ||
+        (isModerator() &&
+          existing().status in ['PENDING', 'NEEDS_REVISION'] &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'awardedCoins', 'moderatorNote', 'moderatedBy', 'updatedAt']) &&
+          incoming().updatedAt == request.time) ||
+        (existing().userId == request.auth.uid &&
+          existing().status == 'NEEDS_REVISION' &&
+          incoming().status == 'PENDING' &&
+          incoming().awardedCoins == 0 &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['mediaUrl', 'description', 'status', 'updatedAt']) &&
+          incoming().updatedAt == request.time)
+      );
+      allow delete: if isValidId(submissionId) && isSuperAdmin();
+    }
+
+    // 6. School Captain Tasks -> Eco Ambassadors
+    match /eco_tasks/{taskId} {
+      allow get: if isValidId(taskId) && isSignedIn() && (
+        isSuperAdmin() ||
+        existing().assigneeUid == request.auth.uid ||
+        existing().assignedByUid == request.auth.uid ||
+        isSchoolAdmin(existing().schoolId)
+      );
+      allow list: if isSignedIn() && (
+        existing().assigneeUid == request.auth.uid ||
+        existing().assignedByUid == request.auth.uid ||
+        isBootstrappedAdmin()
+      );
+      allow create: if isValidId(taskId) && isSignedIn() && isValidEcoTask(incoming()) &&
+        isSchoolAdmin(incoming().schoolId) &&
+        incoming().assignedByUid == request.auth.uid &&
+        incoming().status == 'assigned' &&
+        incoming().createdAt == request.time;
+      allow update: if isValidId(taskId) && isSignedIn() && isValidEcoTask(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().schoolId == existing().schoolId &&
+        incoming().assignedByUid == existing().assignedByUid &&
+        incoming().createdAt == existing().createdAt && (
+        isSuperAdmin() ||
+        (existing().status != 'verified' && isSchoolAdmin(existing().schoolId) &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'instructions', 'rewardCoins', 'updatedAt']) &&
+          incoming().updatedAt == request.time) ||
+        (existing().status in ['assigned', 'in_progress', 'needs_revision'] &&
+          existing().assigneeUid == request.auth.uid &&
+          incoming().status in ['in_progress', 'submitted'] &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'evidenceUrl', 'completionNote', 'updatedAt']) &&
+          incoming().updatedAt == request.time)
+      );
+      allow delete: if isValidId(taskId) && isSuperAdmin();
+    }
+
+    // 7. Super Admin Configurable Reward Settings
+    match /reward_settings/{settingId} {
+      allow get: if isValidId(settingId) && isSignedIn();
+      allow list: if isSignedIn() && isBootstrappedAdmin();
+      allow create, update: if isValidId(settingId) && isSuperAdmin() &&
+        isValidRewardSettings(incoming()) &&
+        incoming().updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    // 8. Legacy Role Requests — Super Admin Approval ONLY
+    match /role_requests/{requestId} {
+      allow get: if isValidId(requestId) && isSignedIn() && (isSuperAdmin() || existing().userId == request.auth.uid);
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isValidId(requestId) && isSignedIn() && isValidRoleRequest(incoming()) &&
+        incoming().userId == request.auth.uid &&
+        incoming().status == 'pending' &&
+        incoming().requestedAt == request.time;
+      allow update: if isValidId(requestId) && isSuperAdmin() && isValidRoleRequest(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().userId == existing().userId &&
+        incoming().requestedAt == existing().requestedAt;
+      allow delete: if isValidId(requestId) && isSuperAdmin();
+    }
+
+    // 9. Ambassadors (Protected Roster — Hierarchical Onboarding by School Captain & Coordinators)
+    match /ambassadors/{ambassadorId} {
+      allow get: if isValidId(ambassadorId) && isSignedIn() && (
+        isSuperAdmin() ||
+        isModerator() ||
+        isSchoolAdmin(existing().schoolId) ||
+        isAmbassador(existing().schoolId) ||
+        ('district' in existing() && isDistrictCoordinator(existing().district)) ||
+        ('region' in existing() && isRegionalCoordinator(existing().region))
+      );
+      allow list: if isSignedIn() && (
+        existing().id == request.auth.uid ||
+        isBootstrappedAdmin() ||
+        isSchoolAdmin(existing().schoolId) ||
+        ('district' in existing() && isDistrictCoordinator(existing().district)) ||
+        ('region' in existing() && isRegionalCoordinator(existing().region))
+      );
+      allow create: if isValidId(ambassadorId) && isSignedIn() && isValidAmbassador(incoming()) && (
+        isSuperAdmin() ||
+        isSchoolAdmin(incoming().schoolId) ||
+        ('district' in incoming() && isDistrictCoordinator(incoming().district)) ||
+        ('region' in incoming() && isRegionalCoordinator(incoming().region))
+      );
+      allow update: if isValidId(ambassadorId) && isSignedIn() && isValidAmbassador(incoming()) &&
+        incoming().id == existing().id && (
+        isSuperAdmin() ||
+        isSchoolAdmin(existing().schoolId) ||
+        ('district' in existing() && isDistrictCoordinator(existing().district)) ||
+        ('region' in existing() && isRegionalCoordinator(existing().region))
+      );
+      allow delete: if isValidId(ambassadorId) && isSuperAdmin();
+    }
+
+    // 10. Audit Logs (Strictly Immutable)
+    match /audit_logs/{logId} {
+      allow get: if isValidId(logId) && (isSuperAdmin() || isModerator());
+      allow list: if isBootstrappedAdmin();
+      allow create: if isValidId(logId) && isSignedIn() && isValidAuditLog(incoming()) &&
+        incoming().actorUid == request.auth.uid &&
+        incoming().timestamp == request.time;
+      allow update, delete: if false;
+    }
+
+    // 11. Shop, Transactions, Orders, Referrals, Notifications
+    match /shopItems/{itemId} {
+      allow get: if isValidId(itemId);
+      allow list: if existing().stock >= 0;
+      allow create, update: if isValidId(itemId) && isSuperAdmin() && isValidShopItem(incoming());
+      allow delete: if isValidId(itemId) && isSuperAdmin();
+    }
+
+    match /transactions/{transactionId} {
+      allow get: if isValidId(transactionId) && isSignedIn() && (isSuperAdmin() || existing().userId == request.auth.uid);
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isValidId(transactionId) && isSuperAdmin() && isValidTransaction(incoming()) && incoming().createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    match /shop_orders/{orderId} {
+      allow get: if isValidId(orderId) && isSignedIn() && (
+        isSuperAdmin() ||
+        isModerator() ||
+        existing().userId == request.auth.uid ||
+        ('schoolId' in existing() && isSchoolAdmin(existing().schoolId))
+      );
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isValidId(orderId) && isSignedIn() && isValidShopOrder(incoming()) &&
+        incoming().userId == request.auth.uid &&
+        incoming().status == 'pending' &&
+        incoming().createdAt == request.time;
+      allow update: if isValidId(orderId) && isSignedIn() && isValidShopOrder(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt && (
+        isSuperAdmin() ||
+        isModerator() || (
+          'schoolId' in existing() &&
+          isSchoolAdmin(existing().schoolId) &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['verifiedBySchoolAdmin', 'verifiedByUid', 'verifiedByName', 'verifiedAt', 'forwardedToSuperAdminAt', 'verificationNote']) &&
+          incoming().verifiedByUid == request.auth.uid
+        )
+      );
+      allow delete: if isValidId(orderId) && isSuperAdmin();
+    }
+
+    match /referrals/{referralId} {
+      allow get: if isValidId(referralId) && isSignedIn() && (isSuperAdmin() || existing().referrerUid == request.auth.uid);
+      allow list: if isSignedIn() && (existing().referrerUid == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isValidId(referralId) && isSignedIn() && isValidReferral(incoming()) &&
+        incoming().referrerUid == request.auth.uid &&
+        incoming().status == 'pending';
+      allow update, delete: if isValidId(referralId) && isSuperAdmin();
+    }
+
+    match /notifications/{notificationId} {
+      allow get: if isValidId(notificationId) && isSignedIn() && (isSuperAdmin() || existing().userId == request.auth.uid);
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isValidId(notificationId) && isSuperAdmin() && isValidNotification(incoming()) && incoming().createdAt == request.time;
+      allow update: if isValidId(notificationId) && isSignedIn() && existing().userId == request.auth.uid &&
+        isValidNotification(incoming()) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['read']);
+      allow delete: if isValidId(notificationId) && isSuperAdmin();
+    }
+
+    // 12. Geospatial Collections (Hybrid Map)
+    match /eco_reports/{reportId} {
+      allow get: if isValidId(reportId) && (
+        existing().status in ['APPROVED', 'ASSIGNED', 'IN_PROGRESS', 'ESCALATED', 'RESOLVED', 'verified', 'in_progress', 'resolved'] ||
+        (isSignedIn() && (
+          existing().reporterUid == request.auth.uid ||
+          isSuperAdmin() ||
+          isModerator() ||
+          isRegionalCoordinator(existing().region) ||
+          isDistrictCoordinator(existing().district) ||
+          isSchoolAdmin(existing().schoolId) ||
+          isAmbassador(existing().schoolId)
+        ))
+      );
+      allow list: if existing().status in ['APPROVED', 'ASSIGNED', 'IN_PROGRESS', 'ESCALATED', 'RESOLVED', 'verified', 'in_progress', 'resolved'] ||
+        (isSignedIn() && existing().reporterUid == request.auth.uid) ||
+        isBootstrappedAdmin();
+      allow create: if isValidId(reportId) && isSignedIn() && isValidEcoReport(incoming()) &&
+        incoming().reporterUid == request.auth.uid &&
+        incoming().status in ['pending', 'PENDING_REVIEW'] &&
+        incoming().createdAt == request.time &&
+        (!('rewardCoins' in incoming()) || incoming().rewardCoins == 0);
+      allow update: if isValidId(reportId) && isSignedIn() && isValidEcoReport(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().reporterUid == existing().reporterUid &&
+        incoming().createdAt == existing().createdAt && (
+        isSuperAdmin() || isModerator()
+      );
+      allow delete: if isValidId(reportId) && (isSuperAdmin() || isModerator());
+    }
+
+    match /districts/{districtId} {
+      allow get: if isValidId(districtId);
+      allow list: if existing().isActive == true || isBootstrappedAdmin();
+      allow create, update: if isValidId(districtId) && isSuperAdmin() && isValidDistrict(incoming()) && incoming().updatedAt == request.time;
+      allow delete: if isValidId(districtId) && isSuperAdmin();
+    }
+
+    match /school_rankings/{rankingId} {
+      allow get: if isValidId(rankingId);
+      allow list: if existing().rank >= 1 || isBootstrappedAdmin();
+      allow create, update: if isValidId(rankingId) && isSuperAdmin() && isValidSchoolRanking(incoming()) && incoming().updatedAt == request.time;
+      allow delete: if isValidId(rankingId) && isSuperAdmin();
+    }
+
+    match /map_layers/{layerId} {
+      allow get: if isValidId(layerId);
+      allow list: if existing().isActive == true || isBootstrappedAdmin();
+      allow create, update: if isValidId(layerId) && (isSuperAdmin() || isModerator()) && isValidMapLayer(incoming()) && incoming().updatedAt == request.time;
+      allow delete: if isValidId(layerId) && isSuperAdmin();
+    }
+
+    // 13. EcoAds & Ad Reward Claims
+    match /eco_ads/{adId} {
+      allow get: if isValidId(adId);
+      allow list: if existing().status == 'active' || isBootstrappedAdmin();
+      allow create, update: if isValidId(adId) && isSuperAdmin() && isValidEcoAd(incoming());
+      allow delete: if isValidId(adId) && isSuperAdmin();
+    }
+
+    match /ad_reward_claims/{claimId} {
+      allow get: if isValidId(claimId) && isSignedIn() && (isSuperAdmin() || existing().userId == request.auth.uid);
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isValidId(claimId) && isSuperAdmin() && isValidAdRewardClaim(incoming()) && incoming().claimedAt == request.time;
+      allow update, delete: if false;
+    }
+
+    // 14. HomePage Posts & News CMS (School Captain, Coordinators, Moderators, Super Admin)
+    match /home_posts/{postId} {
+      allow get: if isValidId(postId);
+      allow list: if existing().status == 'active' || isBootstrappedAdmin() || (
+        isSignedIn() && existing().authorUid == request.auth.uid
+      );
+      allow create: if isValidId(postId) && isSignedIn() && isValidHomePost(incoming()) &&
+        incoming().authorUid == request.auth.uid &&
+        incoming().createdAt == request.time && (
+        isSuperAdmin() ||
+        isModerator() ||
+        ('schoolId' in incoming() && isSchoolAdmin(incoming().schoolId)) ||
+        ('district' in incoming() && isDistrictCoordinator(incoming().district)) ||
+        ('region' in incoming() && isRegionalCoordinator(incoming().region))
+      );
+      allow update: if isValidId(postId) && isSignedIn() && isValidHomePost(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().authorUid == existing().authorUid &&
+        incoming().createdAt == existing().createdAt && (
+        isSuperAdmin() ||
+        isModerator() ||
+        existing().authorUid == request.auth.uid ||
+        ('schoolId' in existing() && isSchoolAdmin(existing().schoolId)) ||
+        ('district' in existing() && isDistrictCoordinator(existing().district)) ||
+        ('region' in existing() && isRegionalCoordinator(existing().region))
+      );
+      allow delete: if isValidId(postId) && isSignedIn() && (
+        isSuperAdmin() ||
+        isModerator() ||
+        existing().authorUid == request.auth.uid ||
+        ('schoolId' in existing() && isSchoolAdmin(existing().schoolId)) ||
+        ('district' in existing() && isDistrictCoordinator(existing().district)) ||
+        ('region' in existing() && isRegionalCoordinator(existing().region))
+      );
+    }
+
+    // 15. District End-of-Month TOP-3 Awards
+    match /monthly_awards/{awardId} {
+      allow get: if isValidId(awardId);
+      allow list: if existing().periodKey is string || isBootstrappedAdmin();
+      allow create: if isValidId(awardId) && isSignedIn() && isValidMonthlyAward(incoming()) &&
+        incoming().awardedByUid == request.auth.uid &&
+        incoming().awardedAt == request.time && (
+        isSuperAdmin() ||
+        isDistrictCoordinator(incoming().district) ||
+        isRegionalCoordinator(incoming().region)
+      );
+      allow update, delete: if isValidId(awardId) && isSuperAdmin();
+    }
+
+    // 16. Real-Time Role Chat & Student DM Permissions
+    match /chat_messages/{messageId} {
+      allow get: if isValidId(messageId) && isSignedIn() && (
+        isSuperAdmin() ||
+        existing().senderUid == request.auth.uid ||
+        ('recipientUid' in existing() && existing().recipientUid == request.auth.uid) ||
+        ('schoolId' in existing() && isSchoolAdmin(existing().schoolId)) ||
+        ('district' in existing() && isDistrictCoordinator(existing().district)) ||
+        ('region' in existing() && isRegionalCoordinator(existing().region))
+      );
+      allow list: if isSignedIn() && (
+        existing().senderUid == request.auth.uid ||
+        ('recipientUid' in existing() && existing().recipientUid == request.auth.uid) ||
+        isBootstrappedAdmin()
+      );
+      allow create: if isValidId(messageId) && isSignedIn() && isValidChatMessage(incoming()) &&
+        incoming().senderUid == request.auth.uid &&
+        incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isValidId(messageId) && (isSuperAdmin() || existing().senderUid == request.auth.uid);
+    }
+
+    match /chat_permissions/{permissionId} {
+      allow get: if isValidId(permissionId) && isSignedIn() && (
+        isSuperAdmin() ||
+        existing().requesterUid == request.auth.uid ||
+        existing().targetUid == request.auth.uid
+      );
+      allow list: if isSignedIn() && (
+        existing().requesterUid == request.auth.uid ||
+        existing().targetUid == request.auth.uid ||
+        isBootstrappedAdmin()
+      );
+      allow create: if isValidId(permissionId) && isSignedIn() && isValidChatPermission(incoming()) &&
+        incoming().requesterUid == request.auth.uid &&
+        incoming().status == 'pending' &&
+        incoming().createdAt == request.time;
+      allow update: if isValidId(permissionId) && isSignedIn() && isValidChatPermission(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().requesterUid == existing().requesterUid &&
+        incoming().targetUid == existing().targetUid &&
+        incoming().createdAt == existing().createdAt && (
+        isSuperAdmin() || (
+          existing().targetUid == request.auth.uid &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'respondedAt'])
+        )
+      );
+      allow delete: if isValidId(permissionId) && (isSuperAdmin() || existing().requesterUid == request.auth.uid);
+    }
+  }
+}
