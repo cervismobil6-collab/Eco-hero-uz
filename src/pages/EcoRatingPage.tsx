@@ -4,7 +4,6 @@ import {
   School as SchoolIcon,
   User,
   Search,
-  Sparkles,
   ShieldCheck,
   Award,
   Info,
@@ -21,6 +20,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useEco } from '../context/EcoContext';
 import { UZBEKISTAN_REGIONS, UZBEKISTAN_DISTRICTS } from '../data/mockData';
 import { LeaderboardPeriod, LeaderboardTier } from '../types/eco';
+import { StudentCabinetRatingsPanel } from '../components/ratings/StudentCabinetRatingsPanel';
+import ecoTrophyCrestImg from '../assets/images/eco_trophy_crest_1795179383102.jpg';
 
 export const EcoRatingPage: React.FC = () => {
   const { user, rewardSettings, fetchLeaderboard, setActiveTab, liveSyncVersion } = useEco();
@@ -104,44 +105,55 @@ export const EcoRatingPage: React.FC = () => {
     { id: 'district_leaders', label: 'Tuman Koordinatorlari', icon: ShieldCheck, restricted: true },
   ];
 
+  const getPodiumAvatar = (item: any) => {
+    if (item?.avatarUrl) return item.avatarUrl;
+    return `https://api.dicebear.com/7.x/shapes/svg?seed=${encodeURIComponent(getItemTitle(item))}`;
+  };
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-8">
       {/* Page Header */}
-      <div className="relative overflow-hidden rounded-3xl p-6 sm:p-8 bg-gradient-to-br from-slate-900 via-emerald-950/40 to-slate-900 border border-emerald-500/20 shadow-xl">
+      <div className="relative overflow-hidden rounded-[32px] p-6 sm:p-8 bg-gradient-to-br from-[#061812] via-[#0B291E] to-[#040D0A] border border-emerald-500/25 shadow-2xl">
+        <div className="pointer-events-none absolute -right-16 -top-16 w-64 h-64 rounded-full bg-emerald-500/15 blur-3xl" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2 max-w-2xl">
-            <div className="flex items-center gap-2 text-emerald-400 font-mono text-xs font-semibold tracking-wider uppercase">
-              <Trophy className="w-4 h-4 text-amber-400" />
-              <span>O'zbekiston Eko-Chempionati · Jonli Reyting</span>
+          <div className="flex items-start gap-4 max-w-2xl">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border border-amber-400/40 bg-[#040D0A] shrink-0 shadow-lg shadow-emerald-950/60">
+              <img src={ecoTrophyCrestImg} alt="EcoHero Chempionat" className="w-full h-full object-cover" />
             </div>
-            <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
-              ECO Reyting & Milliy Peshqadamlar
-            </h1>
-            <p className="text-sm text-slate-300 leading-relaxed">
-              Tasdiqlangan ekologik faoliyatlar asosida shakllanadigan ko‘p darajali reyting tizimi.
-            </p>
+            <div className="space-y-1.5 min-w-0">
+              <div className="flex items-center gap-2 text-emerald-400 font-mono text-xs font-semibold tracking-wider uppercase">
+                <Trophy className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>O&apos;zbekiston Eko-Chempionati · Jonli Reyting</span>
+              </div>
+              <h1 className="font-display text-2xl sm:text-4xl font-black text-white tracking-tight">
+                ECO Reyting & Milliy Peshqadamlar
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                Tasdiqlangan ekologik faoliyatlar asosida shakllanadigan ko‘p darajali jonli liga.
+              </p>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
             <button
               onClick={() => setShowFormulaModal(true)}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold border border-white/10 cursor-pointer"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold border border-white/15 cursor-pointer"
             >
               <Info className="w-4 h-4 text-emerald-400" />
               <span>Ball Formulasi</span>
             </button>
             <button
               onClick={() => setActiveTab('championship')}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/30 cursor-pointer"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-400 to-teal-300 hover:brightness-105 text-[#040D0A] text-xs font-black shadow-lg shadow-emerald-500/25 cursor-pointer"
             >
-              <Crown className="w-4 h-4 text-amber-300" />
+              <Crown className="w-4 h-4" />
               <span>3 Bosqichli Chempionat</span>
             </button>
           </div>
         </div>
 
         {/* Tier Switcher */}
-        <div className="mt-6 pt-6 border-t border-slate-800 flex flex-wrap gap-2">
+        <div className="mt-6 pt-5 border-t border-emerald-500/20 flex flex-wrap gap-2 relative z-10">
           {tierTabs.map(t => (
             <button
               key={t.id}
@@ -151,8 +163,8 @@ export const EcoRatingPage: React.FC = () => {
               }}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 tier === t.id
-                  ? 'bg-emerald-600 text-white shadow-md'
-                  : 'bg-slate-950/70 border border-slate-800 text-slate-400 hover:text-white'
+                  ? 'bg-gradient-to-r from-emerald-400 to-teal-300 text-[#040D0A] shadow-md shadow-emerald-500/25'
+                  : 'bg-[#040D0A]/70 border border-emerald-500/20 text-slate-300 hover:text-white hover:border-emerald-400/40'
               }`}
             >
               <t.icon className="w-4 h-4" />
@@ -174,67 +186,114 @@ export const EcoRatingPage: React.FC = () => {
         </div>
       )}
 
-      {/* Top 3 Podium */}
+      {/* Personal School & District Student Monthly Ratings (50+ school / 500+ district) */}
+      {tier === 'student' && user?.uid && <StudentCabinetRatingsPanel />}
+
+      {/* Illuminated Top 3 Podium */}
       {top3.length >= 1 && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end pt-2">
-          {top3[1] && (
-            <div className="order-2 md:order-1 p-6 rounded-3xl bg-slate-900 border border-slate-700/60 text-center space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-slate-200 text-slate-950 flex items-center justify-center mx-auto text-lg font-black">
-                2
-              </div>
-              <div>
-                <div className="font-extrabold text-white text-base truncate">{getItemTitle(top3[1])}</div>
-                <div className="text-xs text-slate-400 truncate">{getItemSub(top3[1])}</div>
-              </div>
-              <div className="p-3 rounded-2xl bg-slate-950/60 border border-slate-800">
-                <div className="text-xs text-slate-400">Ball / EcoCoin</div>
-                <div className="text-xl font-black font-mono text-slate-200 tabular-nums">
-                  {Number(getScoreValue(top3[1])).toLocaleString()}
-                </div>
-              </div>
-            </div>
-          )}
+        <div className="relative rounded-[32px] p-5 sm:p-8 bg-gradient-to-b from-[#071D15] via-[#05120D] to-[#040D0A] border border-emerald-500/25 shadow-2xl overflow-hidden">
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-44 bg-[radial-gradient(ellipse_at_top,rgba(52,211,153,0.18),transparent_70%)]" />
 
-          {top3[0] && (
-            <div className="order-1 md:order-2 relative p-7 rounded-3xl bg-gradient-to-b from-amber-500/20 via-slate-900 to-slate-900 border-2 border-amber-400/80 text-center space-y-3 md:-translate-y-3">
-              <div className="w-16 h-16 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center mx-auto text-2xl font-black">
-                <Crown className="w-8 h-8" />
-              </div>
-              <div>
-                <div className="font-black text-white text-lg truncate">{getItemTitle(top3[0])}</div>
-                <div className="text-xs text-emerald-400 truncate">{getItemSub(top3[0])}</div>
-              </div>
-              <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30">
-                <div className="text-xs text-amber-300 font-semibold">1-O'rin Chempioni</div>
-                <div className="text-2xl font-black font-mono text-amber-400 tabular-nums">
-                  {Number(getScoreValue(top3[0])).toLocaleString()}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-end pt-4 relative z-10">
+            {/* #2 Silver Pedestal */}
+            {top3[1] && (
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="order-2 md:order-1 relative rounded-3xl bg-[#092118]/90 border border-slate-300/30 p-6 text-center space-y-3 shadow-xl"
+              >
+                <div className="relative mx-auto w-16 h-16">
+                  <img
+                    src={getPodiumAvatar(top3[1])}
+                    alt={getItemTitle(top3[1])}
+                    className="w-16 h-16 rounded-2xl object-cover border-2 border-slate-200 shadow-lg bg-[#040D0A]"
+                  />
+                  <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-slate-200 text-[#040D0A] text-[11px] font-black font-mono">
+                    #2
+                  </span>
                 </div>
-              </div>
-            </div>
-          )}
+                <div className="pt-1">
+                  <div className="font-display font-extrabold text-white text-base truncate">{getItemTitle(top3[1])}</div>
+                  <div className="text-xs text-slate-400 truncate">{getItemSub(top3[1])}</div>
+                </div>
+                <div className="p-3 rounded-2xl bg-[#040D0A]/80 border border-slate-300/15">
+                  <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Ball / EcoCoin</div>
+                  <div className="text-xl font-black font-mono text-slate-100 tabular-nums">
+                    {Number(getScoreValue(top3[1])).toLocaleString()}
+                  </div>
+                </div>
+              </motion.div>
+            )}
 
-          {top3[2] && (
-            <div className="order-3 p-6 rounded-3xl bg-slate-900 border border-amber-800/40 text-center space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-amber-600 text-slate-950 flex items-center justify-center mx-auto text-lg font-black">
-                3
-              </div>
-              <div>
-                <div className="font-extrabold text-white text-base truncate">{getItemTitle(top3[2])}</div>
-                <div className="text-xs text-slate-400 truncate">{getItemSub(top3[2])}</div>
-              </div>
-              <div className="p-3 rounded-2xl bg-slate-950/60 border border-slate-800">
-                <div className="text-xs text-slate-400">Ball / EcoCoin</div>
-                <div className="text-xl font-black font-mono text-amber-500 tabular-nums">
-                  {Number(getScoreValue(top3[2])).toLocaleString()}
+            {/* #1 Champion Raised Pedestal */}
+            {top3[0] && (
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="order-1 md:order-2 relative rounded-3xl bg-gradient-to-b from-amber-500/20 via-[#0B2A1E] to-[#061812] border-2 border-amber-400/75 p-7 text-center space-y-3.5 md:-translate-y-4 shadow-[0_18px_45px_-12px_rgba(245,158,11,0.35)]"
+              >
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-400/40 text-amber-300 text-[10px] font-black uppercase tracking-wider">
+                  <Crown className="w-3.5 h-3.5 text-amber-300" />
+                  <span>1-O&apos;rin Chempioni</span>
                 </div>
-              </div>
-            </div>
-          )}
+                <div className="relative mx-auto w-20 h-20">
+                  <img
+                    src={getPodiumAvatar(top3[0])}
+                    alt={getItemTitle(top3[0])}
+                    className="w-20 h-20 rounded-2xl object-cover border-2 border-amber-400 shadow-xl bg-[#040D0A]"
+                  />
+                  <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full bg-amber-400 text-[#040D0A] text-xs font-black font-mono shadow">
+                    #1
+                  </span>
+                </div>
+                <div className="pt-1">
+                  <div className="font-display font-black text-white text-lg truncate">{getItemTitle(top3[0])}</div>
+                  <div className="text-xs text-emerald-300 truncate">{getItemSub(top3[0])}</div>
+                </div>
+                <div className="p-3.5 rounded-2xl bg-[#040D0A]/80 border border-amber-400/35">
+                  <div className="text-[10px] uppercase tracking-wider text-amber-300 font-bold">Umumiy Ball</div>
+                  <div className="text-2xl font-black font-mono text-amber-400 tabular-nums">
+                    {Number(getScoreValue(top3[0])).toLocaleString()} ECO
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* #3 Bronze Pedestal */}
+            {top3[2] && (
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="order-3 relative rounded-3xl bg-[#092118]/90 border border-amber-600/35 p-6 text-center space-y-3 shadow-xl"
+              >
+                <div className="relative mx-auto w-16 h-16">
+                  <img
+                    src={getPodiumAvatar(top3[2])}
+                    alt={getItemTitle(top3[2])}
+                    className="w-16 h-16 rounded-2xl object-cover border-2 border-amber-600 shadow-lg bg-[#040D0A]"
+                  />
+                  <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-amber-600 text-white text-[11px] font-black font-mono">
+                    #3
+                  </span>
+                </div>
+                <div className="pt-1">
+                  <div className="font-display font-extrabold text-white text-base truncate">{getItemTitle(top3[2])}</div>
+                  <div className="text-xs text-slate-400 truncate">{getItemSub(top3[2])}</div>
+                </div>
+                <div className="p-3 rounded-2xl bg-[#040D0A]/80 border border-amber-600/20">
+                  <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Ball / EcoCoin</div>
+                  <div className="text-xl font-black font-mono text-amber-500 tabular-nums">
+                    {Number(getScoreValue(top3[2])).toLocaleString()}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </div>
         </div>
       )}
 
       {/* Filter and Search Bar */}
-      <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col md:flex-row items-center justify-between gap-3 text-xs">
+      <div className="p-4 rounded-2xl eco-surface flex flex-col md:flex-row items-center justify-between gap-3 text-xs shadow-sm">
         <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto flex-1">
           <div className="relative flex-1 min-w-[200px]">
             <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -246,7 +305,7 @@ export const EcoRatingPage: React.FC = () => {
                 setPage(1);
               }}
               placeholder="Qidiruv (nom, maktab, hudud)..."
-              className="w-full pl-8 pr-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder:text-slate-500 text-xs focus:outline-none focus:border-emerald-500"
+              className="w-full pl-8 pr-3 py-2.5 rounded-xl bg-white dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-slate-900 dark:text-white placeholder:text-slate-400 text-xs focus:outline-none focus:border-emerald-500"
             />
           </div>
 
@@ -257,7 +316,7 @@ export const EcoRatingPage: React.FC = () => {
               setSelectedDistrict('all');
               setPage(1);
             }}
-            className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 text-xs focus:outline-none focus:border-emerald-500"
+            className="px-3 py-2.5 rounded-xl bg-white dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:border-emerald-500"
           >
             <option value="all">Barcha viloyatlar</option>
             {UZBEKISTAN_REGIONS.map(reg => (
@@ -272,7 +331,7 @@ export const EcoRatingPage: React.FC = () => {
                 setSelectedDistrict(e.target.value);
                 setPage(1);
               }}
-              className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 text-xs focus:outline-none focus:border-emerald-500"
+              className="px-3 py-2.5 rounded-xl bg-white dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:border-emerald-500"
             >
               <option value="all">Barcha tumanlar</option>
               {availableDistricts.map(dist => (
@@ -283,7 +342,7 @@ export const EcoRatingPage: React.FC = () => {
         </div>
 
         {/* Period Switcher */}
-        <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+        <div className="flex items-center gap-1 bg-slate-100 dark:bg-[#040D0A] p-1 rounded-xl border border-slate-200 dark:border-emerald-500/20">
           {([
             { id: 'monthly', label: 'Oylik' },
             { id: 'quarterly', label: 'Choraklik' },
@@ -295,8 +354,10 @@ export const EcoRatingPage: React.FC = () => {
                 setPeriod(tf.id);
                 setPage(1);
               }}
-              className={`px-3 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer ${
-                period === tf.id ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
+              className={`px-3 py-1.5 rounded-lg font-bold transition-colors cursor-pointer ${
+                period === tf.id
+                  ? 'bg-emerald-500 text-[#040D0A]'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               {tf.label}
@@ -307,15 +368,15 @@ export const EcoRatingPage: React.FC = () => {
 
       {/* Main Leaderboard Table */}
       {!forbiddenMsg && (
-        <div className="rounded-3xl bg-slate-900 border border-slate-800 overflow-hidden shadow-xl">
-          <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+        <div className="rounded-3xl eco-surface overflow-hidden shadow-xl">
+          <div className="px-6 py-4 border-b border-slate-200/80 dark:border-emerald-500/15 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-emerald-400" />
-              <h3 className="font-extrabold text-sm text-white uppercase">
+              <BarChart3 className="w-4 h-4 text-emerald-500" />
+              <h3 className="font-display font-extrabold text-sm text-slate-900 dark:text-white uppercase">
                 {tierTabs.find(t => t.id === tier)?.label} Reytingi ({period})
               </h3>
             </div>
-            <span className="text-xs text-slate-400 font-mono tabular-nums">
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums">
               Jami: {total} ta natija
             </span>
           </div>
@@ -323,7 +384,7 @@ export const EcoRatingPage: React.FC = () => {
           <div>
             {loading && items.length === 0 ? (
               <div className="p-12 text-center text-xs text-slate-400 font-bold uppercase">
-                Reyting ma'lumotlari yuklanmoqda...
+                Reyting ma&apos;lumotlari yuklanmoqda...
               </div>
             ) : items.length === 0 ? (
               <div className="p-12 text-center text-xs text-slate-400 font-bold uppercase">
@@ -332,7 +393,7 @@ export const EcoRatingPage: React.FC = () => {
             ) : (
               <>
                 {/* Mobile Responsive Cards */}
-                <div className="md:hidden divide-y divide-slate-800/80">
+                <div className="md:hidden divide-y divide-slate-200/70 dark:divide-emerald-500/10">
                   {items.map((item, idx) => {
                     const rank = item.rank || (page - 1) * 15 + idx + 1;
                     const isSelf =
@@ -341,51 +402,51 @@ export const EcoRatingPage: React.FC = () => {
                     return (
                       <div
                         key={item.id || item.uid || idx}
-                        className={`p-4 space-y-2 text-xs ${isSelf ? 'bg-emerald-950/50' : ''}`}
+                        className={`p-4 space-y-2 text-xs ${isSelf ? 'bg-emerald-500/10 dark:bg-emerald-500/15' : ''}`}
                       >
                         <div className="flex items-start justify-between gap-2.5">
                           <div className="flex items-center gap-2.5 min-w-0">
                             <span
                               className={`w-7 h-7 rounded-lg flex items-center justify-center font-mono font-black text-xs shrink-0 ${
                                 rank === 1
-                                  ? 'bg-amber-400 text-slate-950'
+                                  ? 'bg-amber-400 text-[#040D0A]'
                                   : rank === 2
-                                  ? 'bg-slate-200 text-slate-950'
+                                  ? 'bg-slate-200 text-[#040D0A]'
                                   : rank === 3
-                                  ? 'bg-amber-600 text-slate-950'
-                                  : 'bg-slate-800 text-slate-300'
+                                  ? 'bg-amber-600 text-white'
+                                  : 'bg-slate-100 dark:bg-[#0D261D] text-slate-700 dark:text-slate-300'
                               }`}
                             >
                               {rank}
                             </span>
                             <div className="min-w-0">
-                              <div className="font-bold text-white truncate flex items-center gap-1.5">
+                              <div className="font-bold text-slate-900 dark:text-white truncate flex items-center gap-1.5">
                                 <span className="truncate">{getItemTitle(item)}</span>
                                 {isSelf && (
-                                  <span className="text-[10px] font-bold text-emerald-400 shrink-0">(Siz)</span>
+                                  <span className="text-[10px] font-bold text-emerald-500 shrink-0">(Siz)</span>
                                 )}
                               </div>
-                              <div className="text-[11px] text-slate-400 truncate">
+                              <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
                                 {item.region || '-'}
                                 {item.district ? ` · ${item.district}` : ''}
                               </div>
                             </div>
                           </div>
                           <div className="text-right shrink-0">
-                            <div className="font-black font-mono text-amber-400 tabular-nums">
+                            <div className="font-black font-mono text-amber-500 dark:text-amber-400 tabular-nums">
                               {Number(getScoreValue(item)).toLocaleString()} ECO
                             </div>
                             {tier === 'ambassador' && (
                               <button
                                 onClick={() => setSelectedCertificateAmbassador(item)}
-                                className="mt-1 px-2 py-0.5 rounded bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold cursor-pointer"
+                                className="mt-1 px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-[10px] font-bold cursor-pointer"
                               >
                                 Sertifikat
                               </button>
                             )}
                           </div>
                         </div>
-                        <div className="text-[11px] text-slate-400 font-mono tabular-nums pl-9">
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono tabular-nums pl-9">
                           {tier === 'school' && (
                             <span>
                               {item.registeredStudentsCount || item.studentsCount || 0} o‘quvchi · {item.treesPlanted || 0} daraxt
@@ -416,16 +477,16 @@ export const EcoRatingPage: React.FC = () => {
                 {/* Desktop Table */}
                 <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-950/80 text-slate-400 font-semibold border-b border-slate-800">
+                    <thead className="bg-slate-100/80 dark:bg-[#040D0A]/80 text-slate-500 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-emerald-500/15">
                       <tr>
                         <th className="py-4 px-4 w-14 text-center">#</th>
                         <th className="py-4 px-4">Ishtirokchi / Hudud</th>
                         <th className="py-4 px-4">Viloyat / Tuman</th>
-                        <th className="py-4 px-4 text-center">Faollik Ko'rsatkichlari</th>
+                        <th className="py-4 px-4 text-center">Faollik Ko&apos;rsatkichlari</th>
                         <th className="py-4 px-4 text-right">Ball / EcoCoin</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800/80 font-medium">
+                    <tbody className="divide-y divide-slate-200/70 dark:divide-emerald-500/10 font-medium">
                       {items.map((item, idx) => {
                         const rank = item.rank || (page - 1) * 15 + idx + 1;
                         const isSelf =
@@ -434,11 +495,11 @@ export const EcoRatingPage: React.FC = () => {
                         return (
                           <tr
                             key={item.id || item.uid || idx}
-                            className={`hover:bg-slate-800/50 transition-colors ${
-                              isSelf ? 'bg-emerald-950/50' : ''
+                            className={`hover:bg-emerald-500/[0.06] transition-colors ${
+                              isSelf ? 'bg-emerald-500/10 dark:bg-emerald-500/15' : ''
                             }`}
                           >
-                            <td className="py-4 px-4 text-center font-bold font-mono text-slate-300 tabular-nums">
+                            <td className="py-4 px-4 text-center font-bold font-mono text-slate-700 dark:text-slate-300 tabular-nums">
                               {rank}
                             </td>
                             <td className="py-4 px-4">
@@ -447,27 +508,27 @@ export const EcoRatingPage: React.FC = () => {
                                   <img
                                     src={item.avatarUrl}
                                     alt={getItemTitle(item)}
-                                    className="w-8 h-8 rounded-full object-cover border border-slate-700"
+                                    className="w-8 h-8 rounded-full object-cover border border-emerald-500/30"
                                   />
                                 )}
                                 <div>
-                                  <div className="font-bold text-white flex items-center gap-2">
+                                  <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                                     <span>{getItemTitle(item)}</span>
                                     {isSelf && (
-                                      <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">
+                                      <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 text-[10px] font-bold">
                                         Siz
                                       </span>
                                     )}
                                   </div>
-                                  <div className="text-[11px] text-slate-400">{getItemSub(item)}</div>
+                                  <div className="text-[11px] text-slate-500 dark:text-slate-400">{getItemSub(item)}</div>
                                 </div>
                               </div>
                             </td>
-                            <td className="py-4 px-4 text-slate-300">
+                            <td className="py-4 px-4 text-slate-700 dark:text-slate-300">
                               <div>{item.region || '-'}</div>
                               <div className="text-[11px] text-slate-500">{item.district || ''}</div>
                             </td>
-                            <td className="py-4 px-4 text-center text-slate-300 tabular-nums">
+                            <td className="py-4 px-4 text-center text-slate-700 dark:text-slate-300 tabular-nums">
                               {tier === 'school' && (
                                 <span>
                                   {item.registeredStudentsCount || item.studentsCount || 0} o‘quvchi · {item.treesPlanted || 0} daraxt
@@ -492,13 +553,13 @@ export const EcoRatingPage: React.FC = () => {
                             </td>
                             <td className="py-4 px-4 text-right">
                               <div className="flex items-center justify-end gap-3">
-                                <span className="font-black font-mono text-amber-400 text-sm tabular-nums">
+                                <span className="font-black font-mono text-amber-500 dark:text-amber-400 text-sm tabular-nums">
                                   {Number(getScoreValue(item)).toLocaleString()} ECO
                                 </span>
                                 {tier === 'ambassador' && (
                                   <button
                                     onClick={() => setSelectedCertificateAmbassador(item)}
-                                    className="px-2.5 py-1 rounded-lg bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold hover:bg-emerald-600 hover:text-white cursor-pointer"
+                                    className="px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-[10px] font-bold hover:bg-emerald-500 hover:text-[#040D0A] cursor-pointer"
                                   >
                                     Sertifikat
                                   </button>
@@ -517,7 +578,7 @@ export const EcoRatingPage: React.FC = () => {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="px-6 py-4 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+            <div className="px-6 py-4 border-t border-slate-200 dark:border-emerald-500/15 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
               <span className="tabular-nums">
                 Sahifa {page} / {totalPages}
               </span>
@@ -525,14 +586,14 @@ export const EcoRatingPage: React.FC = () => {
                 <button
                   disabled={page <= 1}
                   onClick={() => setPage(p => Math.max(1, p - 1))}
-                  className="px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 disabled:opacity-40 flex items-center gap-1 cursor-pointer"
+                  className="px-3 py-1.5 rounded-lg bg-white dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 disabled:opacity-40 flex items-center gap-1 cursor-pointer"
                 >
                   <ChevronLeft className="w-3.5 h-3.5" /> Oldingi
                 </button>
                 <button
                   disabled={page >= totalPages}
                   onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                  className="px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 disabled:opacity-40 flex items-center gap-1 cursor-pointer"
+                  className="px-3 py-1.5 rounded-lg bg-white dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 disabled:opacity-40 flex items-center gap-1 cursor-pointer"
                 >
                   Keyingi <ChevronRight className="w-3.5 h-3.5" />
                 </button>
@@ -550,7 +611,7 @@ export const EcoRatingPage: React.FC = () => {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="w-full max-w-md rounded-3xl bg-slate-900 border-2 border-amber-400/50 p-8 space-y-5 shadow-2xl text-center"
+              className="w-full max-w-md rounded-3xl bg-[#071912] border-2 border-amber-400/50 p-8 space-y-5 shadow-2xl text-center"
             >
               <div className="w-16 h-16 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto">
                 <Award className="w-8 h-8" />
@@ -562,13 +623,13 @@ export const EcoRatingPage: React.FC = () => {
                 <h3 className="text-2xl font-black text-white">{getItemTitle(selectedCertificateAmbassador)}</h3>
                 <p className="text-xs text-slate-400">{getItemSub(selectedCertificateAmbassador)}</p>
               </div>
-              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-1 text-xs tabular-nums">
+              <div className="p-4 rounded-2xl bg-[#040D0A] border border-emerald-500/20 space-y-1 text-xs tabular-nums">
                 <div className="font-bold text-amber-300">Tasdiqlangan Eko-Elchi</div>
                 <div className="font-mono text-slate-400">Ball: {Number(getScoreValue(selectedCertificateAmbassador)).toLocaleString()} ECO</div>
               </div>
               <button
                 onClick={() => setSelectedCertificateAmbassador(null)}
-                className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs cursor-pointer"
+                className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-[#040D0A] font-black text-xs cursor-pointer"
               >
                 Yopish
               </button>
@@ -585,11 +646,11 @@ export const EcoRatingPage: React.FC = () => {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="w-full max-w-xl rounded-3xl bg-slate-900 border border-slate-800 p-6 sm:p-8 space-y-6 shadow-2xl"
+              className="w-full max-w-xl rounded-3xl bg-[#071912] border border-emerald-500/25 p-6 sm:p-8 space-y-6 shadow-2xl"
             >
-              <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center justify-between border-b border-emerald-500/20 pb-4">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center">
                     <Target className="w-5 h-5" />
                   </div>
                   <div>
@@ -599,34 +660,34 @@ export const EcoRatingPage: React.FC = () => {
                 </div>
                 <button
                   onClick={() => setShowFormulaModal(false)}
-                  className="w-8 h-8 rounded-lg bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer"
+                  className="w-8 h-8 rounded-lg bg-[#040D0A] text-slate-400 hover:text-white flex items-center justify-center cursor-pointer"
                 >
                   ✕
                 </button>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs tabular-nums">
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex justify-between">
+                <div className="p-3 rounded-xl bg-[#040D0A] border border-emerald-500/15 flex justify-between">
                   <span className="text-slate-300">Tasdiqlangan muammo</span>
                   <span className="font-mono font-bold text-emerald-400">+{rewardSettings.problemVerified} ECO</span>
                 </div>
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex justify-between">
+                <div className="p-3 rounded-xl bg-[#040D0A] border border-emerald-500/15 flex justify-between">
                   <span className="text-slate-300">Hal etilgan muammo</span>
                   <span className="font-mono font-bold text-emerald-400">+{rewardSettings.problemResolved} ECO</span>
                 </div>
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex justify-between">
+                <div className="p-3 rounded-xl bg-[#040D0A] border border-emerald-500/15 flex justify-between">
                   <span className="text-slate-300">Daraxt ekish videosi</span>
                   <span className="font-mono font-bold text-emerald-400">+{rewardSettings.treePlanting} ECO</span>
                 </div>
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex justify-between">
+                <div className="p-3 rounded-xl bg-[#040D0A] border border-emerald-500/15 flex justify-between">
                   <span className="text-slate-300">Chiqindi saralash</span>
                   <span className="font-mono font-bold text-emerald-400">+{rewardSettings.wasteSorting} ECO</span>
                 </div>
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex justify-between">
+                <div className="p-3 rounded-xl bg-[#040D0A] border border-emerald-500/15 flex justify-between">
                   <span className="text-slate-300">Kunlik Eko-Viktorina</span>
                   <span className="font-mono font-bold text-amber-400">+{rewardSettings.dailyQuiz} ECO</span>
                 </div>
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex justify-between">
+                <div className="p-3 rounded-xl bg-[#040D0A] border border-emerald-500/15 flex justify-between">
                   <span className="text-slate-300">Elchi topshirig‘i</span>
                   <span className="font-mono font-bold text-amber-400">+{rewardSettings.ambassadorTaskBonus} ECO</span>
                 </div>
@@ -634,7 +695,7 @@ export const EcoRatingPage: React.FC = () => {
 
               <button
                 onClick={() => setShowFormulaModal(false)}
-                className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs cursor-pointer"
+                className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-[#040D0A] font-black text-xs cursor-pointer"
               >
                 Tushundim
               </button>

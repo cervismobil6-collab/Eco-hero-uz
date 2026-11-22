@@ -47,19 +47,20 @@ echo "🌐 Doimiy 24/7 HTTPS URL: $SERVICE_URL"
 echo ""
 
 # 5. Telegram Webhookni avtomatik ulash
-BOT_TOKEN=$(grep -o '"botToken": *"[^"]*"' server-bot-config.json | cut -d'"' -f4 || echo "")
-
-if [ -n "$BOT_TOKEN" ]; then
+if [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
   echo "🤖 Telegram Webhook faollashtirilmoqda..."
-  curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/setWebhook?url=${SERVICE_URL}/api/telegram/webhook"
-  echo ""
-  echo "📱 Telegram Bot WebApp Menyu tugmasi sinxronlanmoqda..."
-  curl -s -X POST "${SERVICE_URL}/api/telegram/sync-menu-button"
+  WEBHOOK_URL="${SERVICE_URL}/api/telegram/webhook"
+  if [ -n "${TELEGRAM_WEBHOOK_SECRET:-}" ]; then
+    curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
+      -H "Content-Type: application/json" \
+      -d "{\"url\":\"${WEBHOOK_URL}\",\"secret_token\":\"${TELEGRAM_WEBHOOK_SECRET}\",\"drop_pending_updates\":true}"
+  else
+    curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=${WEBHOOK_URL}&drop_pending_updates=true"
+  fi
   echo ""
   echo "✅ Telegram Bot va Mini App endi 24/7 to'liq mustaqil ishlamoqda!"
 else
-  echo "⚠️ server-bot-config.json faylida Bot Token topilmadi. Tokenni kiritgach, ushbu buyruqni ishga tushiring:"
-  echo "curl -X POST 'https://api.telegram.org/bot<TOKEN>/setWebhook?url=${SERVICE_URL}/api/telegram/webhook'"
+  echo "⚠️ TELEGRAM_BOT_TOKEN muhit o'zgaruvchisi berilmagan. Token va TELEGRAM_WEBHOOK_SECRET ni Cloud Run Secrets'ga qo'shing."
 fi
 
 echo "=============================================================================="

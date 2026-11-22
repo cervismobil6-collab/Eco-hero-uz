@@ -6,3 +6,9 @@ coverage/
 *.log
 .env*
 !.env.example
+.session-secret
+server-bot-config.json
+server-unified-db*.json
+public-tunnel-url.txt
+bin/
+.aistudio/

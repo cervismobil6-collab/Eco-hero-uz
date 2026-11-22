@@ -27,7 +27,7 @@ import {
 import { useEco } from '../context/EcoContext';
 import { INITIAL_ECO_QUIZZES, UZBEKISTAN_REGIONS } from '../data/mockData';
 import { AiMarkdownContent } from '../components/ai/AiMarkdownContent';
-import { apiUrl, isHtmlContentType, parseApiJson, STATIC_HOSTING_API_ERROR_MESSAGE } from '../utils/api';
+import { isHtmlContentType, parseApiJson, STATIC_HOSTING_API_ERROR_MESSAGE } from '../utils/api';
 
 type WorkspaceMode = 'chat' | 'scanner' | 'trees' | 'quizzes';
 
@@ -168,6 +168,8 @@ export const EcoAiPage: React.FC = () => {
     setActiveTab: setGlobalTab,
     triggerHaptic,
     claimDailyQuizReward,
+    apiFetch,
+    openAuthModal,
   } = useEco();
 
   const [mode, setMode] = useState<WorkspaceMode>('chat');
@@ -237,10 +239,13 @@ export const EcoAiPage: React.FC = () => {
     saveSessionsToStorage(sessions);
   }, [sessions]);
 
-  // Auto-scroll to bottom when messages update
+  const lastMessageText =
+    activeSession?.messages[activeSession.messages.length - 1]?.text || '';
+
+  // Auto-scroll to bottom smoothly when messages arrive or stream updates
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: isStreaming ? 'auto' : 'smooth' });
-  }, [activeSession?.messages.length, isStreaming]);
+  }, [activeSession?.messages.length, lastMessageText, isStreaming]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -400,34 +405,46 @@ export const EcoAiPage: React.FC = () => {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
+    const cleanHistory = baseHistory
+      .filter((m) => !m.isError && (m.text?.trim() || (m.attachments && m.attachments.length > 0)))
+      .slice(-16)
+      .map((m) => ({
+        role: m.role,
+        text: m.text,
+        attachments: m.attachments?.map((a) => ({ name: a.name })),
+      }));
+
+    const requestBody = {
+      message: rawText.trim(),
+      chatHistory: cleanHistory,
+      attachments: attachmentsToSend.map((a) => ({
+        name: a.name,
+        mimeType: a.mimeType,
+        dataBase64: a.dataBase64,
+        textContent: a.textContent,
+      })),
+      userId: user.uid,
+      telegramId: user.telegramId,
+      fullName: user.fullName,
+      schoolName: user.schoolName,
+      region: user.region,
+    };
+
+    let accumulated = '';
+
     try {
-      const response = await fetch(apiUrl('/api/ai/eco-assistant/stream'), {
+      const response = await apiFetch('/api/ai/eco-assistant/stream', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
-        body: JSON.stringify({
-          message: rawText.trim(),
-          chatHistory: baseHistory.slice(-14).map((m) => ({
-            role: m.role,
-            text: m.text,
-            attachments: m.attachments?.map((a) => ({ name: a.name })),
-          })),
-          attachments: attachmentsToSend.map((a) => ({
-            name: a.name,
-            mimeType: a.mimeType,
-            dataBase64: a.dataBase64,
-            textContent: a.textContent,
-          })),
-          userId: user.uid,
-          telegramId: user.telegramId,
-          fullName: user.fullName,
-          schoolName: user.schoolName,
-          region: user.region,
-        }),
+        timeoutMs: 0,
+        body: JSON.stringify(requestBody),
       });
 
       if (isHtmlContentType(response)) {
         throw new Error(STATIC_HOSTING_API_ERROR_MESSAGE);
+      }
+      if (response.status === 401) {
+        openAuthModal();
       }
       if (!response.ok || !response.body) {
         let serverErr = `Server javob bermadi (${response.status})`;
@@ -443,25 +460,14 @@ export const EcoAiPage: React.FC = () => {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let sseBuffer = '';
-      let accumulated = '';
       let streamError: string | null = null;
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        sseBuffer += decoder.decode(value, { stream: true });
-
-        const events = sseBuffer.split('\n\n');
-        sseBuffer = events.pop() || '';
-
-        for (const evtBlock of events) {
-          const dataLine = evtBlock
-            .split('\n')
-            .find((l) => l.startsWith('data:'));
-          if (!dataLine) continue;
-          const jsonRaw = dataLine.slice(5).trim();
+      const processEventBlock = (evtBlock: string) => {
+        const lines = evtBlock.split(/\r?\n/);
+        for (const line of lines) {
+          if (!line.startsWith('data:')) continue;
+          const jsonRaw = line.slice(5).trim();
           if (!jsonRaw) continue;
-
           try {
             const payload = JSON.parse(jsonRaw);
             if (payload.error) {
@@ -483,14 +489,47 @@ export const EcoAiPage: React.FC = () => {
             // ignore malformed SSE fragment
           }
         }
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        sseBuffer += decoder.decode(value, { stream: true });
+
+        const events = sseBuffer.split(/\r?\n\r?\n/);
+        sseBuffer = events.pop() || '';
+        for (const evtBlock of events) {
+          processEventBlock(evtBlock);
+        }
       }
 
-      if (streamError) {
+      if (sseBuffer.trim()) {
+        processEventBlock(sseBuffer);
+      }
+
+      if (streamError && !accumulated.trim()) {
         throw new Error(streamError);
       }
 
-      if (!accumulated.trim()) {
-        throw new Error('Javob bo‘sh qaytdi. Iltimos qayta urinib ko‘ring.');
+      if (!accumulated.trim() && !controller.signal.aborted) {
+        // Automatic single non-stream fallback if SSE ended empty
+        const fallbackRes = await apiFetch('/api/ai/eco-assistant', {
+          method: 'POST',
+          signal: controller.signal,
+          timeoutMs: 0,
+          body: JSON.stringify(requestBody),
+        });
+        const fallbackData = await parseApiJson<{ success?: boolean; reply?: string; error?: string }>(fallbackRes);
+        if (fallbackRes.status === 401) {
+          openAuthModal();
+        }
+        if (!fallbackRes.ok || !fallbackData.reply) {
+          throw new Error(fallbackData.error || 'Javob bo‘sh qaytdi. Iltimos qayta urinib ko‘ring.');
+        }
+        accumulated = fallbackData.reply;
+        updateSessionMessages(targetSessionId, (prev) =>
+          prev.map((m) => (m.id === aiMsgId ? { ...m, text: accumulated } : m))
+        );
       }
     } catch (err: any) {
       if (err?.name === 'AbortError') {
@@ -501,7 +540,7 @@ export const EcoAiPage: React.FC = () => {
               : m
           )
         );
-      } else {
+      } else if (!accumulated.trim()) {
         updateSessionMessages(targetSessionId, (prev) =>
           prev.map((m) =>
             m.id === aiMsgId
@@ -567,9 +606,9 @@ export const EcoAiPage: React.FC = () => {
     setIsScanning(true);
     setAttachmentError(null);
     try {
-      const res = await fetch(apiUrl('/api/ai/analyze-problem'), {
+      const res = await apiFetch('/api/ai/analyze-problem', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        timeoutMs: 45000,
         body: JSON.stringify({
           title: scanTitle,
           description: 'Ushbu suratdagi ekologik muammoni tahlil qiling.',
@@ -578,6 +617,9 @@ export const EcoAiPage: React.FC = () => {
         }),
       });
       const data = await parseApiJson<{ success?: boolean; analysis?: any; error?: string }>(res);
+      if (res.status === 401) {
+        openAuthModal();
+      }
       if (!res.ok || !data.success || !data.analysis) {
         throw new Error(data.error || `AI skaneri xatolik qaytardi (${res.status})`);
       }
@@ -595,9 +637,9 @@ export const EcoAiPage: React.FC = () => {
     setIsTreeLoading(true);
     setTreePlanResult(null);
     try {
-      const res = await fetch(apiUrl('/api/ai/tree-plan'), {
+      const res = await apiFetch('/api/ai/tree-plan', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        timeoutMs: 45000,
         body: JSON.stringify({
           region: selectedRegion,
           soilType,
@@ -605,6 +647,9 @@ export const EcoAiPage: React.FC = () => {
         }),
       });
       const data = await parseApiJson<{ success?: boolean; plan?: string; error?: string }>(res);
+      if (res.status === 401) {
+        openAuthModal();
+      }
       if (!res.ok || !data.success || !data.plan) {
         throw new Error(data.error || `AI ko‘chat rejasi xatolik qaytardi (${res.status})`);
       }
@@ -958,13 +1003,22 @@ export const EcoAiPage: React.FC = () => {
                                 {msg.isError ? (
                                   <p>{msg.text}</p>
                                 ) : (
-                                  <AiMarkdownContent content={msg.text} />
+                                  <>
+                                    <AiMarkdownContent content={msg.text} />
+                                    {isStreaming && isLastModel && (
+                                      <span className="inline-block w-2 h-4 ml-1 align-middle bg-emerald-500 rounded-xs animate-pulse" />
+                                    )}
+                                  </>
                                 )}
                               </div>
                             ) : (
-                              <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 py-1">
-                                <Loader2 className="w-4 h-4 animate-spin text-emerald-500" />
-                                <span>Javob tayyorlanmoqda...</span>
+                              <div className="flex items-center gap-2.5 text-xs text-slate-500 dark:text-slate-400 py-1.5">
+                                <span className="inline-flex items-center gap-1">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-bounce [animation-delay:0ms]" />
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-bounce [animation-delay:150ms]" />
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-bounce [animation-delay:300ms]" />
+                                </span>
+                                <span>Fikrlamoqda...</span>
                               </div>
                             )}
 
@@ -1005,7 +1059,7 @@ export const EcoAiPage: React.FC = () => {
             </div>
 
             {/* Bottom Composer Dock */}
-            <div className="shrink-0 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-3 sm:px-6 py-2.5 sm:py-3">
+            <div className="shrink-0 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-3 sm:px-6 pt-2.5 sm:pt-3 pb-[calc(4.75rem+env(safe-area-inset-bottom))] xl:pb-3">
               <div className="max-w-3xl mx-auto w-full space-y-2">
                 {attachmentError && (
                   <div className="px-3 py-2 rounded-xl bg-rose-500/10 border border-rose-500/25 text-rose-600 dark:text-rose-300 text-xs flex items-center justify-between gap-2">

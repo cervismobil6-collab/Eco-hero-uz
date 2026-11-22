@@ -4,18 +4,9 @@ import {
   Mail,
   Lock,
   User,
-  School as SchoolIcon,
-  MapPin,
-  CheckCircle2,
   AlertCircle,
-  Sparkles,
-  ShieldAlert,
-  Award,
-  Building2,
-  Briefcase,
 } from 'lucide-react';
 import { useEco } from '../../context/EcoContext';
-import { UserRole } from '../../types/eco';
 import { UZBEKISTAN_REGIONS, UZBEKISTAN_DISTRICTS } from '../../data/mockData';
 
 interface AuthModalProps {
@@ -24,18 +15,17 @@ interface AuthModalProps {
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
-  const { loginUser, registerUser, loginWithGoogle, switchRole } = useEco();
+  const { loginUser, registerUser, loginWithGoogle } = useEco();
 
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('+998 ');
-  const [role, setRole] = useState<UserRole>('student');
   const [region, setRegion] = useState(UZBEKISTAN_REGIONS[0]);
   const [district, setDistrict] = useState((UZBEKISTAN_DISTRICTS[UZBEKISTAN_REGIONS[0]] || [])[0] || 'Shayxontohur tumani');
   const [schoolName, setSchoolName] = useState('17-sonli maktab');
-  const [schoolNumber, setSchoolNumber] = useState('17');
+  const [schoolNumber] = useState('17');
   const [grade, setGrade] = useState('9-sinf');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,7 +45,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
         await registerUser(email, password, {
           fullName,
           phoneNumber,
-          role,
+          role: 'student',
           region,
           district,
           schoolName,
@@ -82,11 +72,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleQuickSwitch = (roleKey: UserRole) => {
-    switchRole(roleKey);
-    onClose();
   };
 
   return (
@@ -177,31 +162,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                 </div>
               </div>
 
-              {/* Role selection */}
-              <div>
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                  Rolingizni tanlang (Barcha 8 ta lavozim)
-                </label>
-                <select
-                  value={role}
-                  onChange={e => setRole(e.target.value as UserRole)}
-                  className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 font-medium"
-                >
-                  <option value="student">🎓 O'quvchi (Student)</option>
-                  <option value="ambassador">🌱 Eko-Elchi (Eco Ambassador)</option>
-                  <option value="school_admin">🏫 Maktab Admini / Sardori</option>
-                  <option value="moderator">🛡 Mintaqaviy Moderator</option>
-                  <option value="district_coordinator">📍 Tuman Koordinator</option>
-                  <option value="regional_coordinator">🌍 Viloyat Koordinator</option>
-                  <option value="sponsor">💼 Homiy va Hamkor Tashkilot</option>
-                  <option value="super_admin">👑 Super Admin (@jasurdost)</option>
-                </select>
-                {role !== 'student' && (
-                  <p className="text-[10px] text-amber-500 font-semibold mt-1">
-                    ℹ️ Eslatma: O'quvchidan tashqari barcha boshqaruv lavozimlari Super Admin <b>@jasurdost</b> tasdiqlaganidan so'ng faollashadi.
-                  </p>
-                )}
-              </div>
+              <p className="text-[11px] text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-3 py-2">
+                Yangi hisoblar &quot;O&apos;quvchi&quot; maqomida ochiladi. Maktab sardori, Eko-Elchi yoki koordinator lavozimi uchun kirganingizdan so&apos;ng Kabinetdan ariza topshirishingiz mumkin.
+              </p>
 
               <div>
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
@@ -335,52 +298,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
             Google akkaunt bilan kirish
           </button>
         </form>
-
-        {/* Quick Demo Role Switcher for seamless testing */}
-        <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-2">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-            Tezkor Sinov: Rolni Tanlash (Demo)
-          </span>
-          <div className="grid grid-cols-3 gap-1.5 text-[11px]">
-            <button
-              onClick={() => handleQuickSwitch('super_admin')}
-              className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-semibold border border-amber-200 dark:border-amber-800 hover:bg-amber-100 text-center cursor-pointer"
-            >
-              Super Admin
-            </button>
-            <button
-              onClick={() => handleQuickSwitch('moderator')}
-              className="p-2 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 font-semibold border border-sky-200 dark:border-sky-800 hover:bg-sky-100 text-center cursor-pointer"
-            >
-              Moderator
-            </button>
-            <button
-              onClick={() => handleQuickSwitch('school_admin')}
-              className="p-2 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-semibold border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 text-center cursor-pointer"
-            >
-              Maktab Admin
-            </button>
-            <button
-              onClick={() => handleQuickSwitch('ambassador')}
-              className="p-2 rounded-lg bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 font-semibold border border-teal-200 dark:border-teal-800 hover:bg-teal-100 text-center cursor-pointer"
-            >
-              Eko-Elchi
-            </button>
-            <button
-              onClick={() => handleQuickSwitch('student')}
-              className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-semibold border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 text-center cursor-pointer"
-            >
-              O'quvchi
-            </button>
-            <button
-              onClick={() => handleQuickSwitch('sponsor')}
-              className="p-2 rounded-lg bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 font-semibold border border-purple-200 dark:border-purple-800 hover:bg-purple-100 text-center cursor-pointer"
-            >
-              Homiy
-            </button>
-          </div>
-        </div>
-
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ShieldCheck,
   User,
@@ -11,6 +11,8 @@ import {
   AlertCircle,
   X,
   Share2,
+  Mail,
+  Lock,
 } from 'lucide-react';
 import { useEco } from '../../context/EcoContext';
 import { UZBEKISTAN_REGIONS, UZBEKISTAN_DISTRICTS } from '../../data/mockData';
@@ -26,14 +28,22 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
   onClose,
   isEditMode = false,
 }) => {
-  const { user, rewardSettings, completeOnboarding, updateUserProfile, isTelegramMiniApp } = useEco();
+  const { user, rewardSettings, completeOnboarding, updateUserProfile, registerUser, openAuthModal, sessionToken, isTelegramMiniApp } = useEco();
 
+  const [email, setEmail] = useState(
+    user.email && !user.email.endsWith('@ecohero.uz') && !user.email.endsWith('@telegram.ecohero.uz') ? user.email : ''
+  );
+  const [password, setPassword] = useState('');
   const [phoneNumber, setPhoneNumber] = useState(user.phoneNumber || '+998 ');
   const [fullName, setFullName] = useState(user.fullName && user.fullName !== 'Eko-Qahramon' ? user.fullName : '');
   const [region, setRegion] = useState(user.region || UZBEKISTAN_REGIONS[0]);
-  const [district, setDistrict] = useState(user.district || (UZBEKISTAN_DISTRICTS[UZBEKISTAN_REGIONS[0]] ? UZBEKISTAN_DISTRICTS[UZBEKISTAN_REGIONS[0]][0] : 'Chilonzor tumani'));
+  const [district, setDistrict] = useState(
+    user.district || (UZBEKISTAN_DISTRICTS[UZBEKISTAN_REGIONS[0]] ? UZBEKISTAN_DISTRICTS[UZBEKISTAN_REGIONS[0]][0] : 'Chilonzor tumani')
+  );
   const [schoolName, setSchoolName] = useState(user.schoolName && user.schoolName !== 'Maktab kiritilmagan' ? user.schoolName : '');
   const [grade, setGrade] = useState(user.grade || '9-sinf');
+
+  const needsWebCredentials = !isEditMode && !sessionToken && !isTelegramMiniApp;
 
   const handleRegionChange = (newRegion: string) => {
     setRegion(newRegion);
@@ -45,19 +55,35 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [telegramDetectedId, setTelegramDetectedId] = useState<string | number | null>(null);
   const [telegramDetectedUsername, setTelegramDetectedUsername] = useState<string | null>(null);
+  const wasOpenRef = useRef(false);
 
-  // Sync local form state when modal opens or user data updates
+  // Initialize form state strictly when modal transitions from closed -> open (prevents background syncBootstrap from wiping user edits)
   useEffect(() => {
-    if (!isOpen) return;
+    const justOpened = isOpen && !wasOpenRef.current;
+    wasOpenRef.current = isOpen;
+    if (!justOpened) return;
+
+    setError(null);
     if (user.phoneNumber) setPhoneNumber(user.phoneNumber);
-    if (user.fullName && user.fullName !== 'Eko-Qahramon' && user.fullName !== 'Jasurbek Aliyev') {
+    if (user.fullName && user.fullName !== 'Eko-Qahramon' && user.fullName !== 'Jasurbek Aliyev' && user.fullName !== "O'quvchi") {
       setFullName(user.fullName);
     }
-    if (user.region) setRegion(user.region);
-    if (user.district) setDistrict(user.district);
-    if (user.schoolName && user.schoolName !== 'Maktab kiritilmagan') setSchoolName(user.schoolName);
+    const initRegion = user.region && UZBEKISTAN_REGIONS.includes(user.region) ? user.region : UZBEKISTAN_REGIONS[0];
+    setRegion(initRegion);
+    const regDistricts = UZBEKISTAN_DISTRICTS[initRegion] || [];
+    const initDistrict =
+      user.district && regDistricts.includes(user.district) ? user.district : regDistricts[0] || user.district || '';
+    setDistrict(initDistrict);
+
+    if (
+      user.schoolName &&
+      user.schoolName !== 'Maktab kiritilmagan' &&
+      (isEditMode || user.isOnboarded || user.schoolName !== 'Toshkent sh. 17-sonli ixtisoslashtirilgan maktab')
+    ) {
+      setSchoolName(user.schoolName);
+    }
     if (user.grade) setGrade(user.grade);
-  }, [isOpen, user]);
+  }, [isOpen, user, isEditMode]);
 
   // Auto-detect Telegram WebApp user and contact events
   useEffect(() => {
@@ -128,15 +154,33 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
     e.preventDefault();
     setError(null);
 
-    if (!fullName.trim()) {
+    const cleanFullName = fullName.trim();
+    if (!cleanFullName) {
       setError("Iltimos, ism va familiyangizni to'liq kiriting");
       return;
     }
 
-    const cleanPhone = phoneNumber.replace(/\s+/g, '');
-    if (cleanPhone.length < 9) {
+    const phoneDigits = phoneNumber.replace(/\D/g, '');
+    if (phoneDigits.length < 9) {
       setError("Iltimos, to'g'ri telefon raqamingizni kiriting (Masalan: +998 90 123 45 67)");
       return;
+    }
+
+    const cleanSchool = schoolName.trim();
+    if (!cleanSchool) {
+      setError("Iltimos, maktabingiz raqami yoki nomini kiriting (Masalan: 17-maktab)");
+      return;
+    }
+
+    if (needsWebCredentials) {
+      if (!email.trim() || !email.includes('@')) {
+        setError("Iltimos, to'g'ri elektron pochta manzilini kiriting");
+        return;
+      }
+      if (password.length < 6) {
+        setError("Parol kamida 6 ta belgidan iborat bo'lishi kerak");
+        return;
+      }
     }
 
     if (!privacyAccepted) {
@@ -144,25 +188,41 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
       return;
     }
 
+    const effectiveRegion = region || UZBEKISTAN_REGIONS[0];
+    const validDistricts = UZBEKISTAN_DISTRICTS[effectiveRegion] || [];
+    const effectiveDistrict =
+      district && validDistricts.includes(district) ? district : validDistricts[0] || district || 'Markaziy tumani';
+    const normalizedPhone = phoneNumber.trim();
+
     setLoading(true);
     try {
       if (isEditMode) {
         await updateUserProfile({
-          fullName,
-          phoneNumber,
-          region,
-          district,
-          schoolName,
+          fullName: cleanFullName,
+          phoneNumber: normalizedPhone,
+          region: effectiveRegion,
+          district: effectiveDistrict,
+          schoolName: cleanSchool,
+          grade,
+        });
+        onClose();
+      } else if (needsWebCredentials) {
+        await registerUser(email.trim(), password, {
+          fullName: cleanFullName,
+          phoneNumber: normalizedPhone,
+          region: effectiveRegion,
+          district: effectiveDistrict,
+          schoolName: cleanSchool,
           grade,
         });
         onClose();
       } else {
         await completeOnboarding({
-          fullName,
-          phoneNumber,
-          region,
-          district,
-          schoolName,
+          fullName: cleanFullName,
+          phoneNumber: normalizedPhone,
+          region: effectiveRegion,
+          district: effectiveDistrict,
+          schoolName: cleanSchool,
           grade,
           privacyAccepted,
         });
@@ -378,6 +438,45 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
             </div>
           </div>
 
+          {needsWebCredentials && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Elektron Pochta <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    placeholder="misol@maktab.uz"
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Parol <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="password"
+                    required
+                    minLength={6}
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    placeholder="Kamida 6 ta belgi"
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Privacy Consent Checkbox */}
           <div className="pt-1">
             <label className="flex items-start gap-2.5 cursor-pointer text-xs text-slate-600 dark:text-slate-300">
@@ -412,11 +511,23 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
           </button>
         </form>
 
-        {/* Footer note: Google sign-in is not required */}
-        <div className="mt-3 text-center">
-          <span className="text-[11px] text-slate-400">
-            Google akkaunt orqali kirish talab qilinmaydi. Hisobingiz Telegram orqali avtomatik himoyalangan.
-          </span>
+        <div className="mt-3 text-center space-y-1.5">
+          {needsWebCredentials ? (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                openAuthModal();
+              }}
+              className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+            >
+              Hisobingiz bormi? Kirish yoki Google orqali davom etish
+            </button>
+          ) : (
+            <span className="text-[11px] text-slate-400 block">
+              Hisobingiz tasdiqlangan sessiya bilan himoyalangan.
+            </span>
+          )}
         </div>
 
       </div>

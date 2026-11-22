@@ -103,7 +103,8 @@ service cloud.firestore {
         data.keys().hasOnly([
           'uid', 'fullName', 'email', 'phoneNumber', 'profileImage', 'avatarUrl',
           'role', 'approvedRoles', 'schoolId', 'schoolName', 'schoolNumber',
-          'region', 'district', 'grade', 'ecoCoins', 'registrationDate',
+          'region', 'district', 'grade', 'ecoCoins', 'ecoXP', 'level',
+          'streakDays', 'lastStreakClaimDate', 'registrationDate',
           'isVerified', 'badge', 'telegramUsername', 'telegramId',
           'allowStudentMessages', 'activityStats', 'createdAt', 'updatedAt'
         ]) &&
@@ -289,7 +290,8 @@ service cloud.firestore {
         data.treePlanting is number && data.treePlanting >= 0 &&
         data.gardenProject is number && data.gardenProject >= 0 &&
         data.problemResolved is number && data.problemResolved >= 0 &&
-        data.updatedAt is timestamp;
+        (!('updatedBy' in data) || (data.updatedBy is string && data.updatedBy.size() <= 128)) &&
+        (data.updatedAt is timestamp || (data.updatedAt is string && data.updatedAt.size() <= 64));
     }
 
     function isValidRoleRequest(data) {
@@ -373,11 +375,16 @@ service cloud.firestore {
         data.keys().hasOnly([
           'id', 'title', 'sponsorId', 'sponsorName', 'sponsorLogo', 'type', 'placement',
           'headline', 'subheadline', 'imageUrl', 'videoUrl', 'ctaText', 'ctaUrl',
+          'ctaType', 'clickOpensLink',
           'rewardCoins', 'skipAfterSeconds', 'isVerifiedSponsor', 'startDate', 'endDate',
-          'status', 'impressionsCount', 'clicksCount', 'complianceNote', 'createdAt'
+          'status', 'impressionsCount', 'clicksCount', 'complianceNote', 'createdAt', 'updatedAt'
         ]) &&
         isValidId(data.id) &&
-        data.title is string && data.title.size() >= 2 && data.title.size() <= 200 &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+        (!('sponsorId' in data) || (data.sponsorId is string && data.sponsorId.size() <= 128)) &&
+        (!('sponsorName' in data) || (data.sponsorName is string && data.sponsorName.size() <= 150)) &&
+        (!('sponsorLogo' in data) || (data.sponsorLogo is string && data.sponsorLogo.size() <= 1024)) &&
+        (!('type' in data) || data.type in ['banner', 'video', 'card']) &&
         data.placement in ['home_top', 'home_middle', 'shop_top', 'map_banner', 'media_sidebar', 'post_purchase', 'earn_coins'] &&
         data.headline is string && data.headline.size() <= 300 &&
         (!('subheadline' in data) || (data.subheadline is string && data.subheadline.size() <= 500)) &&
@@ -385,8 +392,16 @@ service cloud.firestore {
         (!('videoUrl' in data) || (data.videoUrl is string && data.videoUrl.size() <= 1024)) &&
         (!('ctaText' in data) || (data.ctaText is string && data.ctaText.size() <= 80)) &&
         (!('ctaUrl' in data) || (data.ctaUrl is string && data.ctaUrl.size() <= 1024)) &&
+        (!('ctaType' in data) || data.ctaType in ['website', 'telegram_bot', 'telegram_channel']) &&
+        (!('clickOpensLink' in data) || data.clickOpensLink is bool) &&
+        (!('isVerifiedSponsor' in data) || data.isVerifiedSponsor is bool) &&
+        (!('startDate' in data) || (data.startDate is string && data.startDate.size() <= 64)) &&
+        (!('endDate' in data) || (data.endDate is string && data.endDate.size() <= 64)) &&
+        (!('complianceNote' in data) || (data.complianceNote is string && data.complianceNote.size() <= 500)) &&
         (!('rewardCoins' in data) || (data.rewardCoins is number && data.rewardCoins >= 0 && data.rewardCoins <= 1000)) &&
-        (!('skipAfterSeconds' in data) || (data.skipAfterSeconds is number && data.skipAfterSeconds >= 0 && data.skipAfterSeconds <= 120)) &&
+        (!('skipAfterSeconds' in data) || (data.skipAfterSeconds is number && data.skipAfterSeconds >= 0 && data.skipAfterSeconds <= 300)) &&
+        (!('createdAt' in data) || data.createdAt is timestamp || (data.createdAt is string && data.createdAt.size() <= 64)) &&
+        (!('updatedAt' in data) || data.updatedAt is timestamp || (data.updatedAt is string && data.updatedAt.size() <= 64)) &&
         data.status in ['active', 'paused', 'pending', 'expired'];
     }
 
@@ -423,9 +438,19 @@ service cloud.firestore {
 
     function isValidShopItem(data) {
       return data.keys().hasAll(['id', 'title', 'priceCoins', 'stock']) &&
-        data.keys().hasOnly(['id', 'title', 'description', 'priceCoins', 'category', 'stock', 'imageUrl', 'sponsorName']) &&
+        data.keys().hasOnly([
+          'id', 'title', 'description', 'priceCoins', 'category', 'stock',
+          'imageUrl', 'sponsorName', 'features', 'redemptionGate', 'updatedAt'
+        ]) &&
         isValidId(data.id) &&
-        data.title is string && data.title.size() <= 200 &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+        (!('description' in data) || (data.description is string && data.description.size() <= 2000)) &&
+        (!('category' in data) || (data.category is string && data.category.size() <= 80)) &&
+        (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 1024)) &&
+        (!('sponsorName' in data) || (data.sponsorName is string && data.sponsorName.size() <= 150)) &&
+        (!('features' in data) || (data.features is list && data.features.size() <= 20)) &&
+        (!('redemptionGate' in data) || data.redemptionGate is map) &&
+        (!('updatedAt' in data) || data.updatedAt is timestamp || (data.updatedAt is string && data.updatedAt.size() <= 64)) &&
         data.priceCoins is number && data.priceCoins >= 0 &&
         data.stock is number && data.stock >= 0;
     }
@@ -438,15 +463,64 @@ service cloud.firestore {
           'region', 'district', 'isPinned', 'status', 'createdAt', 'updatedAt'
         ]) &&
         isValidId(data.id) &&
-        data.title is string && data.title.size() >= 2 && data.title.size() <= 200 &&
-        data.content is string && data.content.size() >= 2 && data.content.size() <= 2000 &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+        data.content is string && data.content.size() >= 1 && data.content.size() <= 2000 &&
         data.category in ['bot_news', 'website', 'channel_ad', 'news', 'school_event'] &&
         isValidId(data.authorUid) &&
+        (!('authorName' in data) || (data.authorName is string && data.authorName.size() <= 150)) &&
+        (!('authorRole' in data) || (data.authorRole is string && data.authorRole.size() <= 64)) &&
+        (!('schoolId' in data) || (data.schoolId is string && data.schoolId.size() <= 128)) &&
+        (!('schoolName' in data) || (data.schoolName is string && data.schoolName.size() <= 200)) &&
+        (!('region' in data) || (data.region is string && data.region.size() <= 100)) &&
+        (!('district' in data) || (data.district is string && data.district.size() <= 100)) &&
+        (!('isPinned' in data) || data.isPinned is bool) &&
         (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 1024)) &&
         (!('ctaText' in data) || (data.ctaText is string && data.ctaText.size() <= 80)) &&
         (!('ctaUrl' in data) || (data.ctaUrl is string && data.ctaUrl.size() <= 1024)) &&
         data.status in ['active', 'paused'] &&
-        data.createdAt is timestamp;
+        (data.createdAt is timestamp || (data.createdAt is string && data.createdAt.size() <= 64)) &&
+        (!('updatedAt' in data) || data.updatedAt is timestamp || (data.updatedAt is string && data.updatedAt.size() <= 64));
+    }
+
+    function isValidEcoMission(data) {
+      return data.keys().hasAll(['id', 'type', 'title', 'rewardCoins', 'status']) &&
+        data.keys().hasOnly([
+          'id', 'type', 'title', 'description', 'rewardCoins', 'status', 'category',
+          'questions', 'passingPercent', 'question', 'options', 'correctIndex',
+          'explanation', 'channelUsername', 'channelUrl', 'requiresProof', 'proofType',
+          'createdByUid', 'createdByName', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        data.type in ['quiz', 'channel_subscribe', 'custom_task'] &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+        (!('description' in data) || (data.description is string && data.description.size() <= 2000)) &&
+        data.rewardCoins is number && data.rewardCoins >= 1 && data.rewardCoins <= 100000 &&
+        data.status in ['active', 'paused'] &&
+        (!('category' in data) || (data.category is string && data.category.size() <= 64)) &&
+        (!('questions' in data) || (data.questions is list && data.questions.size() <= 50)) &&
+        (!('passingPercent' in data) || (data.passingPercent is number && data.passingPercent >= 10 && data.passingPercent <= 100)) &&
+        (!('question' in data) || (data.question is string && data.question.size() <= 500)) &&
+        (!('options' in data) || (data.options is list && data.options.size() <= 10)) &&
+        (!('correctIndex' in data) || (data.correctIndex is number && data.correctIndex >= 0 && data.correctIndex <= 9)) &&
+        (!('explanation' in data) || (data.explanation is string && data.explanation.size() <= 1000)) &&
+        (!('channelUsername' in data) || (data.channelUsername is string && data.channelUsername.size() <= 120)) &&
+        (!('channelUrl' in data) || (data.channelUrl is string && data.channelUrl.size() <= 1024)) &&
+        (!('requiresProof' in data) || data.requiresProof is bool) &&
+        (!('proofType' in data) || (data.proofType is string && data.proofType.size() <= 32)) &&
+        (!('createdByUid' in data) || (data.createdByUid is string && data.createdByUid.size() <= 128)) &&
+        (!('createdByName' in data) || (data.createdByName is string && data.createdByName.size() <= 150)) &&
+        (!('createdAt' in data) || data.createdAt is timestamp || (data.createdAt is string && data.createdAt.size() <= 64)) &&
+        (!('updatedAt' in data) || data.updatedAt is timestamp || (data.updatedAt is string && data.updatedAt.size() <= 64));
+    }
+
+    function isValidCatalogTombstone(data) {
+      return data.keys().hasAll(['id', 'collectionName', 'targetId', 'deletedAt']) &&
+        data.keys().hasOnly(['id', 'collectionName', 'targetId', 'deletedByUid', 'deletedAt']) &&
+        isValidId(data.id) &&
+        data.collectionName in ['eco_missions', 'shopItems', 'eco_ads', 'home_posts'] &&
+        isValidId(data.targetId) &&
+        (!('deletedByUid' in data) || (data.deletedByUid is string && data.deletedByUid.size() <= 128)) &&
+        (data.deletedAt is timestamp || (data.deletedAt is string && data.deletedAt.size() <= 64));
     }
 
     function isValidMonthlyAward(data) {
@@ -496,6 +570,32 @@ service cloud.firestore {
         data.status in ['pending', 'approved', 'rejected', 'blocked'] &&
         (!('note' in data) || (data.note is string && data.note.size() <= 500)) &&
         data.createdAt is timestamp;
+    }
+
+    function isValidLiveMetrics(data) {
+      return data.keys().hasAll(['id', 'totalSchools', 'totalUsers', 'botUsersCount', 'updatedAt']) &&
+        data.keys().hasOnly([
+          'id', 'totalSchools', 'totalUsers', 'botUsersCount',
+          'totalDistricts', 'totalRegions', 'schoolCaptainsCount',
+          'pendingApplicationsCount', 'shopOrdersCount',
+          'resolvedReports', 'totalReports', 'treesPlanted',
+          'activeAmbassadors', 'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        data.id.size() <= 64 &&
+        data.totalSchools is number && data.totalSchools >= 0 &&
+        data.totalUsers is number && data.totalUsers >= 0 &&
+        data.botUsersCount is number && data.botUsersCount >= 0 &&
+        (!('totalDistricts' in data) || (data.totalDistricts is number && data.totalDistricts >= 0)) &&
+        (!('totalRegions' in data) || (data.totalRegions is number && data.totalRegions >= 0)) &&
+        (!('schoolCaptainsCount' in data) || (data.schoolCaptainsCount is number && data.schoolCaptainsCount >= 0)) &&
+        (!('pendingApplicationsCount' in data) || (data.pendingApplicationsCount is number && data.pendingApplicationsCount >= 0)) &&
+        (!('shopOrdersCount' in data) || (data.shopOrdersCount is number && data.shopOrdersCount >= 0)) &&
+        (!('resolvedReports' in data) || (data.resolvedReports is number && data.resolvedReports >= 0)) &&
+        (!('totalReports' in data) || (data.totalReports is number && data.totalReports >= 0)) &&
+        (!('treesPlanted' in data) || (data.treesPlanted is number && data.treesPlanted >= 0)) &&
+        (!('activeAmbassadors' in data) || (data.activeAmbassadors is number && data.activeAmbassadors >= 0)) &&
+        (data.updatedAt is timestamp || (data.updatedAt is string && data.updatedAt.size() <= 64));
     }
 
     // ========================================================
@@ -715,11 +815,10 @@ service cloud.firestore {
 
     // 7. Super Admin Configurable Reward Settings
     match /reward_settings/{settingId} {
-      allow get: if isValidId(settingId) && isSignedIn();
+      allow get: if isValidId(settingId);
       allow list: if isSignedIn() && isBootstrappedAdmin();
       allow create, update: if isValidId(settingId) && isSuperAdmin() &&
-        isValidRewardSettings(incoming()) &&
-        incoming().updatedAt == request.time;
+        isValidRewardSettings(incoming());
       allow delete: if false;
     }
 
@@ -897,7 +996,7 @@ service cloud.firestore {
     // 13. EcoAds & Ad Reward Claims
     match /eco_ads/{adId} {
       allow get: if isValidId(adId);
-      allow list: if existing().status == 'active' || isBootstrappedAdmin();
+      allow list: if existing().status in ['active', 'paused'] || isBootstrappedAdmin();
       allow create, update: if isValidId(adId) && isSuperAdmin() && isValidEcoAd(incoming());
       allow delete: if isValidId(adId) && isSuperAdmin();
     }
@@ -909,40 +1008,37 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // 14. HomePage Posts & News CMS (School Captain, Coordinators, Moderators, Super Admin)
+    // 14. HomePage Posts & News CMS (Super Admin ONLY)
     match /home_posts/{postId} {
-      allow get: if isValidId(postId);
-      allow list: if existing().status == 'active' || isBootstrappedAdmin() || (
-        isSignedIn() && existing().authorUid == request.auth.uid
-      );
-      allow create: if isValidId(postId) && isSignedIn() && isValidHomePost(incoming()) &&
-        incoming().authorUid == request.auth.uid &&
-        incoming().createdAt == request.time && (
+      allow get: if isValidId(postId) && (existing().status == 'active' || isSuperAdmin());
+      allow list: if existing().status in ['active', 'paused'] || isBootstrappedAdmin();
+      allow create: if isValidId(postId) && isSuperAdmin() && isValidHomePost(incoming());
+      allow update: if isValidId(postId) && isSuperAdmin() && isValidHomePost(incoming()) &&
+        incoming().id == existing().id;
+      allow delete: if isValidId(postId) && isSuperAdmin();
+    }
+
+    // 14.5 EcoMissions Hub & Catalog Tombstones
+    match /eco_missions/{missionId} {
+      allow get: if isValidId(missionId);
+      allow list: if existing().status in ['active', 'paused'] || isBootstrappedAdmin();
+      allow create, update: if isValidId(missionId) && (
         isSuperAdmin() ||
         isModerator() ||
-        ('schoolId' in incoming() && isSchoolAdmin(incoming().schoolId)) ||
-        ('district' in incoming() && isDistrictCoordinator(incoming().district)) ||
-        ('region' in incoming() && isRegionalCoordinator(incoming().region))
-      );
-      allow update: if isValidId(postId) && isSignedIn() && isValidHomePost(incoming()) &&
-        incoming().id == existing().id &&
-        incoming().authorUid == existing().authorUid &&
-        incoming().createdAt == existing().createdAt && (
+        (userDocExists() && getUserData().role == 'school_admin')
+      ) && isValidEcoMission(incoming());
+      allow delete: if isValidId(missionId) && (
         isSuperAdmin() ||
         isModerator() ||
-        existing().authorUid == request.auth.uid ||
-        ('schoolId' in existing() && isSchoolAdmin(existing().schoolId)) ||
-        ('district' in existing() && isDistrictCoordinator(existing().district)) ||
-        ('region' in existing() && isRegionalCoordinator(existing().region))
+        (userDocExists() && getUserData().role == 'school_admin')
       );
-      allow delete: if isValidId(postId) && isSignedIn() && (
-        isSuperAdmin() ||
-        isModerator() ||
-        existing().authorUid == request.auth.uid ||
-        ('schoolId' in existing() && isSchoolAdmin(existing().schoolId)) ||
-        ('district' in existing() && isDistrictCoordinator(existing().district)) ||
-        ('region' in existing() && isRegionalCoordinator(existing().region))
-      );
+    }
+
+    match /catalog_tombstones/{tombstoneId} {
+      allow get: if isValidId(tombstoneId);
+      allow list: if existing().collectionName in ['eco_missions', 'shopItems', 'eco_ads', 'home_posts'];
+      allow create, update: if isValidId(tombstoneId) && (isSuperAdmin() || isModerator()) && isValidCatalogTombstone(incoming());
+      allow delete: if isValidId(tombstoneId) && (isSuperAdmin() || isModerator());
     }
 
     // 15. District End-of-Month TOP-3 Awards
@@ -1007,6 +1103,72 @@ service cloud.firestore {
         )
       );
       allow delete: if isValidId(permissionId) && (isSuperAdmin() || existing().requesterUid == request.auth.uid);
+    }
+
+    // 17. Live Platform Metrics (Public single-doc read, Super Admin validated write)
+    match /live_metrics/{metricId} {
+      allow get: if isValidId(metricId);
+      allow list: if isBootstrappedAdmin();
+      allow create, update: if isValidId(metricId) && isSuperAdmin() && isValidLiveMetrics(incoming());
+      allow delete: if false;
+    }
+
+    // 18. QR Eco-Punkt Scans
+    match /qr_eco_scans/{scanId} {
+      allow get: if isValidId(scanId) && isSignedIn() && (
+        isSuperAdmin() ||
+        isModerator() ||
+        existing().studentUid == request.auth.uid ||
+        existing().scannedByUid == request.auth.uid ||
+        isSchoolAdmin(existing().schoolId)
+      );
+      allow list: if isSignedIn() && (
+        existing().studentUid == request.auth.uid ||
+        existing().scannedByUid == request.auth.uid ||
+        isBootstrappedAdmin()
+      );
+      allow create: if isValidId(scanId) && isSignedIn() && isValidQrEcoScan(incoming()) &&
+        incoming().scannedByUid == request.auth.uid &&
+        incoming().createdAt == request.time && (
+        isSuperAdmin() ||
+        isModerator() ||
+        isSchoolAdmin(incoming().schoolId) ||
+        isAmbassador(incoming().schoolId)
+      );
+      allow update, delete: if isValidId(scanId) && isSuperAdmin();
+    }
+
+    // 19. School-vs-School Duels
+    match /school_duels/{duelId} {
+      allow get: if isValidId(duelId);
+      allow list: if existing().status in ['pending', 'active', 'completed'] || isBootstrappedAdmin();
+      allow create: if isValidId(duelId) && isSignedIn() && isValidSchoolDuel(incoming()) &&
+        incoming().createdByUid == request.auth.uid &&
+        incoming().createdAt == request.time && (
+        isSuperAdmin() ||
+        isSchoolAdmin(incoming().challengerSchoolId) ||
+        isAmbassador(incoming().challengerSchoolId)
+      );
+      allow update: if isValidId(duelId) && isSignedIn() && isValidSchoolDuel(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().challengerSchoolId == existing().challengerSchoolId &&
+        incoming().opponentSchoolId == existing().opponentSchoolId &&
+        incoming().createdAt == existing().createdAt && (
+        isSuperAdmin() || (
+          isSchoolAdmin(existing().opponentSchoolId) &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'startedAt', 'endsAt'])
+        )
+      );
+      allow delete: if isValidId(duelId) && isSuperAdmin();
+    }
+
+    // 20. Official QR-Verified Certificates
+    match /certificates/{certId} {
+      allow get: if isValidId(certId);
+      allow list: if isSignedIn() && (existing().uid == request.auth.uid || isBootstrappedAdmin());
+      allow create, update: if isValidId(certId) && isSuperAdmin() && isValidEcoCertificate(incoming()) &&
+        incoming().issuedAt == request.time;
+      allow delete: if isValidId(certId) && isSuperAdmin();
     }
   }
 }

@@ -25,7 +25,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { INITIAL_ARTICLES } from '../data/mockData';
 import { EcoArticle, MediaCategory } from '../types/eco';
 import { useEco } from '../context/EcoContext';
-import { apiUrl, parseApiJson } from '../utils/api';
+import { parseApiJson } from '../utils/api';
 import { EcoAdBanner } from '../components/EcoAdBanner';
 
 export const EcoMediaPage: React.FC = () => {
@@ -37,6 +37,8 @@ export const EcoMediaPage: React.FC = () => {
     rewardSettings,
     triggerHaptic,
     showNotification,
+    apiFetch,
+    openAuthModal,
   } = useEco();
 
   const [articles] = useState<EcoArticle[]>(INITIAL_ARTICLES);
@@ -160,15 +162,18 @@ export const EcoMediaPage: React.FC = () => {
     setIsSummarizing(true);
     triggerHaptic('medium');
     try {
-      const response = await fetch(apiUrl('/api/ai/eco-assistant'), {
+      const response = await apiFetch('/api/ai/eco-assistant', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        timeoutMs: 35000,
         body: JSON.stringify({
           message: `Ushbu maqolani o'quvchilar uchun 3 ta muhim nuqtada xulosa qilib ber: "${selectedArticle.title}. ${selectedArticle.content}"`,
           chatHistory: [],
         }),
       });
       const data = await parseApiJson<{ success?: boolean; reply?: string; error?: string }>(response);
+      if (response.status === 401) {
+        openAuthModal();
+      }
       if (response.ok && data.success && data.reply) {
         setAiSummary(data.reply);
       } else {

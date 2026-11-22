@@ -1,13 +1,11 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import dotenv from 'dotenv';
 import type { Request, Response, NextFunction } from 'express';
 import { centralDb, findUserByAnyIdentifier } from './server-db';
 
-const SUPER_ADMIN_ID = '8832599080';
-const SUPER_ADMIN_USERNAME = 'jasurdost';
-const SUPER_ADMIN_PHONE = '+998945181161';
-const SUPER_ADMIN_EMAIL = 'diyorbekormonov44@gmail.com';
+dotenv.config({ override: true });
 
 // Read Firebase web API key for server-side ID token verification if supplied
 let FIREBASE_WEB_API_KEY = process.env.FIREBASE_API_KEY || '';
@@ -21,54 +19,149 @@ try {
   // Ignore
 }
 
-function getSessionSecret(): string {
-  if (process.env.SESSION_SECRET && process.env.SESSION_SECRET.length >= 16) {
-    return process.env.SESSION_SECRET;
-  }
-  const secretFile = path.join(process.cwd(), '.session-secret');
-  try {
-    if (fs.existsSync(secretFile)) {
-      const val = fs.readFileSync(secretFile, 'utf-8').trim();
-      if (val.length >= 32) return val;
-    }
-    const generated = crypto.randomBytes(32).toString('hex');
-    fs.writeFileSync(secretFile, generated, { mode: 0o600 });
-    return generated;
-  } catch {
-    return crypto.createHash('sha256').update(process.cwd() + 'ecohero-fallback-2026').digest('hex');
-  }
+function getSuperAdminEmails(): Set<string> {
+  return new Set(
+    String(process.env.SUPER_ADMIN_EMAILS || '')
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean)
+  );
 }
 
-const SESSION_SECRET = getSessionSecret();
+function getSuperAdminTelegramIds(): Set<string> {
+  return new Set(
+    String(process.env.SUPER_ADMIN_TELEGRAM_IDS || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+  );
+}
+
+export function getSuperAdminTelegramIdList(): string[] {
+  return Array.from(getSuperAdminTelegramIds());
+}
+
+export function isSuperAdminEmail(email?: string | null): boolean {
+  const clean = String(email || '').trim().toLowerCase();
+  return Boolean(clean && getSuperAdminEmails().has(clean));
+}
+
+export function isSuperAdminTelegramId(telegramId?: string | number | null): boolean {
+  const clean = String(telegramId ?? '').trim();
+  return Boolean(clean && getSuperAdminTelegramIds().has(clean));
+}
+
+function resolveSessionSecret(): string {
+  const envSecret = String(process.env.SESSION_SECRET || '').trim();
+  if (envSecret.length >= 32) {
+    return envSecret;
+  }
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      '[Security] SESSION_SECRET environment variable must be set and at least 32 characters long in production.'
+    );
+  }
+  console.warn(
+    '[Security] SESSION_SECRET env topilmadi yoki 32 belgidan qisqa — development uchun vaqtinchalik xotira kaliti yaratildi.'
+  );
+  return crypto.randomBytes(32).toString('hex');
+}
+
+const SESSION_SECRET = resolveSessionSecret();
 
 export interface AuthenticatedRequest extends Request {
   authUser?: any;
 }
 
+/**
+ * Super Admin tekshiruvi FAQAT tasdiqlangan manbalarga tayanadi:
+ * 1) Server bazasidagi autentifikatsiyadan o'tgan foydalanuvchi roli (`role === 'super_admin'`),
+ * 2) Emaili tasdiqlangan Firebase ID token (`verifiedEmail === true`),
+ * 3) HMAC yoki Telegram Bot API orqali tasdiqlangan Telegram ID (`verifiedTelegram === true`).
+ * Request body'dagi email/telefon/username bo'yicha hech qachon ruxsat berilmaydi.
+ */
 export function checkIsSuperAdmin(userData?: {
   role?: string;
   approvedRoles?: string[];
-  telegramUsername?: string;
   telegramId?: string | number;
   chatId?: string | number;
   email?: string;
-  phoneNumber?: string;
+  verifiedEmail?: boolean;
+  verifiedTelegram?: boolean;
 } | null): boolean {
   if (!userData) return false;
   if (userData.role === 'super_admin') return true;
   if (Array.isArray(userData.approvedRoles) && userData.approvedRoles.includes('super_admin')) return true;
 
-  const tgUsername = String(userData.telegramUsername || '').replace('@', '').toLowerCase().trim();
-  const tgId = String(userData.telegramId || userData.chatId || '').trim();
-  const phone = String(userData.phoneNumber || '').replace(/\s/g, '').trim();
-  const email = String(userData.email || '').trim().toLowerCase();
+  if (userData.verifiedEmail === true && isSuperAdminEmail(userData.email)) {
+    return true;
+  }
 
-  return (
-    tgUsername === SUPER_ADMIN_USERNAME ||
-    tgId === SUPER_ADMIN_ID ||
-    phone === SUPER_ADMIN_PHONE ||
-    email === SUPER_ADMIN_EMAIL
-  );
+  if (userData.verifiedTelegram === true && isSuperAdminTelegramId(userData.telegramId ?? userData.chatId)) {
+    return true;
+  }
+
+  return false;
+}
+
+export function hashPassword(password: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const salt = crypto.randomBytes(16).toString('hex');
+    crypto.scrypt(password, salt, 64, { N: 16384, r: 8, p: 1 }, (err, derivedKey) => {
+      if (err) return reject(err);
+      resolve(`scrypt:${salt}:${derivedKey.toString('hex')}`);
+    });
+  });
+}
+
+export function verifyPassword(
+  password: string,
+  storedHash?: string | null
+): Promise<{ valid: boolean; needsRehash: boolean }> {
+  return new Promise((resolve) => {
+    if (!password || !storedHash || typeof storedHash !== 'string') {
+      return resolve({ valid: false, needsRehash: false });
+    }
+
+    if (storedHash.startsWith('scrypt:')) {
+      const parts = storedHash.split(':');
+      if (parts.length !== 3) {
+        return resolve({ valid: false, needsRehash: false });
+      }
+      const [, salt, expectedHex] = parts;
+      if (!salt || !expectedHex) {
+        return resolve({ valid: false, needsRehash: false });
+      }
+      crypto.scrypt(password, salt, 64, { N: 16384, r: 8, p: 1 }, (err, derivedKey) => {
+        if (err) return resolve({ valid: false, needsRehash: false });
+        try {
+          const expectedBuf = Buffer.from(expectedHex, 'hex');
+          if (derivedKey.length !== expectedBuf.length) {
+            return resolve({ valid: false, needsRehash: false });
+          }
+          const valid = crypto.timingSafeEqual(derivedKey, expectedBuf);
+          return resolve({ valid, needsRehash: false });
+        } catch {
+          return resolve({ valid: false, needsRehash: false });
+        }
+      });
+      return;
+    }
+
+    // Legacy SHA-256 hash verification with timingSafeEqual & transparent migration flag
+    try {
+      const legacyHex = crypto.createHash('sha256').update(String(password)).digest('hex');
+      const a = Buffer.from(legacyHex, 'hex');
+      const b = Buffer.from(storedHash.trim(), 'hex');
+      if (a.length !== b.length || a.length === 0) {
+        return resolve({ valid: false, needsRehash: false });
+      }
+      const valid = crypto.timingSafeEqual(a, b);
+      return resolve({ valid, needsRehash: valid });
+    } catch {
+      return resolve({ valid: false, needsRehash: false });
+    }
+  });
 }
 
 export function issueSessionToken(user: { uid: string; role?: string }): string {

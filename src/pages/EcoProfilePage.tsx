@@ -16,10 +16,16 @@ import {
   Target,
   Share2,
   TreePine,
+  Flame,
+  CheckCircle2,
+  Lock,
+  Sparkles,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useEco } from '../context/EcoContext';
 import { computeUserStreakState } from '../utils/streak';
+import { StudentCabinetRatingsPanel } from '../components/ratings/StudentCabinetRatingsPanel';
+import ecopassportBannerImg from '../assets/images/ecopassport_banner_1795179383722.jpg';
 
 export const EcoProfilePage: React.FC = () => {
   const {
@@ -27,6 +33,7 @@ export const EcoProfilePage: React.FC = () => {
     transactions,
     studentsLeaderboard,
     schools,
+    missionCompletions,
     openEditProfileModal,
     logoutUser,
     setActiveTab,
@@ -38,31 +45,105 @@ export const EcoProfilePage: React.FC = () => {
   const schoolObj = schools.find(s => s.id === user.schoolId);
   const rankDisplay = userRankIdx >= 0 ? `#${userRankIdx + 1}` : schoolObj ? `#${schoolObj.ratingRank}` : '—';
 
+  const userXP = user.ecoXP || (user.totalCoinsEarned || user.ecoCoins || 0) * 4;
+  const computedLevel = user.level || Math.max(1, Math.floor(userXP / 500) + 1);
+  const xpIntoLevel = userXP % 500;
+  const xpProgressPct = Math.min(100, Math.max(4, Math.round((xpIntoLevel / 500) * 100)));
+
+  const streakDays = computeUserStreakState({
+    lastStreakClaimDate: user.lastStreakClaimDate,
+    storedStreakDays: user.streakDays ?? user.activityStats?.streakDays,
+  }).currentStreakDays;
+
   const stats = [
     { label: 'EcoCoins', value: (user.ecoCoins || 0).toLocaleString(), icon: Coins, color: 'text-amber-500' },
-    { label: 'EcoXP', value: (user.ecoXP || (user.totalCoinsEarned || 0) * 4).toLocaleString(), icon: TrendingUp, color: 'text-emerald-500' },
+    { label: 'EcoXP', value: userXP.toLocaleString(), icon: TrendingUp, color: 'text-emerald-500' },
     { label: 'Hisobotlar', value: `${user.reportsCount || 0} ta`, icon: Target, color: 'text-sky-500' },
-    { label: 'Reyting', value: rankDisplay, icon: Award, color: 'text-indigo-500' },
+    { label: 'Reyting', value: rankDisplay, icon: Award, color: 'text-indigo-400' },
   ];
 
-  const recentTxs = transactions.slice(0, 5);
+  // Real data-driven achievement milestones
+  const achievements = [
+    {
+      id: 'rank',
+      title: user.badge || 'Eko-Lochin',
+      desc: 'Asosiy EcoHero unvoni',
+      icon: Star,
+      unlocked: true,
+      progressLabel: `Lv.${computedLevel}`,
+      tone: 'text-amber-400 bg-amber-500/15 border-amber-400/35',
+    },
+    {
+      id: 'trees',
+      title: "Ko'chat Ekuvchi",
+      desc: 'Kamida 5 ta daraxt ekish',
+      icon: TreePine,
+      unlocked: (user.treesPlanted || 0) >= 5,
+      progressLabel: `${user.treesPlanted || 0} / 5`,
+      tone: 'text-emerald-400 bg-emerald-500/15 border-emerald-500/35',
+    },
+    {
+      id: 'reports',
+      title: 'Eko-Nazoratchi',
+      desc: 'Kamida 3 ta ekologik ariza',
+      icon: Target,
+      unlocked: (user.reportsCount || 0) >= 3,
+      progressLabel: `${user.reportsCount || 0} / 3`,
+      tone: 'text-sky-400 bg-sky-500/15 border-sky-500/35',
+    },
+    {
+      id: 'streak',
+      title: '7-Kunlik Barqarorlik',
+      desc: 'Ketma-ket 7 kun faollik',
+      icon: Flame,
+      unlocked: streakDays >= 7,
+      progressLabel: `${streakDays} / 7 kun`,
+      tone: 'text-orange-400 bg-orange-500/15 border-orange-500/35',
+    },
+    {
+      id: 'missions',
+      title: 'Missiya Ustasi',
+      desc: 'Kamida 3 ta missiyani yakunlash',
+      icon: CheckCircle2,
+      unlocked: missionCompletions.length >= 3,
+      progressLabel: `${missionCompletions.length} / 3`,
+      tone: 'text-teal-400 bg-teal-500/15 border-teal-500/35',
+    },
+    {
+      id: 'referrals',
+      title: "Do'stlar Elchisi",
+      desc: "Do'stlarni platformaga taklif qilish",
+      icon: Share2,
+      unlocked: (user.referralCount || 0) >= 1,
+      progressLabel: `${user.referralCount || 0} / 1`,
+      tone: 'text-indigo-400 bg-indigo-500/15 border-indigo-500/35',
+    },
+  ];
+
+  const recentTxs = transactions.slice(0, 6);
+  const passportSerial = `UZ-${String(user.uid || 'ECO001').slice(-6).toUpperCase()}`;
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#020617] text-slate-900 dark:text-white pb-24">
-      {/* Cinematic Header */}
-      <div className="relative h-[350px] w-full overflow-hidden">
+    <div className="min-h-screen bg-[#F4F8F5] dark:bg-[#040D0A] text-slate-900 dark:text-white pb-24">
+      {/* EcoPassport Banner */}
+      <div className="relative h-[340px] sm:h-[370px] w-full overflow-hidden">
         <div className="absolute inset-0 z-0">
           <img
-            src="https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=2000&q=80"
-            className="w-full h-full object-cover opacity-40 dark:opacity-20 scale-110 blur-sm"
-            alt="Profile Background"
+            src={ecopassportBannerImg}
+            className="w-full h-full object-cover opacity-55 dark:opacity-45"
+            alt="EcoPassport fon rasmi"
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-slate-50/0 via-slate-50/50 to-slate-50 dark:from-[#020617]/0 dark:via-[#020617]/50 dark:to-[#020617]" />
+          <div className="absolute inset-0 bg-gradient-to-b from-[#040D0A]/30 via-[#040D0A]/55 to-[#F4F8F5] dark:to-[#040D0A]" />
         </div>
 
-        <div className="relative z-10 max-w-4xl mx-auto px-4 h-full flex flex-col items-center justify-center space-y-6 pt-12 text-center">
+        <div className="relative z-10 max-w-5xl mx-auto px-4 h-full flex flex-col items-center justify-center space-y-5 pt-6 text-center">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-[#040D0A]/75 backdrop-blur-md border border-emerald-400/30 text-[10px] font-mono font-bold uppercase tracking-widest text-emerald-300">
+            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+            <span>EcoPassport · ID {passportSerial}</span>
+          </div>
+
           <div className="relative group">
-            <div className="w-32 h-32 rounded-[40px] border-4 border-white dark:border-[#0f172a] shadow-2xl overflow-hidden relative bg-slate-900">
+            <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-[36px] border-4 border-emerald-400/70 shadow-2xl shadow-emerald-950/60 overflow-hidden relative bg-[#071812]">
               <img
                 src={
                   user.avatarUrl ||
@@ -73,97 +154,170 @@ export const EcoProfilePage: React.FC = () => {
                 className="w-full h-full object-cover"
               />
             </div>
+            <span className="absolute -top-2 -left-2 px-2.5 py-1 rounded-xl bg-gradient-to-r from-emerald-400 to-teal-300 text-[#040D0A] font-mono font-black text-xs shadow-lg">
+              Lv.{computedLevel}
+            </span>
             <button
               onClick={() => {
                 triggerHaptic('light');
                 openEditProfileModal();
               }}
-              className="absolute -bottom-2 -right-2 p-3 bg-emerald-600 text-white rounded-2xl shadow-xl hover:scale-110 active:scale-95 transition-all cursor-pointer"
+              aria-label="Profilni tahrirlash"
+              className="absolute -bottom-2 -right-2 p-2.5 bg-emerald-500 text-[#040D0A] rounded-2xl shadow-xl hover:scale-110 active:scale-95 transition-all cursor-pointer"
             >
-              <Camera className="w-5 h-5" />
+              <Camera className="w-4 h-4" />
             </button>
           </div>
 
-          <div className="space-y-1">
-            <h1 className="text-4xl font-black uppercase tracking-tighter">{user.fullName}</h1>
-            <div className="flex flex-wrap items-center justify-center gap-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+          <div className="space-y-1.5 max-w-xl">
+            <h1 className="font-display text-3xl sm:text-4xl font-black uppercase tracking-tight text-white drop-shadow">
+              {user.fullName}
+            </h1>
+            <div className="flex flex-wrap items-center justify-center gap-2.5 text-[11px] font-bold text-slate-200 uppercase tracking-wider">
               <span className="flex items-center gap-1">
-                <SchoolIcon className="w-3 h-3" /> {user.schoolName}
+                <SchoolIcon className="w-3.5 h-3.5 text-emerald-400" /> {user.schoolName}
               </span>
-              <span>•</span>
-              <span className="flex items-center gap-1 text-emerald-500">
-                <Shield className="w-3 h-3" /> {user.role}
+              {user.district && (
+                <>
+                  <span>·</span>
+                  <span>{user.district}</span>
+                </>
+              )}
+              <span>·</span>
+              <span className="flex items-center gap-1 text-emerald-300">
+                <Shield className="w-3.5 h-3.5" /> {user.role}
               </span>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 -mt-12 relative z-20 space-y-8">
-        {/* Quick Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {stats.map((stat, idx) => (
-            <motion.div
-              key={idx}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: idx * 0.1 }}
-              className="p-6 bg-white dark:bg-[#0f172a] rounded-[32px] border border-slate-200 dark:border-white/5 shadow-xl text-center space-y-2"
-            >
-              <div className={`w-10 h-10 rounded-xl bg-slate-50 dark:bg-white/5 ${stat.color} flex items-center justify-center mx-auto`}>
-                <stat.icon className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{stat.label}</div>
-                <div className="text-xl font-black font-mono">{stat.value}</div>
-              </div>
-            </motion.div>
-          ))}
+      <div className="max-w-5xl mx-auto px-4 -mt-8 relative z-20 space-y-8">
+        {/* XP Progress & Quick Stats */}
+        <div className="eco-surface rounded-[28px] p-5 sm:p-6 shadow-xl space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2 font-extrabold text-slate-900 dark:text-white">
+              <TrendingUp className="w-4 h-4 text-emerald-500" />
+              <span>Daraja {computedLevel} · {user.badge || 'Eko-Lochin'}</span>
+            </div>
+            <span className="font-mono tabular-nums text-emerald-600 dark:text-emerald-400 font-bold">
+              {xpIntoLevel} / 500 XP · Keyingi darajagacha {500 - xpIntoLevel} XP
+            </span>
+          </div>
+          <div className="w-full h-2.5 rounded-full bg-slate-200 dark:bg-[#040D0A] overflow-hidden border border-slate-200 dark:border-emerald-500/20">
+            <div
+              style={{ width: `${xpProgressPct}%` }}
+              className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-300 transition-all duration-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 pt-1">
+            {stats.map((stat, idx) => (
+              <motion.div
+                key={idx}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.06 }}
+                className="p-4 bg-white/80 dark:bg-[#040D0A]/80 rounded-2xl border border-slate-200/80 dark:border-emerald-500/15 text-center space-y-1.5"
+              >
+                <div className={`w-9 h-9 rounded-xl bg-slate-100 dark:bg-[#081C15] ${stat.color} flex items-center justify-center mx-auto`}>
+                  <stat.icon className="w-4 h-4" />
+                </div>
+                <div className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+                  {stat.label}
+                </div>
+                <div className="text-lg font-black font-mono tabular-nums text-slate-900 dark:text-white">
+                  {stat.value}
+                </div>
+              </motion.div>
+            ))}
+          </div>
         </div>
 
-        {/* Action Menu */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
-          <div className="md:col-span-8 space-y-6">
-            <div className="bg-white dark:bg-[#0f172a] rounded-[40px] border border-slate-200 dark:border-white/5 overflow-hidden shadow-2xl">
-              <div className="p-8 border-b border-slate-100 dark:border-white/5">
-                <h3 className="text-xl font-black uppercase tracking-tight">Mening Yutuqlarim</h3>
+        {/* Live School & District Student Ratings */}
+        <StudentCabinetRatingsPanel onOpenFullRatings={() => setActiveTab('rating')} />
+
+        {/* Achievements & Activity + Settings */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="lg:col-span-8 space-y-6">
+            {/* Achievement Collection Grid */}
+            <div className="eco-surface rounded-[28px] overflow-hidden shadow-xl">
+              <div className="p-6 border-b border-slate-200/80 dark:border-emerald-500/15 flex items-center justify-between">
+                <div>
+                  <h3 className="font-display text-lg font-black uppercase tracking-tight">
+                    EcoPassport Nishonlari
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Haqiqiy ekologik yutuqlaringiz asosida ochiladigan kolleksiya
+                  </p>
+                </div>
+                <span className="font-mono tabular-nums text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                  {achievements.filter(a => a.unlocked).length} / {achievements.length}
+                </span>
               </div>
-              <div className="p-8 grid grid-cols-3 gap-6">
-                {[
-                  { label: user.badge || 'Eko-Lochin', icon: Star, color: 'text-amber-400' },
-                  { label: `${user.treesPlanted || 0} Daraxt`, icon: TreePine, color: 'text-emerald-400' },
-                  { label: `${computeUserStreakState({ lastStreakClaimDate: user.lastStreakClaimDate, storedStreakDays: user.streakDays ?? user.activityStats?.streakDays }).currentStreakDays} Kun Streak`, icon: Shield, color: 'text-indigo-400' },
-                ].map((badge, i) => (
-                  <div key={i} className="flex flex-col items-center gap-3 text-center">
-                    <div className="w-16 h-16 rounded-[24px] bg-slate-50 dark:bg-white/5 flex items-center justify-center relative group">
-                      <badge.icon className={`w-8 h-8 ${badge.color}`} />
-                      <div className="absolute inset-0 bg-emerald-500/10 rounded-[24px] opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div className="p-5 sm:p-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
+                {achievements.map(badge => {
+                  const Icon = badge.icon;
+                  return (
+                    <div
+                      key={badge.id}
+                      className={`p-4 rounded-2xl border flex flex-col justify-between gap-3 transition-all ${
+                        badge.unlocked
+                          ? 'bg-white/90 dark:bg-[#040D0A]/80 border-emerald-500/35 shadow-sm'
+                          : 'bg-slate-100/70 dark:bg-[#040D0A]/45 border-slate-200 dark:border-slate-800/80 opacity-75'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className={`w-11 h-11 rounded-2xl border flex items-center justify-center shrink-0 ${badge.tone}`}>
+                          <Icon className="w-5 h-5" />
+                        </div>
+                        {badge.unlocked ? (
+                          <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                            Ochilgan
+                          </span>
+                        ) : (
+                          <Lock className="w-3.5 h-3.5 text-slate-400" />
+                        )}
+                      </div>
+                      <div className="space-y-0.5">
+                        <div className="text-xs font-extrabold text-slate-900 dark:text-white">
+                          {badge.title}
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                          {badge.desc}
+                        </div>
+                      </div>
+                      <div className="text-[11px] font-mono tabular-nums font-bold text-slate-600 dark:text-emerald-300">
+                        {badge.progressLabel}
+                      </div>
                     </div>
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{badge.label}</span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
-            <div className="bg-white dark:bg-[#0f172a] rounded-[40px] border border-slate-200 dark:border-white/5 overflow-hidden shadow-2xl">
-              <div className="p-8 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
-                <h3 className="text-xl font-black uppercase tracking-tight">So'nggi Harakatlar</h3>
-                <History className="w-5 h-5 text-slate-300" />
+            {/* Activity History */}
+            <div className="eco-surface rounded-[28px] overflow-hidden shadow-xl">
+              <div className="p-6 border-b border-slate-200/80 dark:border-emerald-500/15 flex items-center justify-between">
+                <h3 className="font-display text-lg font-black uppercase tracking-tight">
+                  So&apos;nggi Harakatlar
+                </h3>
+                <History className="w-5 h-5 text-emerald-500" />
               </div>
               <div className="p-4 space-y-2">
                 {recentTxs.length > 0 ? (
                   recentTxs.map(act => (
                     <div
                       key={act.id}
-                      className="flex items-center justify-between p-4 hover:bg-slate-50 dark:hover:bg-white/5 rounded-2xl transition-colors"
+                      className="flex items-center justify-between p-3.5 hover:bg-emerald-500/5 rounded-2xl transition-colors"
                     >
-                      <div className="flex items-center gap-4 min-w-0">
-                        <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 shrink-0">
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center text-emerald-500 shrink-0">
                           <Zap className="w-5 h-5" />
                         </div>
                         <div className="min-w-0">
-                          <div className="text-sm font-black uppercase tracking-tight truncate">{act.reason}</div>
-                          <div className="text-[10px] font-bold text-slate-400 uppercase">
+                          <div className="text-xs sm:text-sm font-extrabold tracking-tight truncate">{act.reason}</div>
+                          <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase font-mono">
                             {new Date(act.createdAt).toLocaleDateString('uz-UZ', {
                               day: '2-digit',
                               month: 'short',
@@ -171,23 +325,25 @@ export const EcoProfilePage: React.FC = () => {
                           </div>
                         </div>
                       </div>
-                      <div className={`font-black font-mono shrink-0 ml-3 ${act.amount >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                        {act.amount >= 0 ? `+${act.amount}` : act.amount}
+                      <div className={`font-black font-mono tabular-nums shrink-0 ml-3 ${act.amount >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                        {act.amount >= 0 ? `+${act.amount}` : act.amount} EC
                       </div>
                     </div>
                   ))
                 ) : (
-                  <div className="p-8 text-center text-xs text-slate-400 font-semibold">
-                    Hali tranzaksiyalar mavjud emas. Eko-hisobot yuboring yoki viktorina o'ynang!
+                  <div className="p-8 text-center text-xs text-slate-500 dark:text-slate-400 font-semibold">
+                    Hali tranzaksiyalar mavjud emas. Eko-hisobot yuboring yoki viktorina o&apos;ynang!
                   </div>
                 )}
               </div>
             </div>
           </div>
 
-          <div className="md:col-span-4 space-y-6">
-            <div className="bg-white dark:bg-[#0f172a] rounded-[40px] border border-slate-200 dark:border-white/5 p-6 shadow-2xl space-y-4">
-              <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest px-2">Sozlamalar</h3>
+          <div className="lg:col-span-4 space-y-6">
+            <div className="eco-surface rounded-[28px] p-5 shadow-xl space-y-3">
+              <h3 className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest px-2">
+                Sozlamalar
+              </h3>
               <div className="space-y-1">
                 {[
                   { label: 'Profilni tahrirlash', icon: User, onClick: openEditProfileModal },
@@ -206,42 +362,42 @@ export const EcoProfilePage: React.FC = () => {
                   <button
                     key={i}
                     onClick={item.onClick}
-                    className="w-full flex items-center justify-between p-4 hover:bg-slate-50 dark:hover:bg-white/5 rounded-2xl transition-all group cursor-pointer"
+                    className="w-full flex items-center justify-between p-3.5 hover:bg-emerald-500/10 rounded-2xl transition-all group cursor-pointer"
                   >
                     <div className="flex items-center gap-3">
-                      <item.icon className="w-5 h-5 text-slate-400 group-hover:text-emerald-500 transition-colors" />
-                      <span className="text-[11px] font-black uppercase tracking-widest">{item.label}</span>
+                      <item.icon className="w-4 h-4 text-slate-400 group-hover:text-emerald-500 transition-colors" />
+                      <span className="text-xs font-extrabold">{item.label}</span>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-slate-300 group-hover:translate-x-1 transition-transform" />
+                    <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 transition-transform" />
                   </button>
                 ))}
               </div>
-              <div className="pt-4 border-t border-slate-100 dark:border-white/5">
+              <div className="pt-3 border-t border-slate-200 dark:border-emerald-500/15">
                 <button
                   onClick={() => logoutUser()}
-                  className="w-full flex items-center gap-3 p-4 text-rose-500 hover:bg-rose-500/5 rounded-2xl transition-all cursor-pointer"
+                  className="w-full flex items-center gap-3 p-3.5 text-rose-500 hover:bg-rose-500/10 rounded-2xl transition-all cursor-pointer"
                 >
-                  <LogOut className="w-5 h-5" />
-                  <span className="text-[11px] font-black uppercase tracking-widest">Chiqish</span>
+                  <LogOut className="w-4 h-4" />
+                  <span className="text-xs font-black uppercase tracking-wider">Chiqish</span>
                 </button>
               </div>
             </div>
 
-            <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-[40px] p-8 text-white space-y-6 shadow-2xl">
-              <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center">
-                <Star className="w-6 h-6 fill-white" />
+            <div className="bg-gradient-to-br from-[#0A2E20] via-[#082218] to-[#040D0A] border border-emerald-500/30 rounded-[28px] p-6 text-white space-y-5 shadow-2xl">
+              <div className="w-11 h-11 rounded-2xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-emerald-300">
+                <Star className="w-5 h-5 fill-emerald-400" />
               </div>
-              <div className="space-y-2">
-                <h4 className="text-xl font-black uppercase tracking-tighter">Eko-Bozor & Sovg'alar</h4>
-                <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 leading-relaxed">
-                  Yig'gan EcoCoinlaringizni qimmatbaho sovg'alar va sertifikatlarga almashtiring.
+              <div className="space-y-1.5">
+                <h4 className="font-display text-lg font-black uppercase tracking-tight">Eko-Bozor & Sovg&apos;alar</h4>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Yig&apos;gan EcoCoinlaringizni qimmatbaho sovg&apos;alar va rasmiy sertifikatlarga almashtiring.
                 </p>
               </div>
               <button
                 onClick={() => setActiveTab('shop')}
-                className="w-full py-4 bg-white text-indigo-900 rounded-[20px] text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-xl cursor-pointer"
+                className="w-full py-3.5 bg-gradient-to-r from-emerald-400 to-teal-300 text-[#040D0A] rounded-2xl text-xs font-black uppercase tracking-wider hover:brightness-105 transition-all shadow-lg cursor-pointer"
               >
-                Eko-Bozorga O'tish
+                Eko-Bozorga O&apos;tish
               </button>
             </div>
           </div>

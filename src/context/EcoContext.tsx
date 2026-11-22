@@ -18,6 +18,7 @@ import {
   SponsorshipProposal,
   SponsorshipProject,
   EcoAd,
+  AdWatchState,
   ShopOrder,
   RoleRequest,
   CompetitionLevel,
@@ -50,6 +51,14 @@ import {
   EcoMission,
   MissionSubmission,
   QuizQuestionItem,
+  StudentRatingsCabinetResponse,
+  StudentRatingsManageResponse,
+  StudentRatingScopePayload,
+  StudentMonthlyAwardRecord,
+  WeeklyChallengeSummary,
+  SchoolTeamMissionSummary,
+  ChampionshipEligibility,
+  ChampionshipLiveResponse,
 } from '../types/eco';
 import {
   INITIAL_USER,
@@ -71,6 +80,14 @@ import {
 import { onAuthStateChanged } from 'firebase/auth';
 import { getPendingReports, removePendingReport } from '../services/offlineQueue';
 import { apiUrl, wsUrl, parseApiJson, isHtmlContentType } from '../utils/api';
+import {
+  fetchCatalogFromFirestore,
+  syncCatalogRecordToFirestore,
+  deleteCatalogRecordFromFirestore,
+  mergeServerAndFirestoreCatalog,
+  syncLiveMetricsToFirestore,
+  subscribeLiveMetricsFromFirestore,
+} from '../services/firestoreCatalogSync';
 
 // One-time cleanup of legacy cached demo records in browser storage
 if (typeof window !== 'undefined') {
@@ -102,6 +119,13 @@ if (typeof window !== 'undefined') {
   } catch {}
 }
 
+const generateWebUid = (): string => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `user_${crypto.randomUUID()}`;
+  }
+  return `user_web_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+};
+
 const getOrCreateBrowserUid = (): string => {
   if (typeof window === 'undefined') return 'user_web_ssr';
   try {
@@ -109,11 +133,11 @@ const getOrCreateBrowserUid = (): string => {
     if (existing && existing.startsWith('user_') && existing !== 'user_student_01') {
       return existing;
     }
-    const fresh = `user_web_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const fresh = generateWebUid();
     localStorage.setItem('ecohero_session_uid', fresh);
     return fresh;
   } catch {
-    return `user_web_${Date.now()}`;
+    return generateWebUid();
   }
 };
 
@@ -177,11 +201,27 @@ interface EcoContextType {
     voucherCode: string,
     payload?: { note?: string; action?: 'forward' | 'deliver' }
   ) => Promise<{ success: boolean; order?: ShopOrder; message?: string; error?: string }>;
-  startAdWatch: (adId: string) => Promise<{ success: boolean; watchSessionId?: string; requiredSeconds?: number; error?: string }>;
+  startAdWatch: (adId: string) => Promise<{
+    success: boolean;
+    watchSessionId?: string;
+    requiredSeconds?: number;
+    cooldownActive?: boolean;
+    remainingSeconds?: number;
+    nextAvailableAt?: string | null;
+    adWatchState?: AdWatchState | null;
+    error?: string;
+  }>;
   claimAdWatchReward: (
     adId: string,
     watchSessionId: string
-  ) => Promise<{ success: boolean; awardedCoins?: number; newBalance?: number; message?: string; error?: string }>;
+  ) => Promise<{
+    success: boolean;
+    awardedCoins?: number;
+    newBalance?: number;
+    adWatchState?: AdWatchState | null;
+    message?: string;
+    error?: string;
+  }>;
   auditLogs: AuditLog[];
   notifications: Notification[];
   markNotificationRead: (id: string) => void;
@@ -208,6 +248,7 @@ interface EcoContextType {
   updateProposalStatus: (id: string, status: 'approved' | 'rejected', notes?: string) => Promise<boolean>;
   createSponsorshipProject: (data: Omit<SponsorshipProject, 'id' | 'raisedAmountUZS'>) => Promise<boolean>;
   ecoAds: EcoAd[];
+  adWatchState: AdWatchState | null;
   createEcoAd: (data: Omit<EcoAd, 'id' | 'impressionsCount' | 'clicksCount'>) => Promise<boolean>;
   updateEcoAdStatus: (id: string, status: 'active' | 'paused' | 'expired') => void;
   recordAdImpression: (id: string) => void;
@@ -256,7 +297,7 @@ interface EcoContextType {
   // Advanced EcoHero RBAC, Applications, Media, Tasks, Rewards, Leaderboards & Analytics
   isSuperAdmin: boolean;
   sessionToken: string | null;
-  apiFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+  apiFetch: (input: RequestInfo | URL, init?: RequestInit & { timeoutMs?: number }) => Promise<Response>;
   registrationApplications: RegistrationApplication[];
   submitApplication: (payload: {
     fullName: string;
@@ -519,6 +560,53 @@ interface EcoContextType {
     action: 'approve' | 'reject',
     adminNote?: string
   ) => Promise<{ success: boolean; error?: string }>;
+  fetchStudentRatingsCabinet: (params?: {
+    schoolId?: string;
+    region?: string;
+    district?: string;
+  }) => Promise<StudentRatingsCabinetResponse | null>;
+  fetchStudentRatingsManage: (params?: {
+    schoolId?: string;
+    region?: string;
+    district?: string;
+  }) => Promise<StudentRatingsManageResponse | null>;
+  updateSchoolStudentRatingConfig: (payload: {
+    schoolId?: string;
+    schoolName?: string;
+    enabled?: boolean;
+    minMembersThreshold?: number;
+    monthlyPrizeTitle?: string;
+    bonusCoins?: number;
+  }) => Promise<{ success: boolean; school?: StudentRatingScopePayload; error?: string }>;
+  updateDistrictStudentRatingConfig: (payload: {
+    region?: string;
+    district?: string;
+    enabled?: boolean;
+    minMembersThreshold?: number;
+    top1Prize?: string;
+    top2Prize?: string;
+    top3Prize?: string;
+    bonuses?: [number, number, number];
+  }) => Promise<{ success: boolean; district?: StudentRatingScopePayload; error?: string }>;
+  awardSchoolTop1Student: (params?: {
+    schoolId?: string;
+    schoolName?: string;
+  }) => Promise<{ success: boolean; award?: StudentMonthlyAwardRecord; school?: StudentRatingScopePayload; error?: string }>;
+  awardDistrictTop3Students: (params?: {
+    region?: string;
+    district?: string;
+  }) => Promise<{ success: boolean; award?: StudentMonthlyAwardRecord; district?: StudentRatingScopePayload; error?: string }>;
+  weeklyChallenge: WeeklyChallengeSummary | null;
+  schoolTeamMission: SchoolTeamMissionSummary | null;
+  championshipMeta: ChampionshipEligibility | null;
+  joinWeeklyChallenge: () => Promise<{ success: boolean; error?: string }>;
+  claimWeeklyChallenge: () => Promise<{ success: boolean; awardedCoins?: number; error?: string }>;
+  fetchChampionshipLive: (params: {
+    level: 'district' | 'regional' | 'national';
+    entity: 'schools' | 'students';
+    region?: string;
+    district?: string;
+  }) => Promise<ChampionshipLiveResponse | null>;
 }
 
 const EcoContext = createContext<EcoContextType | undefined>(undefined);
@@ -770,6 +858,7 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
   const [analytics, setAnalytics] = useState<AnalyticsResponse | null>(null);
+  const [adWatchState, setAdWatchState] = useState<AdWatchState | null>(null);
   const [homePosts, setHomePosts] = useState<HomePost[]>(() => {
     try {
       const saved = localStorage.getItem('ecohero_home_posts');
@@ -818,6 +907,9 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
   const [missionSubmissions, setMissionSubmissions] = useState<MissionSubmission[]>([]);
   const [missionCompletions, setMissionCompletions] = useState<string[]>([]);
+  const [weeklyChallenge, setWeeklyChallenge] = useState<WeeklyChallengeSummary | null>(null);
+  const [schoolTeamMission, setSchoolTeamMission] = useState<SchoolTeamMissionSummary | null>(null);
+  const [championshipMeta, setChampionshipMeta] = useState<ChampionshipEligibility | null>(null);
   const [sessionToken, setSessionToken] = useState<string | null>(() => {
     try {
       return localStorage.getItem('ecohero_session_token');
@@ -826,36 +918,151 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
   const sessionTokenRef = useRef<string | null>(sessionToken);
+  const refreshSessionPromiseRef = useRef<Promise<string | null> | null>(null);
+  const silentRefreshTriedRef = useRef<boolean>(false);
+  const lastBootstrapServerMsRef = useRef<number>(0);
+  const lastSyncedMetricsKeyRef = useRef<string>('');
+  const [firebaseAuthUid, setFirebaseAuthUid] = useState<string | null>(null);
+
   const saveSessionToken = useCallback((token: string | null) => {
     sessionTokenRef.current = token;
     setSessionToken(token);
+    if (token) silentRefreshTriedRef.current = false;
     try {
       if (token) localStorage.setItem('ecohero_session_token', token);
       else localStorage.removeItem('ecohero_session_token');
     } catch {}
   }, []);
 
-  const apiFetch = useCallback((input: RequestInfo | URL, init: RequestInit & { timeoutMs?: number } = {}) => {
-    const { timeoutMs = 7000, ...fetchInit } = init;
-    const headers = new Headers(fetchInit.headers || {});
-    if (sessionTokenRef.current && !headers.has('Authorization')) {
-      headers.set('Authorization', `Bearer ${sessionTokenRef.current}`);
-    }
-    if (fetchInit.body && typeof fetchInit.body === 'string' && !headers.has('Content-Type')) {
-      headers.set('Content-Type', 'application/json');
-    }
-    const resolvedInput = typeof input === 'string' ? apiUrl(input) : input;
-
-    if (fetchInit.signal || timeoutMs <= 0) {
-      return fetch(resolvedInput, { ...fetchInit, headers });
+  const refreshSessionToken = useCallback(async (): Promise<string | null> => {
+    if (refreshSessionPromiseRef.current) {
+      return refreshSessionPromiseRef.current;
     }
 
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => controller.abort(), timeoutMs);
-    return fetch(resolvedInput, { ...fetchInit, headers, signal: controller.signal }).finally(() => {
-      window.clearTimeout(timer);
+    const runner = (async (): Promise<string | null> => {
+      try {
+        if (auth?.currentUser) {
+          const idToken = await auth.currentUser.getIdToken(true);
+          const res = await fetch(apiUrl('/api/auth/session'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              idToken,
+              firebaseIdToken: idToken,
+              uid: auth.currentUser.uid,
+              email: auth.currentUser.email,
+              fullName: auth.currentUser.displayName || undefined,
+            }),
+          });
+          const data = await parseApiJson<any>(res);
+          if (res.ok && data?.success && data?.sessionToken) {
+            saveSessionToken(data.sessionToken);
+            if (data.user) {
+              setUser(prev => ({ ...prev, ...data.user }));
+            }
+            return String(data.sessionToken);
+          }
+        }
+      } catch {
+        // try Telegram WebApp fallback next
+      }
+
+      try {
+        const tg = typeof window !== 'undefined' ? (window as any).Telegram?.WebApp : null;
+        if (tg?.initData) {
+          const res = await fetch(apiUrl('/api/telegram/auth-webapp'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              initData: tg.initData,
+              unsafeUser: tg.initDataUnsafe?.user || null,
+            }),
+          });
+          const data = await parseApiJson<any>(res);
+          if (res.ok && data?.success && data?.sessionToken) {
+            saveSessionToken(data.sessionToken);
+            if (data.user) {
+              setUser(prev => ({ ...prev, ...data.user }));
+            }
+            return String(data.sessionToken);
+          }
+        }
+      } catch {
+        // ignore
+      }
+
+      return null;
+    })().finally(() => {
+      refreshSessionPromiseRef.current = null;
     });
-  }, []);
+
+    refreshSessionPromiseRef.current = runner;
+    return runner;
+  }, [saveSessionToken]);
+
+  const apiFetch = useCallback(
+    async (input: RequestInfo | URL, init: RequestInit & { timeoutMs?: number } = {}) => {
+      const { timeoutMs = 7000, ...fetchInit } = init;
+      const inputStr = typeof input === 'string' ? input : String(input);
+      const method = (fetchInit.method || 'GET').toUpperCase();
+      const isMutation = method !== 'GET' && method !== 'HEAD';
+
+      const buildHeaders = async (tokenOverride?: string | null) => {
+        const headers = new Headers(fetchInit.headers || {});
+        const tokenToUse = tokenOverride !== undefined ? tokenOverride : sessionTokenRef.current;
+        if (tokenToUse) {
+          headers.set('Authorization', `Bearer ${tokenToUse}`);
+        }
+        if (fetchInit.body && typeof fetchInit.body === 'string' && !headers.has('Content-Type')) {
+          headers.set('Content-Type', 'application/json');
+        }
+        if (isMutation && auth?.currentUser && !headers.has('X-Firebase-Id-Token')) {
+          try {
+            const fbTok = await auth.currentUser.getIdToken();
+            if (fbTok) headers.set('X-Firebase-Id-Token', fbTok);
+          } catch {
+            // ignore token read error
+          }
+        }
+        return { headers, tokenToUse };
+      };
+
+      const execute = async (tokenOverride?: string | null) => {
+        const { headers, tokenToUse } = await buildHeaders(tokenOverride);
+        const resolvedInput = typeof input === 'string' ? apiUrl(input) : input;
+
+        if (fetchInit.signal || timeoutMs <= 0) {
+          const resp = await fetch(resolvedInput, { ...fetchInit, headers });
+          return { resp, tokenToUse };
+        }
+
+        const controller = new AbortController();
+        const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const resp = await fetch(resolvedInput, { ...fetchInit, headers, signal: controller.signal });
+          return { resp, tokenToUse };
+        } finally {
+          window.clearTimeout(timer);
+        }
+      };
+
+      const first = await execute();
+      if (
+        first.resp.status === 401 &&
+        !fetchInit.signal &&
+        !inputStr.includes('/api/auth/session') &&
+        !inputStr.includes('/api/telegram/auth-webapp')
+      ) {
+        const refreshed = await refreshSessionToken();
+        if (refreshed && refreshed !== first.tokenToUse) {
+          const retried = await execute(refreshed);
+          return retried.resp;
+        }
+      }
+      return first.resp;
+    },
+    [refreshSessionToken]
+  );
 
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -949,34 +1156,101 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (targetUid) params.set('uid', targetUid);
         if (targetTgId) params.set('telegramId', String(targetTgId));
 
-        const res = await apiFetch(`/api/bootstrap?${params.toString()}`);
+        const [res, fsSnapshot] = await Promise.all([
+          apiFetch(`/api/bootstrap?${params.toString()}`),
+          fetchCatalogFromFirestore().catch(() => null),
+        ]);
         if (!res.ok) return;
         const data = await res.json();
         if (!data.success) return;
+
+        const callerRole = data.user?.role;
+        const callerIsSuperAdmin =
+          callerRole === 'super_admin' ||
+          (Array.isArray(data.user?.approvedRoles) && data.user.approvedRoles.includes('super_admin'));
+        const callerCanManageMissions = Boolean(
+          data.user &&
+            (callerIsSuperAdmin ||
+              ['moderator', 'school_admin'].includes(callerRole) ||
+              (Array.isArray(data.user?.approvedRoles) &&
+                data.user.approvedRoles.some((r: string) => ['moderator', 'school_admin'].includes(r))))
+        );
 
         setIsServerConnected(true);
         if (Array.isArray(data.schools)) setSchools(data.schools);
         if (Array.isArray(data.reports)) setReports(data.reports);
         if (Array.isArray(data.ambassadors)) setAmbassadors(data.ambassadors);
-        if (Array.isArray(data.shopItems)) setShopItems(data.shopItems);
+
+        if (Array.isArray(data.shopItems)) {
+          const mergedShop = fsSnapshot
+            ? mergeServerAndFirestoreCatalog(
+                data.shopItems,
+                fsSnapshot.shopItems,
+                fsSnapshot.tombstones,
+                'shopItems'
+              )
+            : data.shopItems;
+          setShopItems(mergedShop);
+        }
+
         if (Array.isArray(data.shopOrders)) setShopOrders(data.shopOrders);
         if (Array.isArray(data.transactions)) setTransactions(data.transactions);
         if (Array.isArray(data.roleRequests)) setRoleRequests(data.roleRequests);
         if (Array.isArray(data.registrationApplications)) setRegistrationApplications(data.registrationApplications);
         if (Array.isArray(data.mediaSubmissions)) setMediaSubmissions(data.mediaSubmissions);
         if (Array.isArray(data.ecoTasks)) setEcoTasks(data.ecoTasks);
-        if (data.rewardSettings) setRewardSettings(prev => ({ ...prev, ...data.rewardSettings }));
+
+        if (data.rewardSettings || fsSnapshot?.rewardSettings) {
+          const serverSettings = data.rewardSettings || {};
+          const fsSettings = fsSnapshot?.rewardSettings || null;
+          const serverTs = Date.parse(String(serverSettings.updatedAt || '')) || 0;
+          const fsTs = Date.parse(String(fsSettings?.updatedAt || '')) || 0;
+          const chosen = fsSettings && fsTs > serverTs ? { ...serverSettings, ...fsSettings } : serverSettings;
+          setRewardSettings(prev => ({ ...prev, ...chosen }));
+        }
+
         if (Array.isArray(data.partners)) setPartners(data.partners);
         if (Array.isArray(data.sponsorshipProjects)) setSponsorshipProjects(data.sponsorshipProjects);
         if (Array.isArray(data.sponsorshipProposals)) setSponsorshipProposals(data.sponsorshipProposals);
-        if (Array.isArray(data.ecoAds)) setEcoAds(data.ecoAds);
+
+        if (Array.isArray(data.ecoAds)) {
+          const mergedAds = fsSnapshot
+            ? mergeServerAndFirestoreCatalog(
+                data.ecoAds,
+                fsSnapshot.ecoAds,
+                fsSnapshot.tombstones,
+                'eco_ads'
+              ).filter((a) => a.status === 'active' || callerIsSuperAdmin)
+            : data.ecoAds;
+          setEcoAds(mergedAds);
+        }
+        if ('adWatchState' in data) {
+          setAdWatchState(data.adWatchState || null);
+        }
+
         if (Array.isArray(data.referrals)) setReferrals(data.referrals);
         if (Array.isArray(data.broadcasts)) setBroadcasts(data.broadcasts);
         if (Array.isArray(data.auditLogs)) setAuditLogs(data.auditLogs);
         if (Array.isArray(data.notifications)) setNotifications(data.notifications);
         if (Array.isArray(data.studentsLeaderboard)) setStudentsLeaderboard(data.studentsLeaderboard);
-        if (Array.isArray(data.homePosts)) setHomePosts(data.homePosts);
+
+        if (Array.isArray(data.homePosts)) {
+          const mergedPosts = fsSnapshot
+            ? mergeServerAndFirestoreCatalog(
+                data.homePosts,
+                fsSnapshot.homePosts,
+                fsSnapshot.tombstones,
+                'home_posts'
+              ).filter((p) => p.status === 'active' || callerIsSuperAdmin || callerRole === 'moderator')
+            : data.homePosts;
+          setHomePosts(mergedPosts);
+        }
+
         if (Array.isArray(data.monthlyAwards)) setMonthlyAwards(data.monthlyAwards);
+        if (data.serverNow) {
+          const parsedNow = Date.parse(String(data.serverNow));
+          if (Number.isFinite(parsedNow)) lastBootstrapServerMsRef.current = parsedNow;
+        }
         if (data.liveMetrics) {
           setLiveMetrics(data.liveMetrics);
           try {
@@ -984,13 +1258,24 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           } catch {}
         }
         if (Array.isArray(data.ecoMissions)) {
-          setEcoMissions(data.ecoMissions);
+          const mergedMissions = fsSnapshot
+            ? mergeServerAndFirestoreCatalog(
+                data.ecoMissions,
+                fsSnapshot.missions,
+                fsSnapshot.tombstones,
+                'eco_missions'
+              ).filter((m) => m.status === 'active' || callerCanManageMissions)
+            : data.ecoMissions;
+          setEcoMissions(mergedMissions);
           try {
-            localStorage.setItem('ecohero_eco_missions', JSON.stringify(data.ecoMissions));
+            localStorage.setItem('ecohero_eco_missions', JSON.stringify(mergedMissions));
           } catch {}
         }
         if (Array.isArray(data.missionSubmissions)) setMissionSubmissions(data.missionSubmissions);
         if (Array.isArray(data.missionCompletions)) setMissionCompletions(data.missionCompletions);
+        if (data.weeklyChallenge) setWeeklyChallenge(data.weeklyChallenge);
+        if (data.schoolTeamMission) setSchoolTeamMission(data.schoolTeamMission);
+        if (data.championshipMeta) setChampionshipMeta(data.championshipMeta);
 
         if (data.sessionToken) {
           saveSessionToken(data.sessionToken);
@@ -1010,12 +1295,31 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (data.user.welcomeBonusClaimed) {
             localStorage.setItem('ecohero_welcome_bonus_claimed', 'true');
           }
+        } else {
+          const tg = typeof window !== 'undefined' ? (window as any).Telegram?.WebApp : null;
+          const canSilentRefresh = Boolean(auth?.currentUser || tg?.initData);
+          if (canSilentRefresh && !silentRefreshTriedRef.current) {
+            silentRefreshTriedRef.current = true;
+            refreshSessionToken().then((newTok) => {
+              if (newTok) {
+                syncBootstrap();
+              }
+            });
+          } else if (!canSilentRefresh && userRef.current.role !== 'student') {
+            if (sessionTokenRef.current) saveSessionToken(null);
+            setUser(prev => ({
+              ...prev,
+              role: 'student',
+              approvedRoles: ['student'],
+              isVerified: false,
+            }));
+          }
         }
       } catch (err) {
         console.warn('[EcoContext] Bootstrap sync skipped:', err);
       }
     },
-    [apiFetch, saveSessionToken]
+    [apiFetch, saveSessionToken, refreshSessionToken]
   );
 
   const flushOfflineQueue = useCallback(async () => {
@@ -1026,9 +1330,8 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       let synced = 0;
       for (const item of pending) {
         try {
-          const res = await fetch(apiUrl('/api/reports/submit'), {
+          const res = await apiFetch('/api/reports/submit', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               clientReportId: item.id,
               title: item.title,
@@ -1042,10 +1345,7 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               lng: item.lng,
               imageUrl: item.imageUrl,
               imageBase64: item.imageBase64,
-              authorUid: item.authorUid,
-              authorName: item.authorName,
               authorSchool: item.authorSchool,
-              authorTelegramId: item.authorTelegramId,
             }),
           });
           if (res.ok && !isHtmlContentType(res)) {
@@ -1063,7 +1363,7 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {
       // ignore IndexedDB errors
     }
-  }, [syncBootstrap, showNotification]);
+  }, [apiFetch, syncBootstrap, showNotification]);
 
   const setActiveTab = (tab: string) => {
     setActiveTabState(tab);
@@ -1168,6 +1468,11 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem('ecohero_monthly_awards', JSON.stringify(monthlyAwards));
     } catch {}
   }, [monthlyAwards]);
+  useEffect(() => {
+    try {
+      localStorage.setItem('ecohero_eco_missions', JSON.stringify(ecoMissions));
+    } catch {}
+  }, [ecoMissions]);
 
   // Prompt registration automatically for unauthenticated non-Telegram web visitors
   useEffect(() => {
@@ -1203,6 +1508,7 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     if (!auth) return;
     const unsub = onAuthStateChanged(auth, async (fbUser) => {
+      setFirebaseAuthUid(fbUser ? fbUser.uid : null);
       if (!fbUser) return;
       try {
         const idToken = await fbUser.getIdToken();
@@ -1234,6 +1540,42 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
     return () => unsub();
   }, [saveSessionToken, syncBootstrap]);
+
+  // Real-time Google Cloud Firestore onSnapshot listener for live_metrics/global (when Firebase Auth is ready)
+  useEffect(() => {
+    if (!firebaseAuthUid) return;
+    const unsubscribe = subscribeLiveMetricsFromFirestore((remoteMetrics) => {
+      const remoteTs = remoteMetrics.updatedAt ? Date.parse(remoteMetrics.updatedAt) : 0;
+      if (Number.isFinite(remoteTs) && remoteTs > lastBootstrapServerMsRef.current) {
+        const { updatedAt: _u, ...cleanMetrics } = remoteMetrics as any;
+        setLiveMetrics((prev) => ({ ...prev, ...cleanMetrics }));
+      }
+    });
+    return () => unsubscribe();
+  }, [firebaseAuthUid]);
+
+  // Mirror authoritative liveMetrics to Firestore live_metrics/global when signed-in Super Admin is active
+  useEffect(() => {
+    if (!firebaseAuthUid || !auth?.currentUser) return;
+    const isSuper =
+      user.role === 'super_admin' ||
+      (Array.isArray(user.approvedRoles) && user.approvedRoles.includes('super_admin'));
+    if (!isSuper) return;
+    const signature = JSON.stringify({
+      s: liveMetrics.totalSchools,
+      u: liveMetrics.totalUsers,
+      b: liveMetrics.botUsersCount,
+      r: liveMetrics.resolvedReports,
+      t: liveMetrics.treesPlanted,
+      a: liveMetrics.activeAmbassadors,
+    });
+    if (signature === lastSyncedMetricsKeyRef.current) return;
+    const timer = window.setTimeout(() => {
+      lastSyncedMetricsKeyRef.current = signature;
+      syncLiveMetricsToFirestore(liveMetrics).catch(() => {});
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [firebaseAuthUid, user.role, user.approvedRoles, liveMetrics]);
 
   // Telegram WebApp detection & auto-authentication
   useEffect(() => {
@@ -1347,11 +1689,8 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const toggleTheme = () => setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
 
   const isSuperAdminUser =
-    user.telegramUsername === '@jasurdost' ||
-    user.telegramUsername === 'jasurdost' ||
-    user.telegramId === 8832599080 ||
-    user.email === 'diyorbekormonov44@gmail.com' ||
-    user.phoneNumber?.replace(/\D/g, '').endsWith('945181161');
+    user.role === 'super_admin' ||
+    (Array.isArray(user.approvedRoles) && user.approvedRoles.includes('super_admin'));
 
   const openRoleRequestModal = (role: UserRole) => {
     setTargetRequestedRole(role);
@@ -1595,7 +1934,7 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const logoutUser = async () => {
     await logOutFirebase();
     saveSessionToken(null);
-    const freshUid = `user_web_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const freshUid = generateWebUid();
     localStorage.removeItem('ecohero_user');
     localStorage.removeItem('ecohero_onboarded');
     localStorage.removeItem('ecohero_welcome_bonus_claimed');
@@ -1630,20 +1969,20 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const res = await apiFetch('/api/user/onboarding', {
         method: 'POST',
         body: JSON.stringify({
-          uid: user.uid,
           fullName: data.fullName,
           phoneNumber: data.phoneNumber,
           region: data.region,
           district: data.district,
           schoolName: data.schoolName,
           grade: data.grade,
-          telegramId: user.telegramId,
-          telegramUsername: user.telegramUsername,
-          email: user.email,
         }),
       });
 
       const result = await parseApiJson<any>(res);
+      if (res.status === 401) {
+        setAuthModalOpen(true);
+        throw new Error(result?.error || "Ro'yxatdan o'tishni yakunlash uchun avval hisobingizga kiring.");
+      }
       if (!res.ok || !result.success || !result.profile) {
         throw new Error(result.error || "Ma'lumotlarni saqlashda xatolik yuz berdi");
       }
@@ -1877,6 +2216,7 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateShopItem = async (itemId: string, updates: Partial<ShopItem>): Promise<boolean> => {
+    const previousItems = shopItems;
     setShopItems(prev => prev.map(item => (item.id === itemId ? { ...item, ...updates } : item)));
 
     try {
@@ -1889,20 +2229,28 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           newStock: updates.stock,
         }),
       });
-      const data = await res.json();
-      if (res.ok && data.success) {
+      const data = await parseApiJson<any>(res);
+      if (res.ok && data?.success) {
         if (data.item) {
           setShopItems(prev => prev.map(item => (item.id === itemId ? data.item : item)));
+          syncCatalogRecordToFirestore('shopItems', data.item.id, data.item).catch(() => {});
         }
         await syncBootstrap();
         showNotification("Sovg'a muvaffaqiyatli yangilandi!", 'success');
         return true;
       }
+      setShopItems(previousItems);
       await syncBootstrap();
-      showNotification(data.error || "Sovg'ani yangilashda xatolik", 'warning');
+      if (res.status === 401 || res.status === 403) {
+        showNotification("Sessiya tasdiqlanmagan. Super Admin hisobiga qayta kiring.", 'warning');
+        if (res.status === 401) setAuthModalOpen(true);
+      } else {
+        showNotification(data?.error || "Sovg'ani yangilashda xatolik", 'warning');
+      }
       return false;
     } catch (e: any) {
       console.error('Failed to update shop item on server:', e);
+      setShopItems(previousItems);
       await syncBootstrap();
       showNotification(e?.message || "Server bilan bog'lanishda xatolik", 'warning');
       return false;
@@ -1915,25 +2263,27 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         method: 'POST',
         body: JSON.stringify(itemData),
       });
-      const data = await res.json();
-      if (data.success && data.item) {
+      const data = await parseApiJson<any>(res);
+      if (res.ok && data?.success && data?.item) {
         setShopItems(prev => [data.item, ...prev]);
+        syncCatalogRecordToFirestore('shopItems', data.item.id, data.item).catch(() => {});
         await syncBootstrap();
         showNotification("Yangi sovg'a Eko-Bozorga muvaffaqiyatli qo'shildi!", 'success');
         triggerConfetti();
         return true;
       }
-    } catch (e) {
+      if (res.status === 401 || res.status === 403) {
+        showNotification("Sessiya tasdiqlanmagan. Super Admin hisobiga qayta kiring.", 'warning');
+        if (res.status === 401) setAuthModalOpen(true);
+      } else {
+        showNotification(data?.error || "Sovg'ani saqlashda xatolik yuz berdi", 'warning');
+      }
+      return false;
+    } catch (e: any) {
       console.error('Failed to create shop item on server:', e);
+      showNotification(e?.message || "Server bilan bog'lanishda xatolik", 'warning');
+      return false;
     }
-
-    const newItem: ShopItem = {
-      ...itemData,
-      id: `shop_custom_${Date.now()}`,
-    };
-    setShopItems(prev => [newItem, ...prev]);
-    showNotification("Yangi sovg'a qo'shildi!", 'success');
-    return true;
   };
 
   const addReport = (reportData: AddReportInput): EcoReport => {
@@ -2209,19 +2559,28 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateShopOrderStatus = async (orderId: string, status: 'approved' | 'delivered' | 'cancelled') => {
+    const previousOrders = shopOrders;
     setShopOrders(prev =>
       prev.map(o => (o.id === orderId ? { ...o, status, approvedAt: new Date().toISOString() } : o))
     );
     try {
-      await apiFetch(`/api/admin/shop/orders/${orderId}/status`, {
+      const res = await apiFetch(`/api/admin/shop/orders/${orderId}/status`, {
         method: 'PATCH',
         body: JSON.stringify({ status }),
       });
+      const data = await parseApiJson<any>(res);
+      if (!res.ok || !data?.success) {
+        setShopOrders(previousOrders);
+        showNotification(data?.error || 'Buyurtma holati yangilanmadi', 'warning');
+        if (res.status === 401) setAuthModalOpen(true);
+        return;
+      }
       await syncBootstrap();
-    } catch {
-      // ignore
+      showNotification(`Buyurtma holati yangilandi: ${status}`, 'info');
+    } catch (err: any) {
+      setShopOrders(previousOrders);
+      showNotification(err?.message || "Server bilan bog'lanishda xatolik", 'warning');
     }
-    showNotification(`Buyurtma holati yangilandi: ${status}`, 'info');
   };
 
   const checkVoucherCode = async (code: string): Promise<VoucherCheckResult> => {
@@ -2272,41 +2631,54 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const startAdWatch = async (
-    adId: string
-  ): Promise<{ success: boolean; watchSessionId?: string; requiredSeconds?: number; error?: string }> => {
+  const startAdWatch = async (adId: string) => {
     try {
       const res = await apiFetch('/api/ads/watch-start', {
         method: 'POST',
         body: JSON.stringify({ adId }),
       });
       const data = await res.json();
+      if (data.adWatchState) {
+        setAdWatchState(data.adWatchState);
+      }
       if (!res.ok || !data.success) {
-        return { success: false, error: data.error || 'Reklama boshlanmadi' };
+        return {
+          success: false,
+          cooldownActive: Boolean(data.cooldownActive),
+          remainingSeconds: data.remainingSeconds,
+          nextAvailableAt: data.nextAvailableAt,
+          adWatchState: data.adWatchState || null,
+          error: data.error || 'Reklama boshlanmadi',
+        };
       }
       return {
         success: true,
         watchSessionId: data.watchSessionId,
         requiredSeconds: data.requiredSeconds || 15,
+        adWatchState: data.adWatchState || null,
       };
     } catch (err: any) {
       return { success: false, error: err?.message || 'Server xatoligi' };
     }
   };
 
-  const claimAdWatchReward = async (
-    adId: string,
-    watchSessionId: string
-  ): Promise<{ success: boolean; awardedCoins?: number; newBalance?: number; message?: string; error?: string }> => {
+  const claimAdWatchReward = async (adId: string, watchSessionId: string) => {
     try {
       const res = await apiFetch('/api/ads/watch-reward', {
         method: 'POST',
         body: JSON.stringify({ adId, watchSessionId }),
       });
       const data = await res.json();
+      if (data.adWatchState) {
+        setAdWatchState(data.adWatchState);
+      }
       if (!res.ok || !data.success) {
         showNotification(data.error || 'Mukofot olinmadi', 'warning');
-        return { success: false, error: data.error || 'Mukofot olinmadi' };
+        return {
+          success: false,
+          adWatchState: data.adWatchState || null,
+          error: data.error || 'Mukofot olinmadi',
+        };
       }
       const awarded = Number(data.awardedCoins || 100);
       setUser(prev => ({
@@ -2322,6 +2694,7 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         success: true,
         awardedCoins: awarded,
         newBalance: data.newBalance,
+        adWatchState: data.adWatchState || null,
         message: data.message,
       };
     } catch (err: any) {
@@ -2366,31 +2739,36 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notes?: string
   ): Promise<boolean> => {
     try {
-      await apiFetch('/api/admin/partners/proposal-status', {
+      const res = await apiFetch('/api/admin/partners/proposal-status', {
         method: 'POST',
         body: JSON.stringify({ proposalId: id, status, adminNotes: notes }),
       });
+      const data = await parseApiJson<any>(res);
+      if (!res.ok || !data?.success) {
+        showNotification(data?.error || 'Homiylik arizasi yangilanmadi', 'warning');
+        if (res.status === 401) setAuthModalOpen(true);
+        return false;
+      }
+      setSponsorshipProposals(prev =>
+        prev.map(p =>
+          p.id === id
+            ? {
+                ...p,
+                status,
+                adminNotes: notes || p.adminNotes,
+                reviewedBy: user.fullName,
+                reviewedAt: new Date().toISOString(),
+              }
+            : p
+        )
+      );
       await syncBootstrap();
-    } catch {
-      // ignore
+      showNotification(`Homiylik arizasi holati yangilandi: ${status === 'approved' ? 'Tasdiqlandi' : 'Rad etildi'}`, 'info');
+      return true;
+    } catch (err: any) {
+      showNotification(err?.message || "Server bilan bog'lanishda xatolik", 'warning');
+      return false;
     }
-
-    setSponsorshipProposals(prev =>
-      prev.map(p =>
-        p.id === id
-          ? {
-              ...p,
-              status,
-              adminNotes: notes || p.adminNotes,
-              reviewedBy: user.fullName,
-              reviewedAt: new Date().toISOString(),
-            }
-          : p
-      )
-    );
-
-    showNotification(`Homiylik arizasi holati yangilandi: ${status === 'approved' ? 'Tasdiqlandi' : 'Rad etildi'}`, 'info');
-    return true;
   };
 
   const createSponsorshipProject = async (
@@ -2401,21 +2779,20 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         method: 'POST',
         body: JSON.stringify(data),
       });
-      const result = await res.json();
-      if (result.success && result.project) {
-        setSponsorshipProjects(prev => [result.project, ...prev]);
-        await syncBootstrap();
+      const result = await parseApiJson<any>(res);
+      if (!res.ok || !result?.success || !result?.project) {
+        showNotification(result?.error || "Homiylik aksiyasi saqlanmadi", 'warning');
+        if (res.status === 401) setAuthModalOpen(true);
+        return false;
       }
-    } catch {
-      const newProj: SponsorshipProject = {
-        ...data,
-        id: `proj_${Date.now()}`,
-        raisedAmountUZS: 0,
-      };
-      setSponsorshipProjects(prev => [newProj, ...prev]);
+      setSponsorshipProjects(prev => [result.project, ...prev]);
+      await syncBootstrap();
+      showNotification("Yangi ekologik homiylik aksiyasi e'lon qilindi!", 'success');
+      return true;
+    } catch (err: any) {
+      showNotification(err?.message || "Server bilan bog'lanishda xatolik", 'warning');
+      return false;
     }
-    showNotification("Yangi ekologik homiylik aksiyasi e'lon qilindi!", 'success');
-    return true;
   };
 
   const createEcoAd = async (
@@ -2426,32 +2803,51 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         method: 'POST',
         body: JSON.stringify(data),
       });
-      const result = await res.json();
-      if (result.success && result.ad) {
+      const result = await parseApiJson<any>(res);
+      if (res.ok && result?.success && result?.ad) {
         setEcoAds(prev => [result.ad, ...prev]);
+        syncCatalogRecordToFirestore('eco_ads', result.ad.id, result.ad).catch(() => {});
         await syncBootstrap();
+        showNotification('Yangi reklama banneri muvaffaqiyatli yaratildi!', 'success');
+        return true;
       }
-    } catch {
-      const newAd: EcoAd = {
-        ...data,
-        id: `ad_${Date.now()}`,
-        impressionsCount: 0,
-        clicksCount: 0,
-      };
-      setEcoAds(prev => [newAd, ...prev]);
+      if (res.status === 401 || res.status === 403) {
+        showNotification("Sessiya tasdiqlanmagan. Super Admin hisobiga qayta kiring.", 'warning');
+        if (res.status === 401) setAuthModalOpen(true);
+      } else {
+        showNotification(result?.error || 'Reklama serverga saqlanmadi', 'warning');
+      }
+      return false;
+    } catch (e: any) {
+      showNotification(e?.message || "Server bilan bog'lanishda xatolik", 'warning');
+      return false;
     }
-    showNotification('Yangi reklama banneri muvaffaqiyatli yaratildi!', 'success');
-    return true;
   };
 
   const updateEcoAdStatus = (id: string, status: 'active' | 'paused' | 'expired') => {
+    const previousAds = ecoAds;
     setEcoAds(prev => prev.map(a => (a.id === id ? { ...a, status } : a)));
     apiFetch(`/api/admin/ads/${id}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
     })
-      .then(() => syncBootstrap())
-      .catch(() => {});
+      .then(async (res) => {
+        const data = await parseApiJson<any>(res);
+        if (!res.ok || !data?.success) {
+          setEcoAds(previousAds);
+          showNotification(data?.error || 'Reklama holati yangilanmadi', 'warning');
+          if (res.status === 401) setAuthModalOpen(true);
+          return;
+        }
+        if (data.ad) {
+          syncCatalogRecordToFirestore('eco_ads', data.ad.id, data.ad).catch(() => {});
+        }
+        await syncBootstrap();
+      })
+      .catch(() => {
+        setEcoAds(previousAds);
+        showNotification("Server bilan bog'lanishda xatolik", 'warning');
+      });
   };
 
   const recordAdImpression = (id: string) => {
@@ -2757,13 +3153,16 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         method: 'PATCH',
         body: JSON.stringify(updates),
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        showNotification(data.error || 'Sozlamalar saqlanmadi', 'warning');
-        return { success: false, error: data.error };
+      const data = await parseApiJson<any>(res);
+      if (!res.ok || !data?.success) {
+        showNotification(data?.error || 'Sozlamalar saqlanmadi', 'warning');
+        if (res.status === 401) setAuthModalOpen(true);
+        return { success: false, error: data?.error };
       }
       setRewardSettings(data.settings);
-      showNotification('Mukofot mezonlari yangilandi!', 'success');
+      syncCatalogRecordToFirestore('reward_settings', 'default', data.settings).catch(() => {});
+      await syncBootstrap();
+      showNotification('Mukofot mezonlari yangilandi va saqlandi!', 'success');
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -2997,12 +3396,14 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           method: 'POST',
           body: JSON.stringify(payload),
         });
-        const data = await res.json();
-        if (!res.ok || !data.success) {
-          showNotification(data.error || "Post qo'shilmadi", 'warning');
-          return { success: false, error: data.error || 'Xatolik' };
+        const data = await parseApiJson<any>(res);
+        if (!res.ok || !data?.success) {
+          showNotification(data?.error || "Post qo'shilmadi", 'warning');
+          if (res.status === 401) setAuthModalOpen(true);
+          return { success: false, error: data?.error || 'Xatolik' };
         }
         setHomePosts(prev => [data.post, ...prev]);
+        syncCatalogRecordToFirestore('home_posts', data.post.id, data.post).catch(() => {});
         await syncBootstrap();
         showNotification('Post asosiy sahifaga joylashtirildi!', 'success');
         return { success: true, post: data.post };
@@ -3020,12 +3421,14 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           method: 'PATCH',
           body: JSON.stringify(updates),
         });
-        const data = await res.json();
-        if (!res.ok || !data.success) {
-          showNotification(data.error || 'Post yangilanmadi', 'warning');
-          return { success: false, error: data.error || 'Xatolik' };
+        const data = await parseApiJson<any>(res);
+        if (!res.ok || !data?.success) {
+          showNotification(data?.error || 'Post yangilanmadi', 'warning');
+          if (res.status === 401) setAuthModalOpen(true);
+          return { success: false, error: data?.error || 'Xatolik' };
         }
         setHomePosts(prev => prev.map(p => (p.id === id ? data.post : p)));
+        syncCatalogRecordToFirestore('home_posts', data.post.id, data.post).catch(() => {});
         await syncBootstrap();
         showNotification('Post muvaffaqiyatli yangilandi', 'success');
         return { success: true, post: data.post };
@@ -3042,12 +3445,14 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const res = await apiFetch(`/api/home-posts/${id}`, {
           method: 'DELETE',
         });
-        const data = await res.json();
-        if (!res.ok || !data.success) {
-          showNotification(data.error || "Post o'chirilmadi", 'warning');
-          return { success: false, error: data.error || 'Xatolik' };
+        const data = await parseApiJson<any>(res);
+        if (!res.ok || !data?.success) {
+          showNotification(data?.error || "Post o'chirilmadi", 'warning');
+          if (res.status === 401) setAuthModalOpen(true);
+          return { success: false, error: data?.error || 'Xatolik' };
         }
         setHomePosts(prev => prev.filter(p => p.id !== id));
+        deleteCatalogRecordFromFirestore('home_posts', id).catch(() => {});
         await syncBootstrap();
         showNotification("Post o'chirildi", 'info');
         return { success: true };
@@ -3156,12 +3561,14 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           method: 'PATCH',
           body: JSON.stringify(updates),
         });
-        const data = await res.json();
-        if (!res.ok || !data.success) {
-          showNotification(data.error || 'Reklama yangilanmadi', 'warning');
-          return { success: false, error: data.error || 'Xatolik' };
+        const data = await parseApiJson<any>(res);
+        if (!res.ok || !data?.success) {
+          showNotification(data?.error || 'Reklama yangilanmadi', 'warning');
+          if (res.status === 401) setAuthModalOpen(true);
+          return { success: false, error: data?.error || 'Xatolik' };
         }
         setEcoAds(prev => prev.map(a => (a.id === adId ? data.ad : a)));
+        syncCatalogRecordToFirestore('eco_ads', data.ad.id, data.ad).catch(() => {});
         await syncBootstrap();
         showNotification('Reklama muvaffaqiyatli yangilandi!', 'success');
         return { success: true };
@@ -3176,12 +3583,14 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     async (adId) => {
       try {
         const res = await apiFetch(`/api/admin/ads/${adId}`, { method: 'DELETE' });
-        const data = await res.json();
-        if (!res.ok || !data.success) {
-          showNotification(data.error || "Reklama o'chirilmadi", 'warning');
-          return { success: false, error: data.error || 'Xatolik' };
+        const data = await parseApiJson<any>(res);
+        if (!res.ok || !data?.success) {
+          showNotification(data?.error || "Reklama o'chirilmadi", 'warning');
+          if (res.status === 401) setAuthModalOpen(true);
+          return { success: false, error: data?.error || 'Xatolik' };
         }
         setEcoAds(prev => prev.filter(a => a.id !== adId));
+        deleteCatalogRecordFromFirestore('eco_ads', adId).catch(() => {});
         await syncBootstrap();
         showNotification("Reklama o'chirildi", 'info');
         return { success: true };
@@ -3196,12 +3605,14 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     async (itemId) => {
       try {
         const res = await apiFetch(`/api/admin/shop/items/${itemId}`, { method: 'DELETE' });
-        const data = await res.json();
-        if (!res.ok || !data.success) {
-          showNotification(data.error || "Mahsulot o'chirilmadi", 'warning');
-          return { success: false, error: data.error || 'Xatolik' };
+        const data = await parseApiJson<any>(res);
+        if (!res.ok || !data?.success) {
+          showNotification(data?.error || "Mahsulot o'chirilmadi", 'warning');
+          if (res.status === 401) setAuthModalOpen(true);
+          return { success: false, error: data?.error || 'Xatolik' };
         }
         setShopItems(prev => prev.filter(i => i.id !== itemId));
+        deleteCatalogRecordFromFirestore('shopItems', itemId).catch(() => {});
         await syncBootstrap();
         showNotification("Sovg'a o'chirildi", 'info');
         return { success: true };
@@ -3219,19 +3630,27 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           method: 'POST',
           body: JSON.stringify(payload),
         });
-        const data = await res.json();
-        if (!res.ok || !data.success) {
-          showNotification(data.error || "Topshiriq qo'shilmadi", 'warning');
-          return { success: false, error: data.error || 'Xatolik' };
+        const data = await parseApiJson<any>(res);
+        if (!res.ok || !data?.success) {
+          if (res.status === 401 || res.status === 403) {
+            showNotification("Sessiya tasdiqlanmagan. Super Admin hisobiga qayta kiring.", 'warning');
+            if (res.status === 401) setAuthModalOpen(true);
+          } else {
+            showNotification(data?.error || "Topshiriq qo'shilmadi", 'warning');
+          }
+          return { success: false, error: data?.error || 'Xatolik' };
         }
         setEcoMissions(prev => [data.mission, ...prev]);
-        showNotification("Yangi missiya qo'shildi!", 'success');
+        syncCatalogRecordToFirestore('eco_missions', data.mission.id, data.mission).catch(() => {});
+        await syncBootstrap();
+        showNotification("Yangi missiya qo'shildi va saqlandi!", 'success');
         return { success: true, mission: data.mission };
       } catch (err: any) {
+        showNotification(err?.message || 'Tarmoq xatoligi', 'warning');
         return { success: false, error: err?.message || 'Tarmoq xatoligi' };
       }
     },
-    [apiFetch, showNotification]
+    [apiFetch, showNotification, syncBootstrap]
   );
 
   const updateMission: EcoContextType['updateMission'] = useCallback(
@@ -3241,38 +3660,115 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           method: 'PATCH',
           body: JSON.stringify(updates),
         });
-        const data = await res.json();
-        if (!res.ok || !data.success) {
-          showNotification(data.error || 'Missiya yangilanmadi', 'warning');
-          return { success: false, error: data.error || 'Xatolik' };
+        const data = await parseApiJson<any>(res);
+        if (!res.ok || !data?.success) {
+          if (res.status === 401 || res.status === 403) {
+            showNotification("Sessiya tasdiqlanmagan. Super Admin hisobiga qayta kiring.", 'warning');
+            if (res.status === 401) setAuthModalOpen(true);
+          } else {
+            showNotification(data?.error || 'Missiya yangilanmadi', 'warning');
+          }
+          return { success: false, error: data?.error || 'Xatolik' };
         }
         setEcoMissions(prev => prev.map(m => (m.id === id ? data.mission : m)));
+        syncCatalogRecordToFirestore('eco_missions', data.mission.id, data.mission).catch(() => {});
+        await syncBootstrap();
         showNotification('Missiya yangilandi!', 'success');
         return { success: true };
       } catch (err: any) {
+        showNotification(err?.message || 'Tarmoq xatoligi', 'warning');
         return { success: false, error: err?.message || 'Tarmoq xatoligi' };
       }
     },
-    [apiFetch, showNotification]
+    [apiFetch, showNotification, syncBootstrap]
   );
 
   const deleteMission: EcoContextType['deleteMission'] = useCallback(
     async (id) => {
       try {
         const res = await apiFetch(`/api/missions/${id}`, { method: 'DELETE' });
-        const data = await res.json();
-        if (!res.ok || !data.success) {
-          showNotification(data.error || "Missiya o'chirilmadi", 'warning');
-          return { success: false, error: data.error || 'Xatolik' };
+        const data = await parseApiJson<any>(res);
+        if (!res.ok || !data?.success) {
+          if (res.status === 401 || res.status === 403) {
+            showNotification("Sessiya tasdiqlanmagan. Super Admin hisobiga qayta kiring.", 'warning');
+            if (res.status === 401) setAuthModalOpen(true);
+          } else {
+            showNotification(data?.error || "Missiya o'chirilmadi", 'warning');
+          }
+          return { success: false, error: data?.error || 'Xatolik' };
         }
         setEcoMissions(prev => prev.filter(m => m.id !== id));
+        deleteCatalogRecordFromFirestore('eco_missions', id).catch(() => {});
+        await syncBootstrap();
         showNotification("Missiya o'chirildi", 'info');
         return { success: true };
       } catch (err: any) {
+        showNotification(err?.message || 'Tarmoq xatoligi', 'warning');
         return { success: false, error: err?.message || 'Tarmoq xatoligi' };
       }
     },
-    [apiFetch, showNotification]
+    [apiFetch, showNotification, syncBootstrap]
+  );
+
+  const joinWeeklyChallenge = useCallback(async () => {
+    try {
+      const res = await apiFetch('/api/missions/weekly/join', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      const data = await parseApiJson<any>(res);
+      if (!res.ok || !data?.success) {
+        showNotification(data?.error || "Haftalik chellenjga qo'shilishda xatolik", 'warning');
+        return { success: false, error: data?.error };
+      }
+      if (data.weeklyChallenge) setWeeklyChallenge(data.weeklyChallenge);
+      await syncBootstrap();
+      showNotification("Haftalik chellenjga qo'shildingiz!", 'success');
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err?.message };
+    }
+  }, [apiFetch, showNotification, syncBootstrap]);
+
+  const claimWeeklyChallenge = useCallback(async () => {
+    try {
+      const res = await apiFetch('/api/missions/weekly/claim', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      const data = await parseApiJson<any>(res);
+      if (!res.ok || !data?.success) {
+        showNotification(data?.error || 'Mukofot olib bo‘lmadi', 'warning');
+        return { success: false, error: data?.error };
+      }
+      if (data.weeklyChallenge) setWeeklyChallenge(data.weeklyChallenge);
+      await syncBootstrap();
+      triggerConfetti();
+      showNotification(data.message || `+${data.awardedCoins || 250} EcoCoin qo'shildi!`, 'success');
+      return { success: true, awardedCoins: data.awardedCoins };
+    } catch (err: any) {
+      return { success: false, error: err?.message };
+    }
+  }, [apiFetch, showNotification, syncBootstrap, triggerConfetti]);
+
+  const fetchChampionshipLive: EcoContextType['fetchChampionshipLive'] = useCallback(
+    async ({ level, entity, region, district }) => {
+      try {
+        const qs = new URLSearchParams({ level, entity });
+        if (region) qs.set('region', region);
+        if (district) qs.set('district', district);
+        const res = await apiFetch(`/api/championship/live?${qs.toString()}`);
+        const data = await parseApiJson<ChampionshipLiveResponse>(res);
+        if (res.ok && data?.success) {
+          if (data.eligibility) setChampionshipMeta(data.eligibility);
+          return data;
+        }
+        return null;
+      } catch {
+        return null;
+      }
+    },
+    [apiFetch]
   );
 
   const submitMission: EcoContextType['submitMission'] = useCallback(
@@ -3375,7 +3871,7 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !sessionToken) {
+    if (typeof window === 'undefined') {
       setWsConnected(false);
       return;
     }
@@ -3385,9 +3881,12 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let closedByCleanup = false;
 
     const connect = () => {
-      if (closedByCleanup || !sessionTokenRef.current) return;
+      if (closedByCleanup) return;
       try {
-        const url = wsUrl(`/ws/chat?token=${encodeURIComponent(sessionTokenRef.current)}`);
+        const tok = sessionTokenRef.current;
+        const url = tok
+          ? wsUrl(`/ws/chat?token=${encodeURIComponent(tok)}`)
+          : wsUrl('/ws/chat?public=1');
         ws = new WebSocket(url);
 
         ws.onopen = () => {
@@ -3636,6 +4135,148 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [apiFetch, showNotification]
   );
 
+  const fetchStudentRatingsCabinet: EcoContextType['fetchStudentRatingsCabinet'] = useCallback(
+    async (params = {}) => {
+      try {
+        const q = new URLSearchParams();
+        if (params.schoolId) q.set('schoolId', params.schoolId);
+        if (params.region) q.set('region', params.region);
+        if (params.district) q.set('district', params.district);
+        const suffix = q.toString() ? `?${q.toString()}` : '';
+        const res = await apiFetch(`/api/student-ratings/cabinet${suffix}`);
+        const data = await res.json();
+        if (!res.ok || !data.success) return null;
+        return data as StudentRatingsCabinetResponse;
+      } catch {
+        return null;
+      }
+    },
+    [apiFetch]
+  );
+
+  const fetchStudentRatingsManage: EcoContextType['fetchStudentRatingsManage'] = useCallback(
+    async (params = {}) => {
+      try {
+        const q = new URLSearchParams();
+        if (params.schoolId) q.set('schoolId', params.schoolId);
+        if (params.region) q.set('region', params.region);
+        if (params.district) q.set('district', params.district);
+        const suffix = q.toString() ? `?${q.toString()}` : '';
+        const res = await apiFetch(`/api/student-ratings/manage${suffix}`);
+        const data = await res.json();
+        if (!res.ok || !data.success) return null;
+        return data as StudentRatingsManageResponse;
+      } catch {
+        return null;
+      }
+    },
+    [apiFetch]
+  );
+
+  const updateSchoolStudentRatingConfig: EcoContextType['updateSchoolStudentRatingConfig'] = useCallback(
+    async (payload) => {
+      try {
+        const res = await apiFetch('/api/student-ratings/school/config', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          showNotification(data.error || 'Maktab reyting sozlamasi saqlanmadi', 'warning');
+          return { success: false, error: data.error || 'Xatolik' };
+        }
+        await syncBootstrap();
+        showNotification(
+          typeof payload.enabled === 'boolean'
+            ? payload.enabled
+              ? 'Maktab o‘quvchilar reytingi jonli rejimda yoqildi!'
+              : 'Maktab o‘quvchilar reytingi o‘chirildi'
+            : 'Maktab reyting sozlamalari saqlandi!',
+          'success'
+        );
+        return { success: true, school: data.school };
+      } catch (err: any) {
+        return { success: false, error: err?.message || 'Tarmoq xatoligi' };
+      }
+    },
+    [apiFetch, showNotification, syncBootstrap]
+  );
+
+  const updateDistrictStudentRatingConfig: EcoContextType['updateDistrictStudentRatingConfig'] = useCallback(
+    async (payload) => {
+      try {
+        const res = await apiFetch('/api/student-ratings/district/config', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          showNotification(data.error || 'Tuman reyting sozlamasi saqlanmadi', 'warning');
+          return { success: false, error: data.error || 'Xatolik' };
+        }
+        await syncBootstrap();
+        showNotification(
+          typeof payload.enabled === 'boolean'
+            ? payload.enabled
+              ? 'Tuman o‘quvchilar oylik reytingi jonli rejimda yoqildi!'
+              : 'Tuman o‘quvchilar oylik reytingi o‘chirildi'
+            : 'Tuman reyting sozlamalari saqlandi!',
+          'success'
+        );
+        return { success: true, district: data.district };
+      } catch (err: any) {
+        return { success: false, error: err?.message || 'Tarmoq xatoligi' };
+      }
+    },
+    [apiFetch, showNotification, syncBootstrap]
+  );
+
+  const awardSchoolTop1Student: EcoContextType['awardSchoolTop1Student'] = useCallback(
+    async (params = {}) => {
+      try {
+        const res = await apiFetch('/api/student-ratings/school/award-top1', {
+          method: 'POST',
+          body: JSON.stringify(params),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          showNotification(data.error || 'Taqdirlash bajarilmadi', 'warning');
+          return { success: false, error: data.error || 'Xatolik' };
+        }
+        await syncBootstrap();
+        triggerConfetti();
+        showNotification("Maktabning eng faol 1-o'rin o'quvchisi taqdirlandi!", 'success');
+        return { success: true, award: data.award, school: data.school };
+      } catch (err: any) {
+        return { success: false, error: err?.message || 'Tarmoq xatoligi' };
+      }
+    },
+    [apiFetch, showNotification, syncBootstrap, triggerConfetti]
+  );
+
+  const awardDistrictTop3Students: EcoContextType['awardDistrictTop3Students'] = useCallback(
+    async (params = {}) => {
+      try {
+        const res = await apiFetch('/api/student-ratings/district/award-top3', {
+          method: 'POST',
+          body: JSON.stringify(params),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          showNotification(data.error || 'Taqdirlash bajarilmadi', 'warning');
+          return { success: false, error: data.error || 'Xatolik' };
+        }
+        await syncBootstrap();
+        triggerConfetti();
+        showNotification("Tuman oylik reytingi TOP-3 o'quvchilari taqdirlandi!", 'success');
+        return { success: true, award: data.award, district: data.district };
+      } catch (err: any) {
+        return { success: false, error: err?.message || 'Tarmoq xatoligi' };
+      }
+    },
+    [apiFetch, showNotification, syncBootstrap, triggerConfetti]
+  );
+
   return (
     <EcoContext.Provider
       value={{
@@ -3696,6 +4337,7 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateProposalStatus,
         createSponsorshipProject,
         ecoAds,
+        adWatchState,
         createEcoAd,
         updateEcoAdStatus,
         recordAdImpression,
@@ -3788,6 +4430,18 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         submitMission,
         parseQuizFromText,
         reviewMissionSubmission,
+        fetchStudentRatingsCabinet,
+        fetchStudentRatingsManage,
+        updateSchoolStudentRatingConfig,
+        updateDistrictStudentRatingConfig,
+        awardSchoolTop1Student,
+        awardDistrictTop3Students,
+        weeklyChallenge,
+        schoolTeamMission,
+        championshipMeta,
+        joinWeeklyChallenge,
+        claimWeeklyChallenge,
+        fetchChampionshipLive,
       }}
     >
       {children}

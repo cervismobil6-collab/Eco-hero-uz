@@ -57,9 +57,11 @@ export const EcoAdBanner: React.FC<EcoAdBannerProps> = ({ placement, className =
   const [savingEdit, setSavingEdit] = useState(false);
   const [uploadingImg, setUploadingImg] = useState(false);
   const [uploadingVid, setUploadingVid] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
 
   const [editTitle, setEditTitle] = useState('');
   const [editSponsor, setEditSponsor] = useState('');
+  const [editSponsorLogo, setEditSponsorLogo] = useState('');
   const [editHeadline, setEditHeadline] = useState('');
   const [editSubheadline, setEditSubheadline] = useState('');
   const [editImageUrl, setEditImageUrl] = useState('');
@@ -85,10 +87,14 @@ export const EcoAdBanner: React.FC<EcoAdBannerProps> = ({ placement, className =
 
   const isSuperAdmin = user.role === 'super_admin';
   const ctaKind = inferCtaKind(activeAd.ctaUrl, activeAd.ctaType);
+  const isSponsorLogoImg = /^(https?:\/\/|\/uploads\/|\/assets\/|data:image\/)/i.test(
+    String(activeAd.sponsorLogo || '').trim()
+  );
 
   const openEditModal = () => {
     setEditTitle(activeAd.title || '');
     setEditSponsor(activeAd.sponsorName || '');
+    setEditSponsorLogo(activeAd.sponsorLogo || '');
     setEditHeadline(activeAd.headline || '');
     setEditSubheadline(activeAd.subheadline || '');
     setEditImageUrl(activeAd.imageUrl || '');
@@ -102,7 +108,7 @@ export const EcoAdBanner: React.FC<EcoAdBannerProps> = ({ placement, className =
     setShowEditModal(true);
   };
 
-  const handleUploadMedia = async (e: React.ChangeEvent<HTMLInputElement>, target: 'image' | 'video') => {
+  const handleUploadMedia = async (e: React.ChangeEvent<HTMLInputElement>, target: 'image' | 'video' | 'logo') => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 80 * 1024 * 1024) {
@@ -111,11 +117,13 @@ export const EcoAdBanner: React.FC<EcoAdBannerProps> = ({ placement, className =
       return;
     }
     if (target === 'image') setUploadingImg(true);
+    else if (target === 'logo') setUploadingLogo(true);
     else setUploadingVid(true);
     try {
       const up = await uploadMediaFile(file, file.name);
       if (up.success && up.url) {
         if (target === 'image') setEditImageUrl(up.url);
+        else if (target === 'logo') setEditSponsorLogo(up.url);
         else setEditVideoUrl(up.url);
         showNotification(target === 'video' ? 'Video muvaffaqiyatli yuklandi!' : 'Rasm muvaffaqiyatli yuklandi!', 'success');
       } else {
@@ -123,6 +131,7 @@ export const EcoAdBanner: React.FC<EcoAdBannerProps> = ({ placement, className =
       }
     } finally {
       setUploadingImg(false);
+      setUploadingLogo(false);
       setUploadingVid(false);
       e.target.value = '';
     }
@@ -137,6 +146,7 @@ export const EcoAdBanner: React.FC<EcoAdBannerProps> = ({ placement, className =
       const res = await updateEcoAd(activeAd.id, {
         title: editTitle.trim() || activeAd.title,
         sponsorName: editSponsor.trim() || activeAd.sponsorName,
+        sponsorLogo: editSponsorLogo.trim() || activeAd.sponsorLogo,
         headline: editHeadline.trim() || editTitle.trim() || activeAd.headline,
         subheadline: editSubheadline.trim(),
         imageUrl: editImageUrl.trim() || activeAd.imageUrl,
@@ -190,7 +200,7 @@ export const EcoAdBanner: React.FC<EcoAdBannerProps> = ({ placement, className =
     <>
       <div
         onClick={handleCardSurfaceClick}
-        className={`group relative overflow-hidden rounded-[28px] border border-emerald-500/25 bg-gradient-to-br from-slate-900 via-[#071f1a] to-slate-950 text-white shadow-xl transition-all hover:border-emerald-400/50 ${
+        className={`group relative overflow-hidden rounded-[28px] border border-emerald-500/25 bg-gradient-to-br from-[#071D15] via-[#061812] to-[#040D0A] text-white shadow-xl transition-all hover:border-emerald-400/50 ${
           activeAd.clickOpensLink !== false ? 'cursor-pointer' : ''
         } ${className}`}
       >
@@ -211,17 +221,24 @@ export const EcoAdBanner: React.FC<EcoAdBannerProps> = ({ placement, className =
           >
             {resolvedVideo ? (
               <>
+                {resolvedImage && (
+                  <img
+                    src={resolvedImage}
+                    alt={activeAd.title}
+                    className="absolute inset-0 w-full h-full object-cover"
+                  />
+                )}
                 <video
                   src={resolvedVideo}
                   poster={resolvedImage || undefined}
-                  autoPlay
+                  preload="metadata"
                   loop
                   playsInline
                   muted={isVideoMuted}
                   controls
-                  className="w-full h-full object-cover"
+                  className="relative z-[1] w-full h-full object-cover"
                 />
-                <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/75 backdrop-blur-md text-[10px] font-black z-10 border border-white/10">
+                <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/75 text-[10px] font-black z-10 border border-white/10">
                   <button
                     type="button"
                     onClick={e => {
@@ -244,11 +261,19 @@ export const EcoAdBanner: React.FC<EcoAdBannerProps> = ({ placement, className =
               />
             )}
 
-            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/30 pointer-events-none" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/30 pointer-events-none z-[2]" />
 
-            <div className="absolute top-2.5 left-2.5 px-2.5 py-1 rounded-full bg-black/75 backdrop-blur-md border border-white/10 text-[10px] font-bold text-emerald-300 flex items-center gap-1.5 pointer-events-none">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              <span>{activeAd.sponsorName}</span>
+            <div className="absolute top-2.5 left-2.5 pr-2.5 pl-1 py-1 rounded-full bg-black/80 border border-white/15 text-[10px] font-bold text-emerald-300 flex items-center gap-1.5 pointer-events-none z-[3]">
+              {isSponsorLogoImg ? (
+                <img
+                  src={resolveMediaUrl(activeAd.sponsorLogo!)}
+                  alt={activeAd.sponsorName}
+                  className="w-5 h-5 rounded-full object-cover border border-emerald-400/50 shrink-0"
+                />
+              ) : (
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 ml-1 shrink-0" />
+              )}
+              <span className="truncate max-w-[140px]">{activeAd.sponsorName}</span>
             </div>
 
             {!resolvedVideo && activeAd.clickOpensLink !== false && (
@@ -343,7 +368,7 @@ export const EcoAdBanner: React.FC<EcoAdBannerProps> = ({ placement, className =
       {/* Inline Super Admin Ad Edit Modal */}
       {showEditModal && (
         <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
-          <div className="w-full max-w-lg rounded-3xl bg-slate-900 border border-slate-800 text-white p-6 space-y-4 shadow-2xl my-8">
+          <div className="w-full max-w-lg rounded-3xl bg-[#071812] border border-emerald-500/25 text-white p-6 space-y-4 shadow-2xl my-8">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-black uppercase tracking-tight">Reklamani O'zgartirish</h3>
               <button
@@ -390,7 +415,31 @@ export const EcoAdBanner: React.FC<EcoAdBannerProps> = ({ placement, className =
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 font-semibold outline-none focus:border-emerald-500 resize-none"
               />
 
-              {/* Direct File Uploads for Video and Image */}
+              {/* Direct File Uploads for Profile Avatar, Video and Cover Image */}
+              <div className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+                {/^(https?:\/\/|\/uploads\/|\/assets\/|data:image\/)/i.test(editSponsorLogo.trim()) ? (
+                  <img
+                    src={resolveMediaUrl(editSponsorLogo)}
+                    alt="Profil rasmi"
+                    className="w-10 h-10 rounded-full object-cover border border-emerald-500/40 shrink-0"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-300 font-black text-xs shrink-0">
+                    {(editSponsor || 'E').trim().charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <label className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-amber-500/15 border border-amber-500/40 hover:bg-amber-500/25 text-amber-300 font-bold cursor-pointer">
+                  <ImageIcon className="w-4 h-4 shrink-0" />
+                  <span>{uploadingLogo ? 'Yuklanmoqda...' : 'Reklama profil rasmi (Avatar)'}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={e => handleUploadMedia(e, 'logo')}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 <label className="flex items-center justify-center gap-2 px-3.5 py-3 rounded-xl bg-emerald-600/20 border border-emerald-500/40 hover:bg-emerald-600/30 text-emerald-300 font-bold cursor-pointer">
                   <Film className="w-4 h-4 shrink-0" />
@@ -571,7 +620,7 @@ export const EcoAdBanner: React.FC<EcoAdBannerProps> = ({ placement, className =
                 </button>
                 <button
                   type="submit"
-                  disabled={savingEdit || uploadingImg || uploadingVid}
+                  disabled={savingEdit || uploadingImg || uploadingVid || uploadingLogo}
                   className="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase tracking-wider cursor-pointer disabled:opacity-50"
                 >
                   {savingEdit ? 'Saqlanmoqda...' : 'Saqlash'}

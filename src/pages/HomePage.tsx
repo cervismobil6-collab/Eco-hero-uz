@@ -1,21 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Sparkles,
   MapPin,
-  Send,
   Coins,
   ShieldCheck,
   TreePine,
   Users,
-  CheckCircle2,
   ArrowRight,
-  TrendingUp,
-  ShoppingBag,
   School,
   ExternalLink,
   ChevronRight,
   Target,
-  Zap,
   Flame,
   Camera,
   Trophy,
@@ -28,6 +23,10 @@ import {
   Plus,
   Image as ImageIcon,
   X,
+  Compass,
+  Award,
+  CheckCircle2,
+  TrendingUp,
 } from 'lucide-react';
 import { motion, Variants } from 'framer-motion';
 import { useEco } from '../context/EcoContext';
@@ -35,6 +34,8 @@ import { EcoAdBanner } from '../components/EcoAdBanner';
 import { computeUserStreakState, DAILY_STREAK_REWARDS } from '../utils/streak';
 import { resolveMediaUrl, openAdTargetUrl } from '../utils/api';
 import { EcoReport, HomePost, HomePostCategory, ProblemStatus } from '../types/eco';
+import heroEcoForestImg from '../assets/images/hero_eco_forest_1795179384249.jpg';
+import dailyQuestChestImg from '../assets/images/daily_quest_chest_1795179383259.jpg';
 
 export const HomePage: React.FC = () => {
   const {
@@ -44,6 +45,9 @@ export const HomePage: React.FC = () => {
     schools,
     liveMetrics,
     homePosts,
+    ecoMissions,
+    missionCompletions,
+    transactions,
     claimDailyStreakReward,
     triggerHaptic,
     editReport,
@@ -54,6 +58,7 @@ export const HomePage: React.FC = () => {
     uploadMediaFile,
     showNotification,
   } = useEco();
+
   const [isClaimingStreak, setIsClaimingStreak] = useState(false);
 
   // Super Admin inline report editor state
@@ -88,6 +93,121 @@ export const HomePage: React.FC = () => {
     lastStreakClaimDate: user.lastStreakClaimDate,
     storedStreakDays: user.streakDays ?? user.activityStats?.streakDays ?? 0,
   });
+
+  // Deterministic XP & Next Level Progress from real EcoContext data
+  const userXP = user.ecoXP || (user.totalCoinsEarned || user.ecoCoins || 0) * 4;
+  const computedLevel = user.level || Math.max(1, Math.floor(userXP / 500) + 1);
+  const xpIntoLevel = userXP % 500;
+  const xpToNextLevel = 500 - xpIntoLevel;
+  const xpProgressPct = Math.min(100, Math.max(4, Math.round((xpIntoLevel / 500) * 100)));
+
+  // Featured Daily Mission from real ecoMissions
+  const activeMissions = useMemo(
+    () => ecoMissions.filter(m => m.status === 'active'),
+    [ecoMissions]
+  );
+  const featuredMission = useMemo(
+    () =>
+      activeMissions.find(m => !missionCompletions.includes(m.id)) ||
+      activeMissions[0] ||
+      null,
+    [activeMissions, missionCompletions]
+  );
+
+  // Real 7-day weekly activity computed from transactions + user reports
+  const weeklyActivity = useMemo(() => {
+    const dayLabels = ['Ya', 'Du', 'Se', 'Ch', 'Pa', 'Ju', 'Sh'];
+    const today = new Date();
+    const days: { key: string; label: string; coins: number; actions: number; isToday: boolean }[] = [];
+
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const iso = d.toISOString().slice(0, 10);
+      days.push({
+        key: iso,
+        label: dayLabels[d.getDay()],
+        coins: 0,
+        actions: 0,
+        isToday: i === 0,
+      });
+    }
+
+    const dayMap = new Map(days.map(d => [d.key, d]));
+    for (const tx of transactions) {
+      if (!tx.createdAt) continue;
+      const iso = String(tx.createdAt).slice(0, 10);
+      const slot = dayMap.get(iso);
+      if (slot) {
+        slot.actions += 1;
+        if (tx.amount > 0) slot.coins += tx.amount;
+      }
+    }
+    for (const rep of reports) {
+      if (rep.reporterUid !== user.uid || !rep.createdAt) continue;
+      const iso = String(rep.createdAt).slice(0, 10);
+      const slot = dayMap.get(iso);
+      if (slot) slot.actions += 1;
+    }
+
+    const maxScore = Math.max(1, ...days.map(d => d.coins > 0 ? d.coins : d.actions * 50));
+    const totalWeekCoins = days.reduce((s, d) => s + d.coins, 0);
+    const totalWeekActions = days.reduce((s, d) => s + d.actions, 0);
+
+    return {
+      days: days.map(d => {
+        const val = d.coins > 0 ? d.coins : d.actions * 50;
+        return {
+          ...d,
+          pct: val > 0 ? Math.max(18, Math.round((val / maxScore) * 100)) : 8,
+        };
+      }),
+      totalWeekCoins,
+      totalWeekActions,
+    };
+  }, [transactions, reports, user.uid]);
+
+  // Interactive Uzbekistan Map Preview pins from real schools & reports
+  const mapPreviewData = useMemo(() => {
+    const projectPoint = (lat?: number, lng?: number) => {
+      if (typeof lat !== 'number' || typeof lng !== 'number' || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return null;
+      }
+      // Uzbekistan bounds: lng ~ 55.9..73.2, lat ~ 37.1..45.6
+      const x = Math.min(94, Math.max(6, ((lng - 55.9) / (73.2 - 55.9)) * 100));
+      const y = Math.min(90, Math.max(10, (1 - (lat - 37.1) / (45.6 - 37.1)) * 100));
+      return { x, y };
+    };
+
+    const schoolPins = schools
+      .slice(0, 24)
+      .map(s => {
+        const pt = projectPoint(s.lat, s.lng);
+        return pt ? { id: s.id, name: s.name, x: pt.x, y: pt.y } : null;
+      })
+      .filter((p): p is { id: string; name: string; x: number; y: number } => Boolean(p));
+
+    const reportPins = reports
+      .slice(0, 24)
+      .map(r => {
+        const pt = projectPoint(r.lat, r.lng);
+        return pt
+          ? {
+              id: r.id,
+              title: r.title,
+              resolved: String(r.status).toLowerCase() === 'resolved',
+              x: pt.x,
+              y: pt.y,
+            }
+          : null;
+      })
+      .filter((p): p is { id: string; title: string; resolved: boolean; x: number; y: number } => Boolean(p));
+
+    const resolvedCount = reports.filter(r => String(r.status).toLowerCase() === 'resolved').length;
+    const pendingCount = Math.max(0, reports.length - resolvedCount);
+
+    return { schoolPins, reportPins, resolvedCount, pendingCount };
+  }, [schools, reports]);
 
   const recentReports = reports.slice(0, 3);
   const activeHomePosts = [...homePosts]
@@ -230,31 +350,30 @@ export const HomePage: React.FC = () => {
     visible: {
       opacity: 1,
       transition: {
-        staggerChildren: 0.08,
+        staggerChildren: 0.06,
       },
     },
   };
 
   const itemVariants: Variants = {
-    hidden: { opacity: 0, y: 16 },
-    visible: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 120 } },
+    hidden: { opacity: 0, y: 14 },
+    visible: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 130, damping: 18 } },
   };
 
   return (
-    <motion.div 
+    <motion.div
       initial="hidden"
       animate="visible"
       variants={containerVariants}
-      className="w-full max-w-full overflow-x-clip space-y-10 sm:space-y-16 pb-28 pt-2"
+      className="w-full max-w-full overflow-x-clip space-y-8 sm:space-y-12 pb-28 pt-2"
     >
-      
-      {/* 0. Standout Feature: Live Eco-Radar Uzbekistan Ticker */}
+      {/* 0. Live Eco-Radar Uzbekistan Ticker */}
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-950 via-slate-900 to-emerald-950 border border-emerald-500/30 p-2.5 sm:p-3 shadow-lg flex items-center justify-between gap-2.5 sm:gap-3 text-xs w-full max-w-full">
+        <div className="relative overflow-hidden rounded-2xl bg-[#071812] border border-emerald-500/25 p-2.5 sm:p-3 shadow-lg shadow-emerald-950/20 flex items-center justify-between gap-2.5 sm:gap-3 text-xs w-full max-w-full">
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <span className="relative flex h-2.5 w-2.5 sm:h-3 sm:w-3">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 sm:h-3 sm:w-3 bg-emerald-500" />
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 sm:h-3 sm:w-3 bg-emerald-400" />
             </span>
             <span className="font-black text-emerald-400 uppercase tracking-wider text-[10px] sm:text-[11px] flex items-center gap-1">
               <Radio className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
@@ -265,17 +384,17 @@ export const HomePage: React.FC = () => {
           <div className="min-w-0 flex-1 overflow-hidden whitespace-nowrap text-slate-300 text-[11px] sm:text-xs font-medium">
             <div className="animate-marquee">
               <span>
-                Jonli baza: <span className="font-bold text-emerald-400 font-mono">{liveMetrics.treesPlanted.toLocaleString()} tup daraxt</span> · <span className="font-bold text-amber-400 font-mono">{liveMetrics.resolvedReports.toLocaleString()} hal etilgan muammo</span> · <span className="text-white font-bold">{topSchoolName}</span> yetakchi · <span className="text-teal-400 font-bold font-mono">{liveMetrics.totalUsers.toLocaleString()}</span> ro'yxatdan o'tgan foydalanuvchi
+                Jonli baza: <span className="font-bold text-emerald-400 font-mono tabular-nums">{liveMetrics.treesPlanted.toLocaleString()} tup daraxt</span> · <span className="font-bold text-amber-400 font-mono tabular-nums">{liveMetrics.resolvedReports.toLocaleString()} hal etilgan muammo</span> · <span className="text-white font-bold">{topSchoolName}</span> yetakchi · <span className="text-teal-300 font-bold font-mono tabular-nums">{liveMetrics.totalUsers.toLocaleString()}</span> ro&apos;yxatdan o&apos;tgan foydalanuvchi
               </span>
               <span aria-hidden="true">
-                Jonli baza: <span className="font-bold text-emerald-400 font-mono">{liveMetrics.treesPlanted.toLocaleString()} tup daraxt</span> · <span className="font-bold text-amber-400 font-mono">{liveMetrics.resolvedReports.toLocaleString()} hal etilgan muammo</span> · <span className="text-white font-bold">{topSchoolName}</span> yetakchi · <span className="text-teal-400 font-bold font-mono">{liveMetrics.totalUsers.toLocaleString()}</span> ro'yxatdan o'tgan foydalanuvchi
+                Jonli baza: <span className="font-bold text-emerald-400 font-mono tabular-nums">{liveMetrics.treesPlanted.toLocaleString()} tup daraxt</span> · <span className="font-bold text-amber-400 font-mono tabular-nums">{liveMetrics.resolvedReports.toLocaleString()} hal etilgan muammo</span> · <span className="text-white font-bold">{topSchoolName}</span> yetakchi · <span className="text-teal-300 font-bold font-mono tabular-nums">{liveMetrics.totalUsers.toLocaleString()}</span> ro&apos;yxatdan o&apos;tgan foydalanuvchi
               </span>
             </div>
           </div>
 
           <button
             onClick={() => setActiveTab('impact')}
-            className="hidden sm:inline-flex items-center gap-1 shrink-0 px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 text-[10px] font-bold transition-colors cursor-pointer"
+            className="hidden sm:inline-flex items-center gap-1 shrink-0 px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/25 text-emerald-300 hover:bg-emerald-500/25 text-[10px] font-bold transition-colors cursor-pointer"
           >
             <span>Tahlil</span>
             <ChevronRight className="w-3 h-3" />
@@ -283,296 +402,617 @@ export const HomePage: React.FC = () => {
         </div>
       </div>
 
-      {/* 1. Hero Section: Cinematic Look */}
+      {/* 1. Hero Welcome Section & EcoHero Rank Card */}
       <section className="relative px-3 sm:px-6 lg:px-8 overflow-x-clip">
         <div className="absolute inset-0 -top-24 overflow-hidden -z-10 pointer-events-none">
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[800px] bg-gradient-to-b from-emerald-500/10 via-transparent to-transparent blur-3xl opacity-50" />
-          <div className="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] bg-teal-500/10 rounded-full blur-3xl" />
-          <div className="absolute top-[20%] -right-[10%] w-[30%] h-[30%] bg-emerald-600/10 rounded-full blur-3xl" />
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[640px] bg-gradient-to-b from-emerald-500/12 via-teal-500/5 to-transparent blur-3xl opacity-60" />
+          <div className="absolute -top-[10%] -left-[8%] w-[38%] h-[38%] bg-emerald-500/10 rounded-full blur-3xl" />
+          <div className="absolute top-[15%] -right-[8%] w-[32%] h-[32%] bg-teal-400/10 rounded-full blur-3xl" />
         </div>
 
-        <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 sm:gap-10 lg:gap-16 items-center">
-            
-            {/* Left: Content */}
-            <motion.div variants={itemVariants} className="lg:col-span-7 min-w-0 space-y-5 sm:space-y-8">
-              <div className="inline-flex max-w-full items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-black uppercase tracking-wider sm:tracking-widest text-emerald-600 dark:text-emerald-400">
-                <Sparkles className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">O'zbekiston Yoshlari Eko-Ekotizimi 2.0</span>
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 lg:gap-12 items-center">
+          {/* Left: Futuristic Botanical Welcome */}
+          <motion.div variants={itemVariants} className="lg:col-span-7 min-w-0 space-y-5 sm:space-y-7">
+            <div className="inline-flex max-w-full items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+              <Sparkles className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+              <span className="truncate">Xush kelibsiz, {user.fullName.split(' ')[0]} · Ekotizim 2.0</span>
+            </div>
+
+            <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-extrabold text-slate-900 dark:text-white tracking-tight leading-[1.03] text-balance break-words">
+              Tabiatni <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-300">EcoHero</span> bilan yashil kelajakka aylantiring.
+            </h1>
+
+            <p className="text-sm sm:text-base text-slate-600 dark:text-slate-300 leading-relaxed max-w-2xl font-medium">
+              Maktabingizni 3 bosqichli ekologik chempionatda yetakchiga aylantiring. EcoHero AI yordamida muammolarni aniqlang, missiyalarni bajaring va <span className="text-slate-900 dark:text-emerald-300 font-extrabold underline decoration-emerald-500/70 decoration-2 underline-offset-4">EcoCoin</span> hamda sertifikatlar yig&apos;ing.
+            </p>
+
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => {
+                  triggerHaptic('medium');
+                  setActiveTab('report');
+                }}
+                className="min-h-[48px] px-6 sm:px-8 py-3.5 bg-gradient-to-r from-emerald-500 to-teal-400 hover:brightness-105 text-[#040D0A] font-black text-xs sm:text-sm rounded-2xl shadow-xl shadow-emerald-500/25 transition-all flex items-center gap-2.5 uppercase tracking-wider cursor-pointer"
+              >
+                <Camera className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span>Muammo Yuborish</span>
+              </motion.button>
+
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => {
+                  triggerHaptic('light');
+                  setActiveTab('map');
+                }}
+                className="min-h-[48px] px-6 sm:px-7 py-3.5 eco-surface text-slate-900 dark:text-white font-black text-xs sm:text-sm rounded-2xl transition-all flex items-center gap-2.5 uppercase tracking-wider shadow-md hover:border-emerald-500/40 cursor-pointer"
+              >
+                <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500" />
+                <span>Eko Xarita</span>
+              </motion.button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-4 sm:gap-6 pt-4 border-t border-slate-200/70 dark:border-emerald-500/15 text-slate-500 dark:text-slate-400">
+              <div className="flex items-center gap-2 font-bold text-xs">
+                <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+                <span>Ekologiya Vazirligi hamkori</span>
               </div>
-
-              <h1 className="text-4xl sm:text-6xl lg:text-7xl font-black text-slate-900 dark:text-white tracking-tighter leading-[0.98] text-balance break-words">
-                Tabiatni <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 via-emerald-400 to-teal-300">AI</span> bilan <br className="hidden sm:block" /> asraymiz.
-              </h1>
-
-              <p className="text-sm sm:text-lg text-slate-600 dark:text-slate-300 leading-relaxed max-w-2xl font-medium">
-                Maktabingizni 3 bosqichli ekologik chempionatda g'olib qiling. EcoHero AI yordamida muammolarni aniqlang va <span className="text-slate-900 dark:text-white font-black underline decoration-emerald-500 decoration-4 underline-offset-4">EcoCoin</span> hamda sertifikatlar yig'ing.
-              </p>
-
-              <div className="flex flex-wrap items-center gap-3 pt-2">
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => {
-                    triggerHaptic('medium');
-                    setActiveTab('report');
-                  }}
-                  className="px-5 sm:px-8 py-3.5 sm:py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs sm:text-sm rounded-2xl shadow-xl shadow-emerald-600/30 transition-all flex items-center gap-2.5 uppercase tracking-wider cursor-pointer"
-                >
-                  <Camera className="w-4 h-4 sm:w-5 sm:h-5" />
-                  <span>Muammo Yuborish</span>
-                </motion.button>
-
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => {
-                    triggerHaptic('light');
-                    setActiveTab('map');
-                  }}
-                  className="px-5 sm:px-8 py-3.5 sm:py-4 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-black text-xs sm:text-sm rounded-2xl border border-slate-200 dark:border-slate-800 transition-all flex items-center gap-2.5 uppercase tracking-wider shadow-md hover:bg-slate-50 dark:hover:bg-slate-800/80 cursor-pointer"
-                >
-                  <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500" />
-                  <span>Eko Xarita</span>
-                </motion.button>
+              <div className="flex items-center gap-2 font-bold text-xs">
+                <TreePine className="w-4 h-4 text-emerald-500 shrink-0" />
+                <span>Yashil Makon Dasturi</span>
               </div>
+            </div>
+          </motion.div>
 
-              <div className="flex flex-wrap items-center gap-4 sm:gap-6 pt-5 border-t border-slate-100 dark:border-slate-800/60 text-slate-400">
-                <div className="flex items-center gap-2 font-bold text-xs"><ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" /> Ekologiya Vazirligi</div>
-                <div className="flex items-center gap-2 font-bold text-xs"><TreePine className="w-4 h-4 text-emerald-500 shrink-0" /> Yashil Makon Dasturi</div>
-              </div>
-            </motion.div>
+          {/* Right: EcoHero Rank, Avatar, Level, XP & Stats Card */}
+          <motion.div variants={itemVariants} className="lg:col-span-5 min-w-0">
+            <div className="relative group">
+              <div className="absolute -inset-0.5 bg-gradient-to-r from-emerald-500/40 via-teal-400/30 to-emerald-600/40 rounded-[32px] blur-md opacity-45 group-hover:opacity-70 transition duration-500" />
+              <div className="relative eco-surface rounded-[28px] p-5 sm:p-6 shadow-2xl overflow-hidden space-y-5">
+                {/* Ambient glow corner */}
+                <div className="pointer-events-none absolute -top-16 -right-16 w-40 h-40 rounded-full bg-emerald-500/15 blur-2xl" />
 
-            {/* Right: Dashboard Preview & Daily Streak Card */}
-            <motion.div variants={itemVariants} className="lg:col-span-5 min-w-0 space-y-4">
-              
-              {/* Profile Card */}
-              <div className="relative group">
-                <div className="absolute -inset-1 bg-gradient-to-r from-emerald-600 to-teal-500 rounded-[36px] blur opacity-25 group-hover:opacity-40 transition duration-1000" />
-                <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[32px] p-6 sm:p-7 shadow-xl overflow-hidden space-y-5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3.5">
-                      <div className="w-14 h-14 rounded-2xl overflow-hidden border-2 border-emerald-500/30 shadow-md">
-                        <img src={user.avatarUrl} className="w-full h-full object-cover" alt="" />
+                {/* Identity & Rank Header */}
+                <div className="flex items-center justify-between gap-3 relative z-10">
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <div className="relative shrink-0">
+                      <div className="w-14 h-14 rounded-2xl overflow-hidden border-2 border-emerald-400/60 shadow-lg bg-[#040D0A]">
+                        <img
+                          src={
+                            user.avatarUrl ||
+                            user.profileImage ||
+                            `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.fullName || 'EcoHero')}`
+                          }
+                          className="w-full h-full object-cover"
+                          alt={user.fullName}
+                        />
                       </div>
-                      <div>
-                        <div className="text-lg font-black text-slate-900 dark:text-white tracking-tight">{user.fullName.split(' ')[0]}</div>
-                        <div className="text-[11px] font-semibold text-emerald-500 truncate max-w-[170px]">{user.schoolName}</div>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Balans</div>
-                      <div className="flex items-center gap-1 text-xl sm:text-2xl font-black text-amber-500 font-mono">
-                        <Coins className="w-5 h-5 fill-amber-500/20" /> {user.ecoCoins.toLocaleString()}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2.5 text-center">
-                    <div className="p-3 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-100 dark:border-slate-800">
-                      <div className="text-[10px] font-bold text-slate-400">Hisobotlar</div>
-                      <div className="text-sm font-black text-slate-900 dark:text-white font-mono mt-0.5">{user.reportsCount || 0}</div>
-                    </div>
-                    <div className="p-3 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-100 dark:border-slate-800">
-                      <div className="text-[10px] font-bold text-slate-400">Daraxtlar</div>
-                      <div className="text-sm font-black text-emerald-500 font-mono mt-0.5">{user.treesPlanted || 0}</div>
-                    </div>
-                    <div className="p-3 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-100 dark:border-slate-800">
-                      <div className="text-[10px] font-bold text-slate-400">Daraja</div>
-                      <div className="text-sm font-black text-indigo-400 font-mono mt-0.5">Lv. {user.level || 12}</div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <button
-                      onClick={() => {
-                        triggerHaptic('light');
-                        setActiveTab('shop');
-                      }}
-                      className="py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs uppercase tracking-wider shadow-md transition-all cursor-pointer"
-                    >
-                      Eko-Bozor
-                    </button>
-                    <button
-                      onClick={() => {
-                        triggerHaptic('light');
-                        setActiveTab('championship');
-                      }}
-                      className="py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold text-xs uppercase tracking-wider transition-all cursor-pointer"
-                    >
-                      Chempionat
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Standout Feature: Progressive Daily Streak Claiming Widget */}
-              <div className="p-4 sm:p-5 rounded-3xl bg-white dark:bg-slate-900 border border-amber-500/30 shadow-lg space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-11 h-11 rounded-2xl bg-amber-500/15 text-amber-500 flex items-center justify-center shrink-0">
-                      <Flame className="w-6 h-6 fill-amber-500" />
+                      <span className="absolute -bottom-1.5 -right-1.5 px-1.5 py-0.5 rounded-lg bg-gradient-to-r from-emerald-400 to-teal-300 text-[#040D0A] text-[10px] font-black font-mono tabular-nums shadow">
+                        Lv.{computedLevel}
+                      </span>
                     </div>
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-black text-slate-900 dark:text-white text-sm tabular-nums">
-                          {streakState.currentStreakDays > 0
-                            ? `${streakState.currentStreakDays} Kunlik Eko-Streak`
-                            : 'Kunlik Eko-Streak'}
-                        </span>
-                        <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">
-                          {streakState.claimedToday
-                            ? 'Bugun faol'
-                            : streakState.wasResetDueToInactivity
-                            ? 'Qayta boshlash'
-                            : `${streakState.claimDayNumber}-kun tayyor`}
-                        </span>
+                      <div className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-600 dark:text-emerald-400 truncate">
+                        {user.badge || 'Eko-Lochin'} · EcoHero Rank
                       </div>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
-                        {streakState.claimedToday
-                          ? `Bugun +${streakState.todayReward} EcoCoin olindi · Ertaga +${streakState.nextTomorrowReward} EcoCoin`
-                          : streakState.wasResetDueToInactivity
-                          ? 'Kecha kirmaganingiz uchun mukofot 1-kundan (+50 EcoCoin) boshlanadi'
-                          : `Bugun kiring va +${streakState.todayReward} EcoCoin oling · Ertaga +${streakState.nextTomorrowReward}`}
-                      </p>
+                      <div className="font-display text-lg font-extrabold text-slate-900 dark:text-white tracking-tight truncate">
+                        {user.fullName}
+                      </div>
+                      <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 truncate">
+                        {user.schoolName}
+                      </div>
                     </div>
                   </div>
 
+                  <div className="text-right shrink-0">
+                    <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+                      EcoCoins
+                    </div>
+                    <div className="flex items-center justify-end gap-1 text-xl sm:text-2xl font-black text-amber-500 dark:text-amber-400 font-mono tabular-nums">
+                      <Coins className="w-5 h-5 fill-amber-500/20" />
+                      <span>{user.ecoCoins.toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* XP Progress to Next Level */}
+                <div className="p-3.5 rounded-2xl bg-slate-100/80 dark:bg-[#040D0A]/75 border border-slate-200/80 dark:border-emerald-500/15 space-y-2 relative z-10">
+                  <div className="flex items-center justify-between text-[11px] font-bold">
+                    <span className="text-slate-700 dark:text-emerald-300 flex items-center gap-1.5">
+                      <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
+                      <span className="font-mono tabular-nums">{userXP.toLocaleString()} XP</span>
+                    </span>
+                    <span className="text-slate-500 dark:text-slate-400 font-mono tabular-nums">
+                      Lv.{computedLevel + 1} gacha {xpToNextLevel} XP
+                    </span>
+                  </div>
+                  <div className="w-full h-2.5 rounded-full bg-slate-200 dark:bg-emerald-950/90 overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${xpProgressPct}%` }}
+                      transition={{ duration: 0.7, ease: 'easeOut' }}
+                      className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-300 shadow-[0_0_12px_rgba(52,211,153,0.5)]"
+                    />
+                  </div>
+                </div>
+
+                {/* Real Activity Stats Row */}
+                <div className="grid grid-cols-3 gap-2.5 text-center relative z-10">
+                  <div className="p-3 rounded-2xl bg-white/80 dark:bg-[#05130E] border border-slate-200/70 dark:border-emerald-500/15">
+                    <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Hisobotlar</div>
+                    <div className="text-base font-black text-slate-900 dark:text-white font-mono tabular-nums mt-0.5">
+                      {user.reportsCount || 0}
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-2xl bg-white/80 dark:bg-[#05130E] border border-slate-200/70 dark:border-emerald-500/15">
+                    <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Daraxtlar</div>
+                    <div className="text-base font-black text-emerald-600 dark:text-emerald-400 font-mono tabular-nums mt-0.5">
+                      {user.treesPlanted || 0}
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-2xl bg-white/80 dark:bg-[#05130E] border border-slate-200/70 dark:border-emerald-500/15">
+                    <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Streak</div>
+                    <div className="text-base font-black text-amber-500 dark:text-amber-400 font-mono tabular-nums mt-0.5">
+                      {streakState.currentStreakDays} kun
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Navigation Buttons */}
+                <div className="grid grid-cols-2 gap-2.5 relative z-10">
                   <button
-                    type="button"
-                    disabled={streakState.claimedToday || isClaimingStreak}
-                    onClick={handleClaimStreak}
-                    className={`w-full sm:w-auto px-5 min-h-[44px] rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 whitespace-nowrap shrink-0 cursor-pointer ${
-                      streakState.claimedToday
-                        ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 cursor-not-allowed border border-slate-200 dark:border-slate-700'
-                        : 'bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 shadow-md shadow-amber-500/20'
-                    }`}
+                    onClick={() => {
+                      triggerHaptic('light');
+                      setActiveTab('shop');
+                    }}
+                    className="min-h-[42px] py-2.5 bg-gradient-to-r from-emerald-500 to-teal-400 hover:brightness-105 text-[#040D0A] rounded-xl font-black text-xs uppercase tracking-wider shadow-md shadow-emerald-500/20 transition-all cursor-pointer"
                   >
-                    {streakState.claimedToday ? (
-                      <>
-                        <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                        <span>Bugun olindi</span>
-                      </>
-                    ) : (
-                      <>
-                        <Gift className="w-4 h-4 shrink-0" />
-                        <span className="tabular-nums">
-                          {isClaimingStreak ? 'Yuklanmoqda...' : `+${streakState.todayReward} EcoCoin Olish`}
-                        </span>
-                      </>
-                    )}
+                    Eko-Bozor
+                  </button>
+                  <button
+                    onClick={() => {
+                      triggerHaptic('light');
+                      setActiveTab('championship');
+                    }}
+                    className="min-h-[42px] py-2.5 bg-slate-900 dark:bg-[#0D261D] hover:bg-slate-800 dark:hover:bg-[#133528] text-white border border-emerald-500/20 rounded-xl font-black text-xs uppercase tracking-wider transition-all cursor-pointer"
+                  >
+                    Chempionat
                   </button>
                 </div>
-
-                {/* 7-Day Escalating Motivation Ladder */}
-                <div className="grid grid-cols-7 gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
-                  {DAILY_STREAK_REWARDS.map((coins, idx) => {
-                    const dayNum = idx + 1;
-                    const effectiveCycleDay =
-                      streakState.currentStreakDays > 7 && streakState.claimedToday
-                        ? 7
-                        : streakState.currentStreakDays;
-                    const isDone =
-                      streakState.claimedToday
-                        ? dayNum <= effectiveCycleDay
-                        : dayNum < streakState.claimDayNumber && streakState.currentStreakDays > 0;
-                    const isTodayTarget = !streakState.claimedToday && dayNum === Math.min(7, streakState.claimDayNumber);
-
-                    return (
-                      <div
-                        key={dayNum}
-                        className={`rounded-xl py-1.5 px-1 text-center border text-[10px] tabular-nums ${
-                          isDone
-                            ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-bold'
-                            : isTodayTarget
-                            ? 'bg-amber-500/15 border-amber-500/40 text-amber-600 dark:text-amber-400 font-bold'
-                            : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400'
-                        }`}
-                      >
-                        <div className="text-[9px] opacity-80">{dayNum}-k</div>
-                        <div className="font-mono font-bold">+{coins}</div>
-                      </div>
-                    );
-                  })}
-                </div>
               </div>
-
-            </motion.div>
-
-          </div>
+            </div>
+          </motion.div>
         </div>
       </section>
 
-      {/* 2. Standout Feature: Quick Action Dock for Mobile / TMA */}
-      <section className="max-w-7xl mx-auto px-4">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+      {/* 2. Daily Streak Reward Ladder & Featured Daily Mission */}
+      <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* 7-Day Daily Streak Reward Box */}
+          <motion.div
+            variants={itemVariants}
+            className="lg:col-span-7 eco-surface rounded-[28px] p-5 sm:p-6 shadow-xl border-amber-500/25 space-y-4 flex flex-col justify-between"
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className="w-16 h-16 rounded-2xl overflow-hidden border border-amber-400/40 bg-[#06130E] shrink-0 shadow-lg">
+                  <img
+                    src={dailyQuestChestImg}
+                    alt="Kunlik Eko-Mukofot"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-display font-black text-slate-900 dark:text-white text-base sm:text-lg tabular-nums flex items-center gap-1.5">
+                      <Flame className="w-4 h-4 text-amber-500 fill-amber-500 shrink-0" />
+                      {streakState.currentStreakDays > 0
+                        ? `${streakState.currentStreakDays} Kunlik Eko-Streak`
+                        : 'Kunlik Eko-Streak'}
+                    </span>
+                    <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400">
+                      {streakState.claimedToday
+                        ? '· Bugun faol'
+                        : streakState.wasResetDueToInactivity
+                        ? '· Qayta boshlash'
+                        : `· ${streakState.claimDayNumber}-kun tayyor`}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-snug">
+                    {streakState.claimedToday
+                      ? `Bugun +${streakState.todayReward} EcoCoin olindi · Ertaga +${streakState.nextTomorrowReward} EcoCoin`
+                      : streakState.wasResetDueToInactivity
+                      ? 'Kecha kirmaganingiz uchun mukofot 1-kundan (+50 EcoCoin) boshlanadi'
+                      : `Bugun kiring va +${streakState.todayReward} EcoCoin oling · Ertaga +${streakState.nextTomorrowReward}`}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                disabled={streakState.claimedToday || isClaimingStreak}
+                onClick={handleClaimStreak}
+                className={`w-full sm:w-auto px-5 min-h-[44px] rounded-2xl font-black text-xs transition-all flex items-center justify-center gap-2 whitespace-nowrap shrink-0 cursor-pointer ${
+                  streakState.claimedToday
+                    ? 'bg-slate-100 dark:bg-[#05130E] text-slate-500 dark:text-emerald-400/80 cursor-not-allowed border border-slate-200 dark:border-emerald-500/20'
+                    : 'bg-gradient-to-r from-amber-500 to-amber-400 hover:brightness-105 text-[#040D0A] shadow-lg shadow-amber-500/25'
+                }`}
+              >
+                {streakState.claimedToday ? (
+                  <>
+                    <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+                    <span>Bugun olindi</span>
+                  </>
+                ) : (
+                  <>
+                    <Gift className="w-4 h-4 shrink-0" />
+                    <span className="tabular-nums">
+                      {isClaimingStreak ? 'Yuklanmoqda...' : `+${streakState.todayReward} EcoCoin Olish`}
+                    </span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* 7-Day Escalating Reward Ladder */}
+            <div className="grid grid-cols-7 gap-1.5 sm:gap-2 pt-3 border-t border-slate-200/70 dark:border-emerald-500/15">
+              {DAILY_STREAK_REWARDS.map((coins, idx) => {
+                const dayNum = idx + 1;
+                const effectiveCycleDay =
+                  streakState.currentStreakDays > 7 && streakState.claimedToday
+                    ? 7
+                    : streakState.currentStreakDays;
+                const isDone =
+                  streakState.claimedToday
+                    ? dayNum <= effectiveCycleDay
+                    : dayNum < streakState.claimDayNumber && streakState.currentStreakDays > 0;
+                const isTodayTarget = !streakState.claimedToday && dayNum === Math.min(7, streakState.claimDayNumber);
+
+                return (
+                  <div
+                    key={dayNum}
+                    className={`rounded-2xl py-2 px-1 text-center border text-[10px] tabular-nums transition-colors ${
+                      isDone
+                        ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-600 dark:text-emerald-300 font-bold'
+                        : isTodayTarget
+                        ? 'bg-amber-500/20 border-amber-400/60 text-amber-600 dark:text-amber-300 font-black shadow-sm shadow-amber-500/15'
+                        : 'bg-slate-50 dark:bg-[#040D0A] border-slate-200 dark:border-emerald-500/15 text-slate-500 dark:text-slate-400'
+                    }`}
+                  >
+                    <div className="text-[9px] opacity-80">{dayNum}-kun</div>
+                    <div className="font-mono font-bold mt-0.5">+{coins}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.div>
+
+          {/* Featured Daily Mission Spotlight Card */}
+          <motion.div
+            variants={itemVariants}
+            className="lg:col-span-5 relative overflow-hidden rounded-[28px] bg-gradient-to-br from-[#0A261B] via-[#071912] to-[#040D0A] border border-emerald-500/30 p-5 sm:p-6 text-white shadow-xl flex flex-col justify-between gap-4"
+          >
+            <div className="pointer-events-none absolute -right-12 -top-12 w-40 h-40 rounded-full bg-emerald-400/15 blur-2xl" />
+            <div className="space-y-2.5 relative z-10">
+              <div className="flex items-center justify-between gap-2 text-xs">
+                <span className="inline-flex items-center gap-1.5 text-emerald-400 font-black uppercase tracking-wider text-[11px]">
+                  <Target className="w-4 h-4" />
+                  <span>Kunlik Tanlangan Missiya</span>
+                </span>
+                <span className="font-mono tabular-nums text-[11px] font-bold text-slate-300">
+                  {missionCompletions.length} / {activeMissions.length} bajarildi
+                </span>
+              </div>
+
+              {featuredMission ? (
+                <>
+                  <h3 className="font-display text-lg sm:text-xl font-extrabold text-white leading-snug">
+                    {featuredMission.title}
+                  </h3>
+                  <p className="text-xs text-slate-300 leading-relaxed line-clamp-2">
+                    {featuredMission.description}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h3 className="font-display text-lg sm:text-xl font-extrabold text-white leading-snug">
+                    Yangi ekologik missiyalar bilan ball to&apos;plang
+                  </h3>
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    Eko-viktorinalar, Telegram kanallar va amaliy topshiriqlarni bajarib EcoCoin yuting.
+                  </p>
+                </>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between gap-3 pt-3 border-t border-emerald-500/20 relative z-10">
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Mukofot</div>
+                <div className="text-lg font-black font-mono tabular-nums text-amber-400 flex items-center gap-1">
+                  <Coins className="w-4 h-4" />
+                  <span>+{featuredMission?.rewardCoins || 100} EC</span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic('medium');
+                  setActiveTab('missions');
+                }}
+                className="min-h-[42px] px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-400 to-teal-300 hover:brightness-105 text-[#040D0A] font-black text-xs uppercase tracking-wider inline-flex items-center gap-1.5 shadow-lg shadow-emerald-500/25 cursor-pointer"
+              >
+                <span>Bajarish</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* 3. Interactive Environmental Map Preview + Weekly Progress & Achievements */}
+      <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* Interactive Map Preview */}
+          <motion.div
+            variants={itemVariants}
+            className="lg:col-span-7 eco-surface rounded-[28px] p-5 sm:p-6 shadow-xl space-y-4 flex flex-col justify-between"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-[11px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                  <Compass className="w-4 h-4" />
+                  <span>Ekologik Monitoring Xaritasi</span>
+                </div>
+                <h2 className="font-display text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white mt-0.5">
+                  O&apos;zbekiston Jonli Eko-Nuqtalari
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic('light');
+                  setActiveTab('map');
+                }}
+                className="min-h-[38px] px-4 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25 text-xs font-black inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <span>Xaritani Ochish</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Interactive SVG Radar Map rendered strictly from real schools + reports coords */}
+            <div
+              onClick={() => setActiveTab('map')}
+              role="button"
+              tabIndex={0}
+              onKeyDown={e => {
+                if (e.key === 'Enter' || e.key === ' ') setActiveTab('map');
+              }}
+              className="relative h-52 sm:h-56 rounded-2xl bg-[#04110C] border border-emerald-500/25 overflow-hidden cursor-pointer group"
+            >
+              {/* Crisp Geospatial Grid */}
+              <svg
+                viewBox="0 0 100 60"
+                className="w-full h-full"
+                preserveAspectRatio="none"
+                aria-label="O'zbekiston ekologik xarita ko'rinishi"
+              >
+                <defs>
+                  <radialGradient id="mapRadarGlow" cx="50%" cy="50%" r="55%">
+                    <stop offset="0%" stopColor="rgba(16, 185, 129, 0.22)" />
+                    <stop offset="100%" stopColor="rgba(4, 17, 12, 0)" />
+                  </radialGradient>
+                </defs>
+                <rect width="100" height="60" fill="url(#mapRadarGlow)" />
+                {[12, 24, 36, 48].map(y => (
+                  <line key={`h-${y}`} x1="0" y1={y} x2="100" y2={y} stroke="rgba(52,211,153,0.08)" strokeWidth="0.25" />
+                ))}
+                {[20, 40, 60, 80].map(x => (
+                  <line key={`v-${x}`} x1={x} y1="0" x2={x} y2="60" stroke="rgba(52,211,153,0.08)" strokeWidth="0.25" />
+                ))}
+                {/* Stylized Uzbekistan silhouette contour */}
+                <path
+                  d="M8,16 L24,12 L38,24 L54,22 L66,18 L82,25 L92,31 L84,42 L72,49 L58,47 L42,37 L24,33 L12,26 Z"
+                  fill="rgba(16, 185, 129, 0.1)"
+                  stroke="rgba(52, 211, 153, 0.35)"
+                  strokeWidth="0.45"
+                />
+              </svg>
+
+              {/* Live School Pins */}
+              {mapPreviewData.schoolPins.map(pin => (
+                <div
+                  key={pin.id}
+                  title={pin.name}
+                  style={{ left: `${pin.x}%`, top: `${pin.y}%` }}
+                  className="absolute -translate-x-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-indigo-400 ring-2 ring-indigo-400/30"
+                />
+              ))}
+
+              {/* Live Report Pins */}
+              {mapPreviewData.reportPins.map(pin => (
+                <div
+                  key={pin.id}
+                  title={pin.title}
+                  style={{ left: `${pin.x}%`, top: `${pin.y}%` }}
+                  className={`absolute -translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full ring-4 ${
+                    pin.resolved
+                      ? 'bg-emerald-400 ring-emerald-400/25'
+                      : 'bg-amber-400 ring-amber-400/25'
+                  }`}
+                />
+              ))}
+
+              {/* Legend & Summary Footer inside Map */}
+              <div className="absolute bottom-3 left-3 right-3 flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-xl bg-[#040D0A]/85 backdrop-blur-md border border-emerald-500/25 text-[11px] text-slate-200">
+                <div className="flex items-center gap-3 font-semibold tabular-nums">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-indigo-400" />
+                    {schools.length} maktab
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-amber-400" />
+                    {mapPreviewData.pendingCount} faol
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                    {mapPreviewData.resolvedCount} hal etilgan
+                  </span>
+                </div>
+                <span className="text-emerald-400 font-bold group-hover:underline">
+                  2D / 3D Globus →
+                </span>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Weekly Progress & Achievements Card */}
+          <motion.div
+            variants={itemVariants}
+            className="lg:col-span-5 eco-surface rounded-[28px] p-5 sm:p-6 shadow-xl space-y-5 flex flex-col justify-between"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <div className="text-[11px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                  <Award className="w-4 h-4" />
+                  <span>Haftalik Faollik & Yutuqlar</span>
+                </div>
+                <h3 className="font-display text-lg font-extrabold text-slate-900 dark:text-white mt-0.5 tabular-nums">
+                  +{weeklyActivity.totalWeekCoins.toLocaleString()} EC · {weeklyActivity.totalWeekActions} harakat
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab('profile')}
+                className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer shrink-0"
+              >
+                EcoPassport →
+              </button>
+            </div>
+
+            {/* Lightweight 7-day SVG/CSS Bar Chart driven by real transactions */}
+            <div className="grid grid-cols-7 gap-2 items-end h-28 px-2 py-3 rounded-2xl bg-slate-100/80 dark:bg-[#040D0A]/80 border border-slate-200/70 dark:border-emerald-500/15">
+              {weeklyActivity.days.map(day => (
+                <div key={day.key} className="flex flex-col items-center justify-end h-full gap-1.5">
+                  <div className="w-full flex-1 flex items-end justify-center">
+                    <div
+                      title={`${day.label}: +${day.coins} EC (${day.actions} harakat)`}
+                      style={{ height: `${day.pct}%` }}
+                      className={`w-full max-w-[20px] rounded-t-lg transition-all ${
+                        day.isToday
+                          ? 'bg-gradient-to-t from-emerald-500 to-teal-300 shadow-[0_0_10px_rgba(52,211,153,0.45)]'
+                          : day.actions > 0 || day.coins > 0
+                          ? 'bg-emerald-500/60 dark:bg-emerald-500/50'
+                          : 'bg-slate-300/70 dark:bg-emerald-950'
+                      }`}
+                    />
+                  </div>
+                  <span
+                    className={`text-[10px] font-mono ${
+                      day.isToday
+                        ? 'font-black text-emerald-600 dark:text-emerald-400'
+                        : 'text-slate-500 dark:text-slate-400'
+                    }`}
+                  >
+                    {day.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Achievements Badges Summary */}
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className="p-3 rounded-2xl bg-white/80 dark:bg-[#05130E] border border-slate-200/70 dark:border-emerald-500/15 flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/15 text-amber-500 flex items-center justify-center shrink-0">
+                  <Trophy className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold">Unvon</div>
+                  <div className="text-xs font-black text-slate-900 dark:text-white truncate">{user.badge || 'Eko-Lochin'}</div>
+                </div>
+              </div>
+              <div className="p-3 rounded-2xl bg-white/80 dark:bg-[#05130E] border border-slate-200/70 dark:border-emerald-500/15 flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/15 text-emerald-500 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold">Missiyalar</div>
+                  <div className="text-xs font-black text-slate-900 dark:text-white font-mono tabular-nums">
+                    {missionCompletions.length} bajarildi
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* 4. Quick Action Dock for Mobile / TMA */}
+      <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3.5">
           {[
             {
               id: 'missions',
               title: 'Missiyalar',
-              desc: 'Quiz, Kanal & Topshiriqlar',
+              desc: 'Quiz, Kanal · +Coin',
               icon: Target,
-              gradient: 'from-amber-500 to-orange-500',
-              badge: '+Coin',
+              gradient: 'from-emerald-500 to-teal-400',
             },
             {
               id: 'ai',
               title: 'AI Eko-Lab',
-              desc: 'Sun\'iy intellekt tahlili',
+              desc: 'EcoHero AI tahlili',
               icon: Sparkles,
-              gradient: 'from-emerald-500 to-teal-500',
-              badge: 'EcoHero AI',
+              gradient: 'from-emerald-400 to-cyan-500',
             },
             {
               id: 'championship',
               title: '3 Bosqichli Liga',
-              desc: 'Tuman, Viloyat, Respublika',
+              desc: 'Tuman · Viloyat · Respublika',
               icon: Trophy,
-              gradient: 'from-yellow-500 to-amber-500',
-              badge: 'Mavsumiy',
+              gradient: 'from-amber-400 to-orange-500',
             },
             {
               id: 'shop',
               title: 'Eko-Bozor',
-              desc: 'Sovg\'alar va gadjetlar',
+              desc: "Sovg'alar va vaucherlar",
               icon: Gift,
-              gradient: 'from-indigo-500 to-blue-500',
-              badge: 'Sovg\'alar',
+              gradient: 'from-teal-500 to-emerald-500',
             },
             {
               id: 'referral',
-              title: 'Do\'stlarni Taklif',
-              desc: '+100 EcoCoin har bir do\'stga',
+              title: "Do'stlarni Taklif",
+              desc: "+100 EcoCoin bonus",
               icon: Share2,
-              gradient: 'from-rose-500 to-pink-500',
-              badge: 'Bonus',
+              gradient: 'from-rose-500 to-amber-500',
             },
           ].map(act => {
             const Icon = act.icon;
             return (
               <motion.button
-                whileHover={{ y: -3 }}
-                whileTap={{ scale: 0.97 }}
+                whileHover={{ y: -2 }}
+                whileTap={{ scale: 0.98 }}
                 key={act.id}
                 onClick={() => {
                   triggerHaptic('light');
                   setActiveTab(act.id);
                 }}
-                className="p-4 rounded-3xl bg-slate-900/90 border border-slate-800 hover:border-slate-700 text-left transition-all group shadow-sm flex flex-col justify-between cursor-pointer"
+                className="min-h-[84px] p-3.5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 hover:border-emerald-400/60 text-left transition-all group shadow-sm flex flex-col justify-between cursor-pointer"
               >
-                <div className="flex items-center justify-between mb-3">
-                  <div className={`w-10 h-10 rounded-2xl bg-gradient-to-tr ${act.gradient} text-white flex items-center justify-center shadow-md`}>
-                    <Icon className="w-5 h-5" />
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className={`w-9 h-9 rounded-xl bg-gradient-to-tr ${act.gradient} text-slate-950 flex items-center justify-center shadow-sm`}>
+                    <Icon className="w-4.5 h-4.5" />
                   </div>
-                  <span className="text-[10px] font-bold text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full">
-                    {act.badge}
-                  </span>
+                  <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-400 group-hover:translate-x-0.5 transition-all" />
                 </div>
                 <div>
-                  <h4 className="font-extrabold text-sm text-white group-hover:text-emerald-400 transition-colors">
+                  <h4 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white group-hover:text-emerald-400 transition-colors truncate">
                     {act.title}
                   </h4>
-                  <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1">
                     {act.desc}
                   </p>
                 </div>
@@ -582,62 +1022,62 @@ export const HomePage: React.FC = () => {
         </div>
       </section>
 
-      {/* 3. Key Metrics: 100% Real Live Database Totals */}
-      <section className="max-w-7xl mx-auto px-4">
-        <motion.div variants={itemVariants} className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
+      {/* 5. Key Metrics: 100% Real Live Database Totals */}
+      <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+        <motion.div variants={itemVariants} className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-5">
           {[
-            { label: 'Ro\'yxatdan o\'tgan Maktablar', val: liveMetrics.totalSchools.toLocaleString(), icon: School, color: 'text-indigo-400' },
-            { label: 'Ro\'yxatdagi O\'quvchilar', val: liveMetrics.totalUsers.toLocaleString(), icon: Users, color: 'text-emerald-400' },
-            { label: 'Hal Qilingan Muammolar', val: liveMetrics.resolvedReports.toLocaleString(), icon: Target, color: 'text-teal-400' },
-            { label: 'Ekilgan Daraxtlar', val: liveMetrics.treesPlanted.toLocaleString(), icon: TreePine, color: 'text-amber-400' },
+            { label: "Ro'yxatdan o'tgan Maktablar", val: liveMetrics.totalSchools.toLocaleString(), icon: School, color: 'text-indigo-500 dark:text-indigo-400' },
+            { label: "Ro'yxatdagi O'quvchilar", val: liveMetrics.totalUsers.toLocaleString(), icon: Users, color: 'text-emerald-600 dark:text-emerald-400' },
+            { label: 'Hal Qilingan Muammolar', val: liveMetrics.resolvedReports.toLocaleString(), icon: Target, color: 'text-teal-600 dark:text-teal-400' },
+            { label: 'Ekilgan Daraxtlar', val: liveMetrics.treesPlanted.toLocaleString(), icon: TreePine, color: 'text-amber-500 dark:text-amber-400' },
           ].map((m) => (
-            <div key={m.label} className="group p-5 sm:p-6 bg-slate-900 border border-slate-800 rounded-3xl shadow-sm hover:border-emerald-500/50 transition-all text-center space-y-1">
-               <div className={`w-10 h-10 rounded-2xl bg-slate-800 ${m.color} flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform`}>
-                  <m.icon className="w-5 h-5" />
-               </div>
-               <div className="text-2xl sm:text-3xl font-black text-white font-mono tracking-tight tabular-nums">{m.val}</div>
-               <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{m.label}</div>
+            <div key={m.label} className="group p-5 sm:p-6 eco-surface rounded-3xl shadow-sm hover:border-emerald-500/45 transition-all text-center space-y-1">
+              <div className={`w-10 h-10 rounded-2xl bg-slate-100 dark:bg-[#040D0A] border border-slate-200/80 dark:border-emerald-500/20 ${m.color} flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform`}>
+                <m.icon className="w-5 h-5" />
+              </div>
+              <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white font-mono tracking-tight tabular-nums">{m.val}</div>
+              <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">{m.label}</div>
             </div>
           ))}
         </motion.div>
       </section>
 
-      {/* 4. Ad Placement: Premium Banner */}
-      <section className="max-w-7xl mx-auto px-4">
+      {/* 6. Ad Placement: Premium Banner */}
+      <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
         <EcoAdBanner placement="home_top" />
       </section>
 
-      {/* 4.5 Sardorlar va Platforma Postlari (Bot yangiliklari, saytlar, kanallar) */}
+      {/* 7. Sardorlar va Platforma Postlari */}
       {(activeHomePosts.length > 0 || isSuperAdmin) && (
-        <section className="max-w-7xl mx-auto px-4">
+        <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
           <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
             <div className="min-w-0 space-y-1">
-              <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+              <h2 className="font-display text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
                 Sardorlar & Platforma Postlari
               </h2>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 Bot yangiliklari, hamkor saytlar, Telegram kanallar va maktab tadbirlari
               </p>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              {isSuperAdmin && (
+            {isSuperAdmin && (
+              <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={openCreatePost}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>Post Qo'shish</span>
+                  <span>Post Qo&apos;shish</span>
                 </button>
-              )}
-              <button
-                onClick={() => setActiveTab('admin')}
-                className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer shrink-0"
-              >
-                <span>Kabinetdan boshqarish</span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
+                <button
+                  onClick={() => setActiveTab('admin')}
+                  className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline transition-colors cursor-pointer shrink-0"
+                >
+                  <span>Kabinetdan boshqarish</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -649,25 +1089,25 @@ export const HomePage: React.FC = () => {
               return (
                 <article
                   key={post.id}
-                  className="min-w-0 bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden flex flex-col justify-between shadow-lg hover:border-emerald-500/40 transition-colors"
+                  className="min-w-0 eco-surface rounded-3xl overflow-hidden flex flex-col justify-between shadow-lg hover:border-emerald-500/40 transition-colors"
                 >
                   <div className="min-w-0">
-                    <div className="relative h-44 bg-slate-950 overflow-hidden">
+                    <div className="relative h-44 bg-[#040D0A] overflow-hidden">
                       <img
                         src={resolveMediaUrl(post.imageUrl || '/assets/schools/eco_courtyard.jpg')}
                         onError={e => {
-                          e.currentTarget.src = '/assets/schools/eco_courtyard.jpg';
+                          e.currentTarget.src = heroEcoForestImg;
                         }}
                         alt={post.title}
                         className="w-full h-full object-cover"
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/20 to-transparent" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-[#040D0A]/90 via-[#040D0A]/25 to-transparent" />
                       {isSuperAdmin && (
                         <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5">
                           <button
                             type="button"
                             onClick={() => openEditPost(post)}
-                            className="p-2 rounded-xl bg-slate-950/80 text-amber-300 hover:bg-amber-500 hover:text-slate-950 transition-colors cursor-pointer"
+                            className="p-2 rounded-xl bg-[#040D0A]/80 text-amber-300 hover:bg-amber-500 hover:text-slate-950 transition-colors cursor-pointer"
                             title="Postni o'zgartirish"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
@@ -675,7 +1115,7 @@ export const HomePage: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => deleteHomePost(post.id)}
-                            className="p-2 rounded-xl bg-slate-950/80 text-rose-400 hover:bg-rose-500 hover:text-white transition-colors cursor-pointer"
+                            className="p-2 rounded-xl bg-[#040D0A]/80 text-rose-400 hover:bg-rose-500 hover:text-white transition-colors cursor-pointer"
                             title="Postni o'chirish"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -688,25 +1128,25 @@ export const HomePage: React.FC = () => {
                           {post.isPinned ? ' · Muhim' : ''}
                         </span>
                         {formattedDate && (
-                          <span className="text-slate-300 font-mono tabular-nums shrink-0">{formattedDate}</span>
+                          <span className="text-slate-200 font-mono tabular-nums shrink-0">{formattedDate}</span>
                         )}
                       </div>
                     </div>
 
                     <div className="p-5 space-y-2.5 min-w-0">
-                      <h3 className="text-base font-extrabold text-white tracking-tight break-words">
+                      <h3 className="text-base font-extrabold text-slate-900 dark:text-white tracking-tight break-words">
                         {post.title}
                       </h3>
-                      <p className="text-xs text-slate-300 leading-relaxed break-words line-clamp-3">
+                      <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed break-words line-clamp-3">
                         {post.content}
                       </p>
                     </div>
                   </div>
 
-                  <div className="px-5 pb-5 pt-3 border-t border-slate-800/80 flex items-center justify-between gap-3">
-                    <div className="min-w-0 text-[11px] text-slate-400 truncate">
+                  <div className="px-5 pb-5 pt-3 border-t border-slate-200/70 dark:border-emerald-500/15 flex items-center justify-between gap-3">
+                    <div className="min-w-0 text-[11px] text-slate-500 dark:text-slate-400 truncate">
                       {post.schoolName ? `${post.schoolName} · ` : ''}
-                      <span className="text-slate-300 font-semibold">{post.authorName}</span>
+                      <span className="text-slate-800 dark:text-slate-200 font-semibold">{post.authorName}</span>
                     </div>
 
                     {post.ctaUrl && (
@@ -727,38 +1167,60 @@ export const HomePage: React.FC = () => {
         </section>
       )}
 
-      {/* 5. Spotlight: Latest Impact Reports */}
-      <section className="max-w-7xl mx-auto px-4">
-        <div className="flex items-end justify-between mb-8">
-           <div className="space-y-1">
-              <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">Jonli Eko-Hisobotlar</h2>
-              <p className="text-xs text-slate-400">O'zbekiston bo'ylab o'quvchilar tomonidan yuborilgan so'nggi arizalar</p>
-           </div>
-           <button onClick={() => setActiveTab('map')} className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer">
-              <span>Barchasi xaritada</span>
-              <ChevronRight className="w-4 h-4" />
-           </button>
+      {/* 8. Community Activity Feed: Latest Impact Reports */}
+      <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+        <div className="flex items-end justify-between mb-6">
+          <div className="space-y-1">
+            <h2 className="font-display text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+              Jonli Eko-Hisobotlar
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              O&apos;zbekiston bo&apos;ylab o&apos;quvchilar tomonidan yuborilgan so&apos;nggi arizalar
+            </p>
+          </div>
+          <button
+            onClick={() => setActiveTab('map')}
+            className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline transition-colors cursor-pointer shrink-0"
+          >
+            <span>Barchasi xaritada</span>
+            <ChevronRight className="w-4 h-4" />
+          </button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {recentReports.map(report => (
             <motion.div
-              whileHover={{ y: -6 }}
+              whileHover={{ y: -4 }}
               key={report.id}
-              className="group bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-xl"
+              className="group eco-surface rounded-3xl overflow-hidden shadow-xl hover:border-emerald-500/40 transition-colors"
             >
-              <div className="relative h-48 overflow-hidden">
-                <img src={resolveMediaUrl(report.imageUrl)} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="" />
-                <div className="absolute top-3 left-3 px-2.5 py-1 bg-black/60 backdrop-blur-md rounded-full text-[10px] font-bold text-white uppercase tracking-wider">{report.region}</div>
-                <div className={`absolute top-3 right-3 px-2.5 py-1 rounded-full text-[10px] font-bold text-white uppercase tracking-wider ${report.status === 'resolved' || report.status === 'RESOLVED' ? 'bg-emerald-600' : 'bg-amber-600'}`}>
-                   {report.status === 'resolved' || report.status === 'RESOLVED' ? 'Hal qilindi' : 'O\'rganilmoqda'}
+              <div className="relative h-48 overflow-hidden bg-[#040D0A]">
+                <img
+                  src={resolveMediaUrl(report.imageUrl)}
+                  referrerPolicy="no-referrer"
+                  onError={e => {
+                    e.currentTarget.src = heroEcoForestImg;
+                  }}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  alt={report.title}
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#040D0A]/75 via-transparent to-black/25" />
+                <div className="absolute top-3 left-3 px-2.5 py-1 bg-[#040D0A]/75 backdrop-blur-md border border-white/10 rounded-full text-[10px] font-bold text-white uppercase tracking-wider">
+                  {report.region}
+                </div>
+                <div
+                  className={`absolute top-3 right-3 px-2.5 py-1 rounded-full text-[10px] font-bold text-white uppercase tracking-wider ${
+                    report.status === 'resolved' || report.status === 'RESOLVED' ? 'bg-emerald-600' : 'bg-amber-600'
+                  }`}
+                >
+                  {report.status === 'resolved' || report.status === 'RESOLVED' ? 'Hal qilindi' : "O'rganilmoqda"}
                 </div>
                 {isSuperAdmin && (
                   <div className="absolute bottom-3 right-3 z-10 flex items-center gap-1.5">
                     <button
                       type="button"
                       onClick={() => openEditReport(report)}
-                      className="p-2 rounded-xl bg-slate-950/85 text-amber-300 hover:bg-amber-500 hover:text-slate-950 transition-colors cursor-pointer"
+                      className="p-2 rounded-xl bg-[#040D0A]/85 text-amber-300 hover:bg-amber-500 hover:text-slate-950 transition-colors cursor-pointer"
                       title="Hisobotni o'zgartirish"
                     >
                       <Edit2 className="w-3.5 h-3.5" />
@@ -766,7 +1228,7 @@ export const HomePage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => deleteReport(report.id)}
-                      className="p-2 rounded-xl bg-slate-950/85 text-rose-400 hover:bg-rose-500 hover:text-white transition-colors cursor-pointer"
+                      className="p-2 rounded-xl bg-[#040D0A]/85 text-rose-400 hover:bg-rose-500 hover:text-white transition-colors cursor-pointer"
                       title="Hisobotni o'chirish"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -775,22 +1237,26 @@ export const HomePage: React.FC = () => {
                 )}
               </div>
               <div className="p-5 space-y-3">
-                <div className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
-                   <School className="w-3.5 h-3.5 text-emerald-400" />
-                   <span className="truncate">{report.schoolName}</span>
+                <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                  <School className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                  <span className="truncate">{report.schoolName}</span>
                 </div>
-                <h3 className="text-base font-extrabold text-white tracking-tight truncate">{report.title}</h3>
-                <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">{report.description}</p>
-                <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
-                   <div className="flex items-center gap-1 text-amber-400 font-bold text-xs">
-                      <Coins className="w-4 h-4 fill-amber-400/20" /> +{report.rewardCoins} Eco
-                   </div>
-                   <button
+                <h3 className="text-base font-extrabold text-slate-900 dark:text-white tracking-tight truncate">
+                  {report.title}
+                </h3>
+                <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2 leading-relaxed">
+                  {report.description}
+                </p>
+                <div className="pt-3 border-t border-slate-200/70 dark:border-emerald-500/15 flex items-center justify-between">
+                  <div className="flex items-center gap-1 text-amber-500 dark:text-amber-400 font-bold font-mono tabular-nums text-xs">
+                    <Coins className="w-4 h-4 fill-amber-400/20" /> +{report.rewardCoins} Eco
+                  </div>
+                  <button
                     onClick={() => setActiveTab('map')}
-                    className="p-2 bg-slate-800 hover:bg-emerald-600 text-slate-300 hover:text-white rounded-xl transition-colors cursor-pointer"
-                   >
-                     <ChevronRight className="w-4 h-4" />
-                   </button>
+                    className="p-2 bg-slate-100 dark:bg-[#0D261D] hover:bg-emerald-600 text-slate-600 dark:text-emerald-300 hover:text-white rounded-xl transition-colors cursor-pointer"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             </motion.div>
@@ -798,70 +1264,93 @@ export const HomePage: React.FC = () => {
         </div>
       </section>
 
-      {/* 6. Eco Media: Latest News Section */}
-      <section className="max-w-7xl mx-auto px-4">
-        <div className="flex items-end justify-between mb-8">
-           <div className="space-y-1">
-              <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">Eko Media & Akademiya</h2>
-              <p className="text-xs text-slate-400">Ekologik ta'lim va so'nggi yangiliklar markazi</p>
-           </div>
-           <button onClick={() => setActiveTab('media')} className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer">
-              <span>Barchasini o'qish</span>
-              <ChevronRight className="w-4 h-4" />
-           </button>
+      {/* 9. Eco Media & Akademiya */}
+      <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+        <div className="flex items-end justify-between mb-6">
+          <div className="space-y-1">
+            <h2 className="font-display text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+              Eko Media & Akademiya
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Ekologik ta&apos;lim va so&apos;nggi yangiliklar markazi
+            </p>
+          </div>
+          <button
+            onClick={() => setActiveTab('media')}
+            className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline transition-colors cursor-pointer shrink-0"
+          >
+            <span>Barchasini o&apos;qish</span>
+            <ChevronRight className="w-4 h-4" />
+          </button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-           {/* Big Article Preview */}
-           <motion.div 
-             whileHover={{ scale: 1.01 }}
-             onClick={() => setActiveTab('media')}
-             className="relative aspect-[16/9] rounded-3xl overflow-hidden shadow-2xl cursor-pointer group"
-           >
-              <img src="https://images.unsplash.com/photo-1473081556163-2a17de81fc97?auto=format&fit=crop&w=1200&q=80" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" alt="" />
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
-              <div className="absolute bottom-6 left-6 right-6 space-y-2">
-                 <span className="px-2.5 py-1 bg-emerald-600 text-white rounded-lg text-[9px] font-black uppercase tracking-wider">Top Yangilik</span>
-                 <h3 className="text-xl font-black text-white tracking-tight">O'zbekistonda 'Yashil Makon' 2026 yangi mavsumi start oldi</h3>
-                 <p className="text-slate-300 text-xs line-clamp-2">Loyiha doirasida har bir maktabda ko'kalamzorlashtirish aksiyasi va o'quvchilar o'rtasida Eko-Chempionat o'tkazilmoqda.</p>
-              </div>
-           </motion.div>
+          <motion.div
+            whileHover={{ scale: 1.01 }}
+            onClick={() => setActiveTab('media')}
+            className="relative aspect-[16/9] rounded-3xl overflow-hidden shadow-2xl cursor-pointer group border border-emerald-500/25"
+          >
+            <img
+              src={heroEcoForestImg}
+              className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+              alt="Yashil Makon 2026"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#040D0A] via-[#040D0A]/45 to-transparent" />
+            <div className="absolute bottom-6 left-6 right-6 space-y-2">
+              <span className="px-2.5 py-1 bg-emerald-500 text-[#040D0A] rounded-lg text-[10px] font-black uppercase tracking-wider">
+                Top Yangilik
+              </span>
+              <h3 className="font-display text-xl font-black text-white tracking-tight">
+                O&apos;zbekistonda &apos;Yashil Makon&apos; 2026 yangi mavsumi start oldi
+              </h3>
+              <p className="text-slate-200 text-xs line-clamp-2">
+                Loyiha doirasida har bir maktabda ko&apos;kalamzorlashtirish aksiyasi va o&apos;quvchilar o&apos;rtasida Eko-Chempionat o&apos;tkazilmoqda.
+              </p>
+            </div>
+          </motion.div>
 
-           <div className="space-y-3.5">
-              {[
-                { title: 'Plastikni saralash va qayta ishlashning 5 oltin qoidasi', cat: 'Akademiya', date: '2 kun avval' },
-                { title: 'Eko Chempionat: Maktablar o\'rtasida tuman bosqichi qizg\'in kechmoqda', cat: 'Reyting', date: 'Kecha' },
-                { title: 'EcoHero AI bilan daraxt turlarini aniqlash va parvarishlash', cat: 'Texnologiya', date: 'Bugun' },
-              ].map((news, i) => (
-                <div key={i} onClick={() => setActiveTab('media')} className="p-4 sm:p-5 bg-slate-900 rounded-2xl border border-slate-800 flex items-center justify-between group cursor-pointer hover:border-emerald-500/50 transition-all">
-                   <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                         <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">{news.cat}</span>
-                         <span className="text-[10px] text-slate-500">{news.date}</span>
-                      </div>
-                      <h4 className="text-xs sm:text-sm font-bold text-white group-hover:text-emerald-400 transition-colors">{news.title}</h4>
-                   </div>
-                   <div className="w-8 h-8 rounded-xl bg-slate-800 flex items-center justify-center text-slate-400 group-hover:bg-emerald-600 group-hover:text-white transition-all shrink-0 ml-3">
-                      <ArrowRight className="w-4 h-4" />
-                   </div>
+          <div className="space-y-3.5">
+            {[
+              { title: 'Plastikni saralash va qayta ishlashning 5 oltin qoidasi', cat: 'Akademiya', date: '2 kun avval' },
+              { title: "Eko Chempionat: Maktablar o'rtasida tuman bosqichi qizg'in kechmoqda", cat: 'Reyting', date: 'Kecha' },
+              { title: 'EcoHero AI bilan daraxt turlarini aniqlash va parvarishlash', cat: 'Texnologiya', date: 'Bugun' },
+            ].map((news, i) => (
+              <div
+                key={i}
+                onClick={() => setActiveTab('media')}
+                className="p-4 sm:p-5 eco-surface rounded-2xl flex items-center justify-between group cursor-pointer hover:border-emerald-500/45 transition-all"
+              >
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 text-[11px]">
+                    <span className="font-bold text-emerald-600 dark:text-emerald-400">{news.cat}</span>
+                    <span className="text-slate-400">·</span>
+                    <span className="text-slate-500">{news.date}</span>
+                  </div>
+                  <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                    {news.title}
+                  </h4>
                 </div>
-              ))}
-           </div>
+                <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-[#0D261D] flex items-center justify-center text-slate-500 dark:text-emerald-300 group-hover:bg-emerald-500 group-hover:text-[#040D0A] transition-all shrink-0 ml-3">
+                  <ArrowRight className="w-4 h-4" />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
-      {/* 7. Strategic Partners Strip */}
-      <section className="max-w-7xl mx-auto px-4">
-        <div className="p-6 rounded-3xl bg-slate-900/60 border border-slate-800 text-center space-y-4">
-          <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-            Rasmiy Hamkorlar va Tizim Qo'llab-Quvvatlovchilari
+      {/* 10. Strategic Partners Strip */}
+      <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+        <div className="p-6 rounded-3xl eco-surface text-center space-y-4">
+          <div className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+            Rasmiy Hamkorlar va Tizim Qo&apos;llab-Quvvatlovchilari
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5 sm:gap-3">
-            {['EKOLOGIYA VAZIRLIGI', 'MAKTABGACHA TA\'LIM', 'YOSHLAR ISHLARI', 'SANFA EKO', 'IT PARK', 'YASHIL MAKON'].map((p, i) => (
+            {['EKOLOGIYA VAZIRLIGI', "MAKTABGACHA TA'LIM", 'YOSHLAR ISHLARI', 'SANFA EKO', 'IT PARK', 'YASHIL MAKON'].map((p, i) => (
               <div
                 key={i}
                 onClick={() => setActiveTab('partners')}
-                className="py-3 px-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-400 font-extrabold text-[9px] sm:text-[10px] break-words hover:text-emerald-400 hover:border-emerald-500/40 cursor-pointer transition-colors"
+                className="py-3 px-2 rounded-xl bg-white dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/15 text-slate-600 dark:text-slate-300 font-extrabold text-[10px] break-words hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-500/45 cursor-pointer transition-colors"
               >
                 {p}
               </div>
@@ -873,9 +1362,9 @@ export const HomePage: React.FC = () => {
       {/* Super Admin Inline Report Edit Modal */}
       {editingReport && (
         <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-3xl bg-slate-900 border border-slate-800 text-white p-6 space-y-4 shadow-2xl">
+          <div className="w-full max-w-md rounded-3xl bg-[#071812] border border-emerald-500/25 text-white p-6 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between">
-              <h3 className="text-base font-black uppercase">Hisobotni O'zgartirish</h3>
+              <h3 className="text-base font-black uppercase">Hisobotni O&apos;zgartirish</h3>
               <button
                 type="button"
                 onClick={() => setEditingReport(null)}
@@ -891,14 +1380,14 @@ export const HomePage: React.FC = () => {
                 value={repTitle}
                 onChange={e => setRepTitle(e.target.value)}
                 placeholder="Sarlavha"
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 font-semibold outline-none focus:border-emerald-500"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-[#040D0A] border border-emerald-500/20 font-semibold outline-none focus:border-emerald-500"
               />
               <textarea
                 rows={3}
                 value={repDesc}
                 onChange={e => setRepDesc(e.target.value)}
                 placeholder="Tavsif"
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 font-semibold outline-none focus:border-emerald-500 resize-none"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-[#040D0A] border border-emerald-500/20 font-semibold outline-none focus:border-emerald-500 resize-none"
               />
               <div className="grid grid-cols-2 gap-3">
                 <input
@@ -906,12 +1395,12 @@ export const HomePage: React.FC = () => {
                   value={repCoins}
                   onChange={e => setRepCoins(e.target.value)}
                   placeholder="EcoCoin mukofoti"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 font-semibold outline-none"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#040D0A] border border-emerald-500/20 font-semibold outline-none"
                 />
                 <select
                   value={repStatus}
                   onChange={e => setRepStatus(e.target.value as ProblemStatus)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 font-semibold outline-none"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#040D0A] border border-emerald-500/20 font-semibold outline-none"
                 >
                   <option value="pending">pending (Kutilmoqda)</option>
                   <option value="verified">verified (Tasdiqlangan)</option>
@@ -942,7 +1431,7 @@ export const HomePage: React.FC = () => {
               <button
                 type="submit"
                 disabled={savingReport || uploadingMedia}
-                className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase tracking-wider cursor-pointer disabled:opacity-50"
+                className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-[#040D0A] font-black uppercase tracking-wider cursor-pointer disabled:opacity-50"
               >
                 {savingReport ? 'Saqlanmoqda...' : 'Saqlash'}
               </button>
@@ -952,9 +1441,9 @@ export const HomePage: React.FC = () => {
       )}
 
       {/* Super Admin Inline Post Create / Edit Modal */}
-      {postModalOpen && (
+      {isSuperAdmin && postModalOpen && (
         <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-3xl bg-slate-900 border border-slate-800 text-white p-6 space-y-4 shadow-2xl">
+          <div className="w-full max-w-md rounded-3xl bg-[#071812] border border-emerald-500/25 text-white p-6 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-black uppercase">
                 {editingPost ? "Postni O'zgartirish" : "Yangi Post Qo'shish"}
@@ -971,7 +1460,7 @@ export const HomePage: React.FC = () => {
               <select
                 value={postCategory}
                 onChange={e => setPostCategory(e.target.value as HomePostCategory)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 font-semibold outline-none"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-[#040D0A] border border-emerald-500/20 font-semibold outline-none"
               >
                 <option value="news">Eko-yangilik</option>
                 <option value="bot_news">Bot yangiligi</option>
@@ -985,7 +1474,7 @@ export const HomePage: React.FC = () => {
                 value={postTitle}
                 onChange={e => setPostTitle(e.target.value)}
                 placeholder="Post sarlavhasi"
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 font-semibold outline-none"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-[#040D0A] border border-emerald-500/20 font-semibold outline-none"
               />
               <textarea
                 rows={3}
@@ -993,7 +1482,7 @@ export const HomePage: React.FC = () => {
                 value={postContent}
                 onChange={e => setPostContent(e.target.value)}
                 placeholder="Post matni"
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 font-semibold outline-none resize-none"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-[#040D0A] border border-emerald-500/20 font-semibold outline-none resize-none"
               />
               <div className="flex items-center gap-3">
                 <label className="flex-1 px-3.5 py-2.5 rounded-xl bg-sky-600/20 border border-sky-500/40 text-sky-300 font-bold flex items-center justify-center gap-2 cursor-pointer">
@@ -1020,14 +1509,14 @@ export const HomePage: React.FC = () => {
                   value={postCtaText}
                   onChange={e => setPostCtaText(e.target.value)}
                   placeholder="Tugma matni"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 font-semibold outline-none"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#040D0A] border border-emerald-500/20 font-semibold outline-none"
                 />
                 <input
                   type="text"
                   value={postCtaUrl}
                   onChange={e => setPostCtaUrl(e.target.value)}
                   placeholder="Havola URL"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 font-semibold outline-none"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#040D0A] border border-emerald-500/20 font-semibold outline-none"
                 />
               </div>
               <label className="flex items-center gap-2 text-slate-300 font-semibold cursor-pointer">
@@ -1042,7 +1531,7 @@ export const HomePage: React.FC = () => {
               <button
                 type="submit"
                 disabled={savingPost || uploadingMedia}
-                className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase tracking-wider cursor-pointer disabled:opacity-50"
+                className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-[#040D0A] font-black uppercase tracking-wider cursor-pointer disabled:opacity-50"
               >
                 {savingPost ? 'Saqlanmoqda...' : 'Saqlash'}
               </button>
@@ -1050,7 +1539,6 @@ export const HomePage: React.FC = () => {
           </div>
         </div>
       )}
-
     </motion.div>
   );
 };

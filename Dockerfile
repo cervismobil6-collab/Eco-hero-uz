@@ -32,10 +32,8 @@ COPY --from=builder /app/src ./src
 COPY --from=builder /app/server.ts ./
 COPY --from=builder /app/server-db.ts ./
 COPY --from=builder /app/server-security.ts ./
-COPY --from=builder /app/index.js ./
 COPY --from=builder /app/tsconfig.json ./
 COPY --from=builder /app/firebase-applet-config.json ./
-COPY --from=builder /app/server-bot-config.json ./
 RUN mkdir -p /app/public/uploads
 
 EXPOSE 3000

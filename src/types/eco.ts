@@ -578,6 +578,15 @@ export interface EcoAd {
   complianceNote: string;
 }
 
+export interface AdWatchState {
+  cooldownHours: number;
+  lastWatchedAdId: string | null;
+  lastClaimedAt: string | null;
+  nextAvailableAt: string | null;
+  remainingSeconds: number;
+  perAdLastClaimedAt: Record<string, string>;
+}
+
 export interface ShopOrder {
   id: string;
   userId: string;
@@ -1079,6 +1088,8 @@ export interface EcoMission {
   channelUrl?: string;
   requiresProof?: boolean;
   proofType?: 'image' | 'video' | 'text' | 'any';
+  difficulty?: 'easy' | 'medium' | 'hard';
+  durationMinutes?: number;
   createdAt: string;
   createdByUid?: string;
   createdByName?: string;
@@ -1108,4 +1119,215 @@ export interface MissionSubmission {
   createdAt: string;
 }
 
+export interface StudentRatingEntry {
+  uid: string;
+  fullName: string;
+  grade?: string;
+  schoolId?: string;
+  schoolName?: string;
+  region?: string;
+  district?: string;
+  badge?: string;
+  avatarUrl?: string;
+  role?: string;
+  rank: number;
+  monthlyScore: number;
+  monthlyEarnedCoins: number;
+  monthlyActivitiesCount: number;
+  monthlyReportsCount: number;
+  monthlyMediaCount: number;
+  monthlyMissionsCount: number;
+  totalCoins: number;
+  treesPlanted: number;
+  isMe?: boolean;
+}
 
+export interface StudentRatingPrizeTier {
+  rank: number;
+  title: string;
+  bonusCoins: number;
+}
+
+export interface StudentMonthlyAwardRecord {
+  id: string;
+  scope: 'school' | 'district';
+  periodKey: string;
+  periodLabel: string;
+  region: string;
+  district: string;
+  schoolId?: string;
+  schoolName?: string;
+  winners: {
+    uid: string;
+    fullName: string;
+    schoolName?: string;
+    grade?: string;
+    rank: number;
+    monthlyScore: number;
+    prizeTitle: string;
+    bonusCoins: number;
+    promoCode: string;
+  }[];
+  awardedByUid: string;
+  awardedByName: string;
+  awardedAt: string;
+}
+
+export interface StudentRatingScopePayload {
+  scope: 'school' | 'district';
+  schoolId?: string;
+  schoolName?: string;
+  region: string;
+  district: string;
+  enabled: boolean;
+  minMembersThreshold: number;
+  currentMembersCount: number;
+  canActivate: boolean;
+  isLiveActive: boolean;
+  periodKey: string;
+  periodLabel: string;
+  daysRemainingInMonth: number;
+  isLastDayOfMonth: boolean;
+  lastDayDateLabel: string;
+  prizes: StudentRatingPrizeTier[];
+  top10: StudentRatingEntry[];
+  previewTop10?: StudentRatingEntry[];
+  totalParticipants: number;
+  myRank: number | null;
+  myEntry: StudentRatingEntry | null;
+  isCallerInTop10: boolean;
+  pointsToTop10: number | null;
+  pointsToTop3?: number | null;
+  pointsToTop1?: number | null;
+  alreadyAwardedThisMonth: boolean;
+  recentWinners: StudentMonthlyAwardRecord[];
+}
+
+export interface StudentRatingsCabinetResponse {
+  success: boolean;
+  school: StudentRatingScopePayload;
+  district: StudentRatingScopePayload;
+}
+
+export interface StudentRatingsManageResponse {
+  success: boolean;
+  school?: StudentRatingScopePayload | null;
+  district?: StudentRatingScopePayload | null;
+}
+
+export interface WeeklyChallengeSummary {
+  weekKey: string;
+  title: string;
+  description: string;
+  targetActions: number;
+  rewardCoins: number;
+  endIso: string;
+  serverNow?: string;
+  daysRemaining: number;
+  hoursRemaining: number;
+  minutesRemaining?: number;
+  secondsRemaining?: number;
+  participantsCount: number;
+  joined: boolean;
+  progress: number;
+  completed: boolean;
+  claimed: boolean;
+}
+
+export interface SchoolTeamMissionSummary {
+  schoolId: string;
+  schoolName: string;
+  region?: string;
+  district?: string;
+  membersCount: number;
+  currentXp: number;
+  targetXp: number;
+  rewardCoins: number;
+  schoolRank: number | null;
+  progressPct: number;
+}
+
+export interface ChampionshipStageScheduleInfo {
+  cycleLabel: string;
+  periodKey: string;
+  endsAt?: string;
+  serverNow?: string;
+  daysRemaining: number;
+  hoursRemaining: number;
+  minutesRemaining?: number;
+  secondsRemaining?: number;
+  unlocked?: boolean;
+}
+
+export interface ChampionshipEligibility {
+  districtUnlocked: boolean;
+  regionalUnlocked: boolean;
+  nationalUnlocked: boolean;
+  isPrivileged: boolean;
+  isQualifiedTop3: boolean;
+  callerDistrictRank: number | null;
+  callerSchoolDistrictRank: number | null;
+  reasonUz: string;
+  stageSchedule: {
+    district: ChampionshipStageScheduleInfo;
+    regional: ChampionshipStageScheduleInfo;
+    national: ChampionshipStageScheduleInfo;
+  };
+}
+
+export interface ChampionshipSchoolEntry {
+  id: string;
+  name: string;
+  number?: string;
+  region: string;
+  district: string;
+  studentsCount: number;
+  treesPlanted: number;
+  resolvedReports: number;
+  approvedMedia: number;
+  totalCoins: number;
+  points: number;
+  logoUrl?: string;
+  isMine?: boolean;
+  rank: number;
+  qualified?: boolean;
+}
+
+export interface ChampionshipStudentEntry {
+  uid: string;
+  name: string;
+  schoolId?: string;
+  schoolName: string;
+  grade?: string;
+  region: string;
+  district: string;
+  avatarUrl?: string;
+  badge?: string;
+  totalCoins: number;
+  points: number;
+  reportsCount?: number;
+  treesPlanted?: number;
+  cleanupsCount?: number;
+  isMe?: boolean;
+  rank: number;
+  qualified?: boolean;
+}
+
+export interface ChampionshipLiveResponse {
+  success: boolean;
+  level: 'district' | 'regional' | 'national';
+  entity: 'schools' | 'students';
+  serverNow?: string;
+  locked?: boolean;
+  lockReason?: string;
+  eligibility: ChampionshipEligibility;
+  schools: ChampionshipSchoolEntry[];
+  students: ChampionshipStudentEntry[];
+  totals: {
+    schoolsCount: number;
+    studentsCount: number;
+    allPlatformSchools?: number;
+    allPlatformUsers?: number;
+  };
+  recentWinners: any[];
+}

@@ -90,32 +90,32 @@ export const Navbar: React.FC = () => {
   };
 
   return (
-    <header 
+    <header
       className={`sticky top-0 z-50 w-full transition-all duration-300 ${
-        scrolled 
-          ? 'bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 shadow-lg shadow-black/5' 
+        scrolled
+          ? 'bg-white/88 dark:bg-[#040D0A]/88 backdrop-blur-xl border-b border-emerald-500/15 shadow-lg shadow-emerald-950/10'
           : 'bg-transparent border-b border-transparent'
       }`}
     >
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 sm:h-18 gap-2 sm:gap-4">
-          
+
           {/* Logo Section */}
           <div className="flex items-center min-w-0 shrink">
             <button
               onClick={() => setActiveTab('home')}
-              className="flex items-center gap-2 sm:gap-3 group transition-transform active:scale-95 min-w-0 cursor-pointer"
+              className="flex items-center gap-2.5 sm:gap-3 group transition-transform active:scale-95 min-w-0 cursor-pointer"
             >
               <div className="relative shrink-0">
-                <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20 group-hover:rotate-6 transition-transform">
-                  <Leaf className="w-5 h-5 sm:w-6 sm:h-6" />
+                <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-gradient-to-tr from-emerald-600 via-emerald-500 to-teal-400 flex items-center justify-center text-[#040D0A] shadow-lg shadow-emerald-500/25 ring-1 ring-emerald-300/30 group-hover:rotate-3 transition-transform">
+                  <Leaf className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.4]" />
                 </div>
               </div>
               <div className="flex flex-col min-w-0 text-left">
-                <span className="font-black text-lg sm:text-2xl tracking-tighter text-slate-900 dark:text-white leading-none whitespace-nowrap">
-                  ECO<span className="text-emerald-500">HERO</span>
+                <span className="font-display font-extrabold text-lg sm:text-2xl tracking-tight text-slate-900 dark:text-white leading-none whitespace-nowrap">
+                  ECO<span className="text-emerald-500 dark:text-emerald-400">HERO</span>
                 </span>
-                <span className="text-[8px] sm:text-[10px] text-slate-500 dark:text-emerald-400/80 font-bold uppercase tracking-widest mt-0.5 whitespace-nowrap">
+                <span className="text-[9px] sm:text-[10px] text-emerald-700 dark:text-emerald-400/80 font-bold uppercase tracking-widest mt-0.5 whitespace-nowrap">
                   Uzbekistan 2.0
                 </span>
               </div>
@@ -123,7 +123,7 @@ export const Navbar: React.FC = () => {
           </div>
 
           {/* Desktop Nav */}
-          <nav className="hidden xl:flex items-center bg-slate-100/50 dark:bg-white/5 rounded-full p-1 border border-slate-200/50 dark:border-white/5 backdrop-blur-sm">
+          <nav className="hidden xl:flex items-center bg-white/75 dark:bg-[#071812]/80 rounded-full p-1 border border-emerald-500/15 backdrop-blur-md shadow-sm">
             {navLinks.slice(0, 7).map(link => {
               const Icon = link.icon;
               const isActive = activeTab === link.id || (link.id === 'missions' && activeTab === 'tasks');
@@ -131,17 +131,17 @@ export const Navbar: React.FC = () => {
                 <button
                   key={link.id}
                   onClick={() => setActiveTab(link.id)}
-                  className={`relative flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-full transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+                  className={`relative flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-full transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                     isActive
-                      ? 'text-white'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                      ? 'text-[#040D0A]'
+                      : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-emerald-300'
                   }`}
                 >
                   {isActive && (
                     <motion.div
                       layoutId="nav-pill"
-                      className="absolute inset-0 bg-gradient-to-r from-emerald-600 to-teal-500 rounded-full shadow-lg shadow-emerald-500/20"
-                      transition={{ type: 'spring', duration: 0.5 }}
+                      className="absolute inset-0 bg-gradient-to-r from-emerald-400 to-teal-300 rounded-full shadow-md shadow-emerald-500/30"
+                      transition={{ type: 'spring', duration: 0.45 }}
                     />
                   )}
                   <span className="relative z-10 flex items-center gap-1.5 whitespace-nowrap">
@@ -154,24 +154,25 @@ export const Navbar: React.FC = () => {
           </nav>
 
           {/* Right Controls */}
-          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
-            
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+
             {/* Wallet Pill */}
             <motion.button
               whileHover={{ y: -1 }}
               whileTap={{ scale: 0.98 }}
               onClick={() => setActiveTab('coins')}
-              className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-400/10 border border-amber-400/20 text-amber-500 text-xs font-black shadow-sm"
+              className="hidden sm:flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-400/10 border border-amber-400/25 text-amber-600 dark:text-amber-300 text-xs font-extrabold shadow-sm cursor-pointer hover:bg-amber-400/15 transition-colors"
             >
               <Coins className="w-4 h-4 fill-amber-500/20" />
-              <span className="font-mono">{user.ecoCoins.toLocaleString()}</span>
+              <span className="font-mono tabular-nums">{user.ecoCoins.toLocaleString()}</span>
             </motion.button>
 
             {/* Notifications */}
             <div className="relative">
               <button
                 onClick={() => setNotifDropdownOpen(!notifDropdownOpen)}
-                className="p-2 sm:p-2.5 rounded-full bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/10 transition-colors relative cursor-pointer"
+                aria-label="Bildirishnomalar"
+                className="p-2 sm:p-2.5 rounded-full bg-white/80 dark:bg-[#081C15]/80 border border-slate-200/70 dark:border-emerald-500/15 text-slate-600 dark:text-slate-300 hover:border-emerald-500/40 transition-colors relative cursor-pointer"
               >
                 <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
                 <AnimatePresence>
@@ -180,7 +181,7 @@ export const Navbar: React.FC = () => {
                       initial={{ scale: 0 }}
                       animate={{ scale: 1 }}
                       exit={{ scale: 0 }}
-                      className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-rose-500 border-2 border-white dark:border-slate-950"
+                      className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-rose-500 border-2 border-white dark:border-[#040D0A]"
                     />
                   )}
                 </AnimatePresence>
@@ -192,11 +193,11 @@ export const Navbar: React.FC = () => {
                     initial={{ opacity: 0, y: 10, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    className="fixed sm:absolute right-3 sm:right-0 left-3 sm:left-auto mt-3 sm:mt-4 sm:w-80 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden z-50"
+                    className="fixed sm:absolute right-3 sm:right-0 left-3 sm:left-auto mt-3 sm:mt-4 sm:w-80 bg-white/95 dark:bg-[#071912]/95 backdrop-blur-xl border border-slate-200 dark:border-emerald-500/20 rounded-3xl shadow-2xl overflow-hidden z-50"
                   >
-                    <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                    <div className="p-4 border-b border-slate-100 dark:border-emerald-500/15 flex items-center justify-between">
                       <h3 className="font-black text-slate-900 dark:text-white uppercase tracking-wider text-xs">Notifikatsiyalar</h3>
-                      <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-500 rounded-full text-[10px] font-black">{unreadNotifs} Yangi</span>
+                      <span className="px-2 py-0.5 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 rounded-full text-[10px] font-black tabular-nums">{unreadNotifs} Yangi</span>
                     </div>
                     <div className="max-h-[400px] overflow-y-auto p-2 space-y-1">
                       {notifications.length > 0 ? (
@@ -204,7 +205,7 @@ export const Navbar: React.FC = () => {
                           <button
                             key={notif.id}
                             onClick={() => markNotificationRead(notif.id)}
-                            className={`w-full p-3 rounded-2xl text-left transition-colors ${
+                            className={`w-full p-3 rounded-2xl text-left transition-colors cursor-pointer ${
                               notif.read
                                 ? 'opacity-50'
                                 : 'bg-emerald-500/5 hover:bg-emerald-500/10'
@@ -229,12 +230,16 @@ export const Navbar: React.FC = () => {
               <motion.button
                 whileTap={{ scale: 0.95 }}
                 onClick={() => setRoleMenuOpen(!roleMenuOpen)}
-                className={`flex items-center gap-1 sm:gap-2 pl-1 pr-2 sm:pr-3 py-1 rounded-full border transition-all cursor-pointer ${
-                  roleLabels[user.role]?.bg || 'bg-slate-100 dark:bg-white/5 border-slate-200 dark:border-slate-800'
+                className={`flex items-center gap-1 sm:gap-2 pl-1 pr-2 sm:pr-3 py-1 rounded-full border border-emerald-500/20 transition-all cursor-pointer ${
+                  roleLabels[user.role]?.bg || 'bg-slate-100 dark:bg-white/5'
                 } ${roleLabels[user.role]?.color || 'text-slate-600 dark:text-slate-300'}`}
               >
-                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full overflow-hidden border-2 border-white dark:border-slate-800">
-                  <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" />
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full overflow-hidden border-2 border-emerald-400/50 bg-[#040D0A]">
+                  <img
+                    src={user.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.fullName || 'EcoHero')}`}
+                    alt=""
+                    className="w-full h-full object-cover"
+                  />
                 </div>
                 <span className="hidden md:block text-xs font-black uppercase tracking-wide">
                   {roleLabels[user.role]?.label || user.role}
@@ -248,37 +253,37 @@ export const Navbar: React.FC = () => {
                     initial={{ opacity: 0, y: 10, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    className="absolute right-0 mt-4 w-64 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden z-50 p-2"
+                    className="absolute right-0 mt-4 w-64 bg-white/95 dark:bg-[#071912]/95 backdrop-blur-xl border border-slate-200 dark:border-emerald-500/20 rounded-3xl shadow-2xl overflow-hidden z-50 p-2"
                   >
-                    <div className="p-3 mb-2 bg-slate-50 dark:bg-white/5 rounded-2xl">
+                    <div className="p-3 mb-2 bg-slate-50 dark:bg-emerald-950/60 border border-slate-100 dark:border-emerald-500/15 rounded-2xl">
                       <div className="font-black text-slate-900 dark:text-white text-xs truncate">{user.fullName}</div>
-                      <div className="text-[10px] text-slate-400 truncate">{user.email || '@username'}</div>
+                      <div className="text-[10px] text-slate-500 dark:text-emerald-300/70 truncate">{user.email || '@username'}</div>
                     </div>
 
                     <div className="space-y-1">
-                      <button 
+                      <button
                         onClick={() => { setActiveTab('profile'); setRoleMenuOpen(false); }}
-                        className="w-full p-2.5 flex items-center gap-3 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-emerald-500/10 hover:text-emerald-500 rounded-xl transition-colors"
+                        className="w-full p-2.5 flex items-center gap-3 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-emerald-500/10 hover:text-emerald-500 rounded-xl transition-colors cursor-pointer"
                       >
                         <UserCheck className="w-4 h-4" />
                         Mening Profilim
                       </button>
                       <button
                         onClick={() => { setActiveTab('admin'); setRoleMenuOpen(false); }}
-                        className="w-full p-2.5 flex items-center gap-3 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-emerald-500/10 hover:text-emerald-500 rounded-xl transition-colors"
+                        className="w-full p-2.5 flex items-center gap-3 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-emerald-500/10 hover:text-emerald-500 rounded-xl transition-colors cursor-pointer"
                       >
                         <ShieldAlert className="w-4 h-4" />
                         Kabinet (Rol Boshqaruvi)
                       </button>
                       <button
                         onClick={() => { openEditProfileModal(); setRoleMenuOpen(false); }}
-                        className="w-full p-2.5 flex items-center gap-3 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-emerald-500/10 hover:text-emerald-500 rounded-xl transition-colors"
+                        className="w-full p-2.5 flex items-center gap-3 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-emerald-500/10 hover:text-emerald-500 rounded-xl transition-colors cursor-pointer"
                       >
                         <Radio className="w-4 h-4" />
                         Sozlamalar
                       </button>
 
-                      <div className="h-px bg-slate-100 dark:bg-slate-800 my-2 mx-2" />
+                      <div className="h-px bg-slate-100 dark:bg-emerald-500/15 my-2 mx-2" />
 
                       <div className="px-3 py-1 text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between">
                         <span>8 Ta Boshqaruv Lavozimlari</span>
@@ -314,7 +319,7 @@ export const Navbar: React.FC = () => {
                             }}
                             className={`w-full p-2.5 flex items-center justify-between rounded-xl transition-all cursor-pointer ${
                               isCurrentRole
-                                ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-900/40'
+                                ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-[#040D0A] shadow-md shadow-emerald-900/40'
                                 : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5'
                             }`}
                           >
@@ -323,7 +328,7 @@ export const Navbar: React.FC = () => {
                                 {roleLabels[r]?.label || r}
                               </span>
                               {isApproved ? (
-                                <span className="text-[9px] text-emerald-400 font-bold px-1.5 py-0.2 rounded bg-emerald-500/10">
+                                <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${isCurrentRole ? 'bg-black/15 text-[#040D0A]' : 'bg-emerald-500/10 text-emerald-400'}`}>
                                   ✓
                                 </span>
                               ) : (
@@ -332,7 +337,7 @@ export const Navbar: React.FC = () => {
                             </div>
 
                             {isCurrentRole ? (
-                              <span className="w-2 h-2 rounded-full bg-white" />
+                              <span className="w-2 h-2 rounded-full bg-[#040D0A]" />
                             ) : !isApproved ? (
                               <span className="text-[9px] font-bold text-amber-400">Ariza</span>
                             ) : null}
@@ -351,7 +356,8 @@ export const Navbar: React.FC = () => {
             {/* Theme Toggle */}
             <button
               onClick={toggleTheme}
-              className="p-2 sm:p-2.5 rounded-full bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/10 transition-colors cursor-pointer"
+              aria-label="Mavzuni o'zgartirish"
+              className="p-2 sm:p-2.5 rounded-full bg-white/80 dark:bg-[#081C15]/80 border border-slate-200/70 dark:border-emerald-500/15 text-slate-600 dark:text-slate-300 hover:border-emerald-500/40 transition-colors cursor-pointer"
             >
               {theme === 'dark' ? <Sun className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5" />}
             </button>
@@ -359,7 +365,8 @@ export const Navbar: React.FC = () => {
             {/* Mobile Menu Btn */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="xl:hidden p-2 sm:p-2.5 rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-500/20 active:scale-90 transition-transform cursor-pointer"
+              aria-label="Menyu"
+              className="xl:hidden p-2 sm:p-2.5 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 text-[#040D0A] shadow-lg shadow-emerald-500/25 active:scale-90 transition-transform cursor-pointer"
             >
               {mobileMenuOpen ? <X className="w-4 h-4 sm:w-5 sm:h-5" /> : <Menu className="w-4 h-4 sm:w-5 sm:h-5" />}
             </button>
@@ -373,17 +380,17 @@ export const Navbar: React.FC = () => {
               initial={{ opacity: 0, x: 100 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 100 }}
-              className="fixed inset-y-0 right-0 w-full max-w-xs bg-white dark:bg-slate-950 shadow-2xl z-[60] xl:hidden border-l border-slate-200 dark:border-slate-800"
+              className="fixed inset-y-0 right-0 w-full max-w-xs bg-white dark:bg-[#05120D] shadow-2xl z-[60] xl:hidden border-l border-slate-200 dark:border-emerald-500/20"
             >
               <div className="flex flex-col h-full p-6">
-                <div className="flex items-center justify-between mb-8">
-                  <div className="font-black text-xl tracking-tighter text-slate-900 dark:text-white">NAVIGATSIYA</div>
-                  <button onClick={() => setMobileMenuOpen(false)} className="p-2 rounded-full bg-slate-100 dark:bg-white/5">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="font-display font-black text-xl tracking-tight text-slate-900 dark:text-white">NAVIGATSIYA</div>
+                  <button onClick={() => setMobileMenuOpen(false)} className="p-2 rounded-full bg-slate-100 dark:bg-white/5 cursor-pointer">
                     <X className="w-5 h-5 text-slate-500" />
                   </button>
                 </div>
-                
-                <div className="flex-1 space-y-2 overflow-y-auto pr-2">
+
+                <div className="flex-1 space-y-1.5 overflow-y-auto pr-1">
                   {navLinks.map(link => {
                     const Icon = link.icon;
                     const isActive = activeTab === link.id;
@@ -391,27 +398,31 @@ export const Navbar: React.FC = () => {
                       <button
                         key={link.id}
                         onClick={() => { setActiveTab(link.id); setMobileMenuOpen(false); }}
-                        className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all ${
+                        className={`w-full flex items-center gap-3.5 p-3.5 rounded-2xl transition-all cursor-pointer ${
                           isActive
-                            ? 'bg-emerald-600 text-white shadow-xl shadow-emerald-600/20 translate-x-2'
-                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5'
+                            ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-[#040D0A] shadow-lg shadow-emerald-500/20'
+                            : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-emerald-950/60'
                         }`}
                       >
-                        <div className={`p-2 rounded-xl ${isActive ? 'bg-white/20' : 'bg-emerald-500/10 text-emerald-500'}`}>
-                          <Icon className="w-5 h-5" />
+                        <div className={`p-2 rounded-xl ${isActive ? 'bg-black/15' : 'bg-emerald-500/10 text-emerald-500 dark:text-emerald-400'}`}>
+                          <Icon className="w-4 h-4" />
                         </div>
-                        <span className="font-black text-xs uppercase tracking-widest">{link.label}</span>
+                        <span className="font-extrabold text-xs uppercase tracking-wider">{link.label}</span>
                       </button>
                     );
                   })}
                 </div>
 
-                <div className="pt-6 mt-6 border-t border-slate-100 dark:border-slate-800">
-                  <div className="flex items-center gap-4 mb-4">
-                    <img src={user.avatarUrl} className="w-12 h-12 rounded-2xl border-2 border-emerald-500/20" alt="" />
-                    <div>
-                      <div className="font-black text-xs text-slate-900 dark:text-white">{user.fullName}</div>
-                      <div className="text-[10px] text-slate-500 uppercase tracking-widest">{roleLabels[user.role]?.label}</div>
+                <div className="pt-5 mt-5 border-t border-slate-100 dark:border-emerald-500/15">
+                  <div className="flex items-center gap-3.5 mb-4">
+                    <img
+                      src={user.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.fullName || 'EcoHero')}`}
+                      className="w-11 h-11 rounded-2xl border-2 border-emerald-500/30 object-cover"
+                      alt=""
+                    />
+                    <div className="min-w-0">
+                      <div className="font-black text-xs text-slate-900 dark:text-white truncate">{user.fullName}</div>
+                      <div className="text-[10px] text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">{roleLabels[user.role]?.label}</div>
                     </div>
                   </div>
                   <button
@@ -423,7 +434,7 @@ export const Navbar: React.FC = () => {
                         openAuthModal();
                       }
                     }}
-                    className="w-full py-4 bg-slate-900 dark:bg-white text-white dark:text-slate-950 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2"
+                    className="w-full py-3.5 bg-slate-900 dark:bg-emerald-500 text-white dark:text-[#040D0A] rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <LogIn className="w-4 h-4" />
                     {user.isOnboarded ? 'Tizimdan Chiqish' : 'Kirish / Hisob'}

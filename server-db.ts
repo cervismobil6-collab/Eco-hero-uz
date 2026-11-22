@@ -22,6 +22,35 @@ export interface RewardSettingsRecord {
   updatedBy: string;
 }
 
+export interface SchoolStudentRatingConfig {
+  schoolId: string;
+  schoolName: string;
+  region: string;
+  district: string;
+  enabled: boolean;
+  minMembersThreshold: number;
+  monthlyPrizeTitle: string;
+  bonusCoins: number;
+  activatedAt?: string;
+  activatedByUid?: string;
+  updatedAt: string;
+}
+
+export interface DistrictStudentRatingConfig {
+  key: string;
+  region: string;
+  district: string;
+  enabled: boolean;
+  minMembersThreshold: number;
+  top1Prize: string;
+  top2Prize: string;
+  top3Prize: string;
+  bonuses: [number, number, number];
+  activatedAt?: string;
+  activatedByUid?: string;
+  updatedAt: string;
+}
+
 export interface UnifiedDatabase {
   users: Record<string, any>;
   schools: any[];
@@ -46,14 +75,32 @@ export interface UnifiedDatabase {
   mapLayers?: any[];
   homePosts: any[];
   monthlyAwards: any[];
+  ratingConfigs: {
+    schoolRatings: Record<string, SchoolStudentRatingConfig>;
+    districtStudentRatings: Record<string, DistrictStudentRatingConfig>;
+  };
+  studentMonthlyAwards: any[];
   chatMessages: any[];
   chatPermissions: any[];
   adRewardClaims: { id: string; userId: string; adId: string; amount: number; claimedAt: string }[];
   ecoMissions: any[];
   missionSubmissions: any[];
   missionCompletions: Record<string, string[]>;
+  botStarters: Record<string, { chatId: string; username?: string; firstName?: string; startedAt: string; lastSeenAt?: string }>;
+  deletedIds: string[];
+  weeklyChallenge: {
+    weekKey: string;
+    title: string;
+    description: string;
+    targetActions: number;
+    rewardCoins: number;
+    participants: Record<string, { uid: string; fullName: string; schoolId?: string; progress: number; joinedAt: string; claimed?: boolean }>;
+  };
   registrationSessions: Record<string, any>;
   dailyQuizClaims: Record<string, string>; // key: uid -> YYYY-MM-DD
+  qrEcoScans: any[];
+  schoolDuels: any[];
+  certificates: any[];
   meta: {
     version: number;
     updatedAt: string;
@@ -63,6 +110,7 @@ export interface UnifiedDatabase {
 }
 
 const UNIFIED_DB_PATH = path.join(process.cwd(), 'server-unified-db.json');
+const UNIFIED_DB_BACKUP_PATH = path.join(process.cwd(), 'server-unified-db.backup.json');
 const LEGACY_USERS_FILE = path.join(process.cwd(), 'registered-users.json');
 const LEGACY_ROLE_REQUESTS_FILE = path.join(process.cwd(), 'role-requests.json');
 const LEGACY_SESSIONS_FILE = path.join(process.cwd(), 'server-registration-sessions.json');
@@ -829,7 +877,7 @@ const SEED_ECO_MISSIONS = [
     status: 'active',
     category: 'telegram',
     channelUsername: '@Ecoheros_uz',
-    channelUrl: 'https://t.me/Ecoheros_bot',
+    channelUrl: 'https://t.me/Ecoheros_uz',
     createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
     createdByName: 'ECO HERO Admin',
   },
@@ -873,18 +921,71 @@ function createDefaultDatabase(): UnifiedDatabase {
     mapLayers: [...SEED_MAP_LAYERS],
     homePosts: [...SEED_HOME_POSTS],
     monthlyAwards: [],
+    ratingConfigs: {
+      schoolRatings: {},
+      districtStudentRatings: {},
+    },
+    studentMonthlyAwards: [],
     chatMessages: [...SEED_CHAT_MESSAGES],
     chatPermissions: [],
     adRewardClaims: [],
     ecoMissions: [...SEED_ECO_MISSIONS],
     missionSubmissions: [],
     missionCompletions: {},
+    botStarters: {},
+    deletedIds: [],
+    weeklyChallenge: createDefaultWeeklyChallenge(),
     registrationSessions: {},
     dailyQuizClaims: {},
+    qrEcoScans: [],
+    schoolDuels: [],
+    certificates: [],
     meta: {
       version: 2,
       updatedAt: new Date().toISOString(),
     },
+  };
+}
+
+export function getCurrentWeekWindow(now = new Date()): {
+  weekKey: string;
+  endIso: string;
+  daysRemaining: number;
+  hoursRemaining: number;
+  minutesRemaining: number;
+  secondsRemaining: number;
+} {
+  const tashkentMs = now.getTime() + 5 * 3600 * 1000;
+  const tDate = new Date(tashkentMs);
+  const utcDay = tDate.getUTCDay(); // 0=Sun..6=Sat
+  const diffToMon = (utcDay + 6) % 7;
+  const monday = new Date(Date.UTC(tDate.getUTCFullYear(), tDate.getUTCMonth(), tDate.getUTCDate() - diffToMon));
+  const nextMonday = new Date(monday.getTime() + 7 * 86400 * 1000);
+  const weekKey = monday.toISOString().slice(0, 10);
+  const remainingMs = Math.max(0, nextMonday.getTime() - tashkentMs);
+  const daysRemaining = Math.floor(remainingMs / (24 * 3600 * 1000));
+  const hoursRemaining = Math.floor((remainingMs % (24 * 3600 * 1000)) / (3600 * 1000));
+  const minutesRemaining = Math.floor((remainingMs % (3600 * 1000)) / (60 * 1000));
+  const secondsRemaining = Math.floor((remainingMs % (60 * 1000)) / 1000);
+  return {
+    weekKey,
+    endIso: new Date(nextMonday.getTime() - 5 * 3600 * 1000).toISOString(),
+    daysRemaining,
+    hoursRemaining,
+    minutesRemaining,
+    secondsRemaining,
+  };
+}
+
+export function createDefaultWeeklyChallenge() {
+  const { weekKey } = getCurrentWeekWindow();
+  return {
+    weekKey,
+    title: "Haftalik Yashil Harakat Chellenji",
+    description: "Shu hafta davomida kamida 3 ta eko-harakat (missiya, quiz yoki muammo xabari) bajaring va +250 EcoCoin bonusi yuting!",
+    targetActions: 3,
+    rewardCoins: 250,
+    participants: {},
   };
 }
 
@@ -1058,22 +1159,54 @@ function purgeDemoRecordsFromDb(db: any): { db: UnifiedDatabase; changed: boolea
   };
 }
 
+function readValidDbJson(filePath: string): any | null {
+  if (!fs.existsSync(filePath)) return null;
+  try {
+    const stat = fs.statSync(filePath);
+    if (!stat.isFile() || stat.size === 0) return null;
+    const raw = fs.readFileSync(filePath, 'utf-8').trim();
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 function loadUnifiedDatabase(): { db: UnifiedDatabase; needsSave: boolean } {
   const defaults = createDefaultDatabase();
 
-  if (fs.existsSync(UNIFIED_DB_PATH)) {
+  let parsed = readValidDbJson(UNIFIED_DB_PATH);
+  let recoveredFromBackup = false;
+
+  if (!parsed) {
+    const backupParsed = readValidDbJson(UNIFIED_DB_BACKUP_PATH);
+    if (backupParsed) {
+      console.warn('[CentralDB] Asosiy baza bo\'sh yoki buzilgan — server-unified-db.backup.json dan tiklanmoqda!');
+      parsed = backupParsed;
+      recoveredFromBackup = true;
+    }
+  }
+
+  if (parsed) {
     try {
-      const parsed = JSON.parse(fs.readFileSync(UNIFIED_DB_PATH, 'utf-8'));
-      const loadedShopItems =
-        Array.isArray(parsed.shopItems) && parsed.shopItems.length > 0 ? parsed.shopItems : defaults.shopItems;
-      const loadedAds = Array.isArray(parsed.ecoAds) && parsed.ecoAds.length > 0 ? [...parsed.ecoAds] : [...defaults.ecoAds];
+      const deletedSet = new Set<string>(Array.isArray(parsed.deletedIds) ? parsed.deletedIds.map(String) : []);
+      const hasShopArray = Array.isArray(parsed.shopItems);
+      const loadedShopItems = (hasShopArray ? parsed.shopItems : defaults.shopItems).filter(
+        (i: any) => !deletedSet.has(String(i?.id || ''))
+      );
+      const hasAdsArray = Array.isArray(parsed.ecoAds);
+      const loadedAds = (hasAdsArray ? [...parsed.ecoAds] : [...defaults.ecoAds]).filter(
+        (a: any) => !deletedSet.has(String(a?.id || ''))
+      );
       if (!loadedAds.some((a: any) => a.placement === 'post_purchase')) {
         const seedPost = SEED_ECO_ADS.find((a) => a.placement === 'post_purchase');
-        if (seedPost) loadedAds.push(seedPost);
+        if (seedPost && !deletedSet.has(seedPost.id)) loadedAds.push(seedPost);
       }
       if (!loadedAds.some((a: any) => a.placement === 'earn_coins')) {
         const seedEarn = SEED_ECO_ADS.find((a) => a.placement === 'earn_coins');
-        if (seedEarn) loadedAds.push(seedEarn);
+        if (seedEarn && !deletedSet.has(seedEarn.id)) loadedAds.push(seedEarn);
       }
       const loadedOrders = (Array.isArray(parsed.shopOrders) ? parsed.shopOrders : []).map((o: any) => {
         if (o.itemImageUrl) return o;
@@ -1085,6 +1218,12 @@ function loadUnifiedDatabase(): { db: UnifiedDatabase; needsSave: boolean } {
             'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=600&q=80',
         };
       });
+
+      const currentWeek = getCurrentWeekWindow().weekKey;
+      const parsedWeekly =
+        parsed.weeklyChallenge && parsed.weeklyChallenge.weekKey === currentWeek
+          ? parsed.weeklyChallenge
+          : createDefaultWeeklyChallenge();
 
       const hydrated = {
         ...defaults,
@@ -1113,19 +1252,41 @@ function loadUnifiedDatabase(): { db: UnifiedDatabase; needsSave: boolean } {
         auditLogs: Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [],
         notifications: Array.isArray(parsed.notifications) ? parsed.notifications : [],
         mapLayers: Array.isArray(parsed.mapLayers) && parsed.mapLayers.length > 0 ? parsed.mapLayers : defaults.mapLayers,
-        homePosts: Array.isArray(parsed.homePosts) && parsed.homePosts.length > 0 ? parsed.homePosts : defaults.homePosts,
+        homePosts: (() => {
+          const hasHomePostsArray = Array.isArray(parsed.homePosts);
+          return (hasHomePostsArray ? parsed.homePosts : defaults.homePosts).filter(
+            (p: any) => !deletedSet.has(String(p?.id || ''))
+          );
+        })(),
         monthlyAwards: Array.isArray(parsed.monthlyAwards) ? parsed.monthlyAwards : [],
+        ratingConfigs: {
+          schoolRatings:
+            parsed.ratingConfigs?.schoolRatings && typeof parsed.ratingConfigs.schoolRatings === 'object'
+              ? parsed.ratingConfigs.schoolRatings
+              : {},
+          districtStudentRatings:
+            parsed.ratingConfigs?.districtStudentRatings &&
+            typeof parsed.ratingConfigs.districtStudentRatings === 'object'
+              ? parsed.ratingConfigs.districtStudentRatings
+              : {},
+        },
+        studentMonthlyAwards: Array.isArray(parsed.studentMonthlyAwards) ? parsed.studentMonthlyAwards : [],
         chatMessages: Array.isArray(parsed.chatMessages) ? parsed.chatMessages : [],
         chatPermissions: Array.isArray(parsed.chatPermissions) ? parsed.chatPermissions : [],
         adRewardClaims: Array.isArray(parsed.adRewardClaims) ? parsed.adRewardClaims : [],
         ecoMissions: (() => {
-          const existingMissions = Array.isArray(parsed.ecoMissions) && parsed.ecoMissions.length > 0
-            ? parsed.ecoMissions.filter((m: any) => !(m.id === 'mission_quiz_01' && (!Array.isArray(m.questions) || m.questions.length <= 1)))
-            : [];
-          if (existingMissions.length === 0) return defaults.ecoMissions;
+          const hasMissionsArray = Array.isArray(parsed.ecoMissions);
+          const existingMissions = hasMissionsArray
+            ? parsed.ecoMissions.filter(
+                (m: any) =>
+                  !deletedSet.has(String(m?.id || '')) &&
+                  !(m.id === 'mission_quiz_01' && !m.updatedAt && (!Array.isArray(m.questions) || m.questions.length <= 1))
+              )
+            : defaults.ecoMissions.filter((m: any) => !deletedSet.has(String(m?.id || '')));
+          if (!hasMissionsArray) return existingMissions;
           const merged = [...existingMissions];
           for (const seedM of SEED_ECO_MISSIONS) {
-            if (!merged.some((m: any) => m.id === seedM.id)) {
+            if (!deletedSet.has(seedM.id) && !merged.some((m: any) => m.id === seedM.id)) {
               merged.push(seedM);
             }
           }
@@ -1136,12 +1297,19 @@ function loadUnifiedDatabase(): { db: UnifiedDatabase; needsSave: boolean } {
           parsed.missionCompletions && typeof parsed.missionCompletions === 'object'
             ? parsed.missionCompletions
             : {},
+        botStarters:
+          parsed.botStarters && typeof parsed.botStarters === 'object' ? parsed.botStarters : {},
+        deletedIds: Array.from(deletedSet),
+        weeklyChallenge: parsedWeekly,
         registrationSessions: parsed.registrationSessions || {},
         dailyQuizClaims: parsed.dailyQuizClaims || {},
+        qrEcoScans: Array.isArray(parsed.qrEcoScans) ? parsed.qrEcoScans : [],
+        schoolDuels: Array.isArray(parsed.schoolDuels) ? parsed.schoolDuels : [],
+        certificates: Array.isArray(parsed.certificates) ? parsed.certificates : [],
       };
 
       const { db: purgedDb, changed } = purgeDemoRecordsFromDb(hydrated);
-      return { db: purgedDb, needsSave: changed };
+      return { db: purgedDb, needsSave: changed || recoveredFromBackup };
     } catch (e) {
       console.error('[CentralDB] Error loading unified DB, using defaults:', e);
     }
@@ -1156,15 +1324,22 @@ export const centralDb: UnifiedDatabase = loadedDbResult.db;
 export function saveCentralDb() {
   try {
     centralDb.meta.updatedAt = new Date().toISOString();
+    const serialized = JSON.stringify(centralDb, null, 2);
+    if (!serialized || serialized.length < 20) return;
+
     const tmpPath = `${UNIFIED_DB_PATH}.tmp`;
-    fs.writeFileSync(tmpPath, JSON.stringify(centralDb, null, 2), 'utf-8');
+    fs.writeFileSync(tmpPath, serialized, 'utf-8');
     fs.renameSync(tmpPath, UNIFIED_DB_PATH);
+
+    const backupTmpPath = `${UNIFIED_DB_BACKUP_PATH}.tmp`;
+    fs.writeFileSync(backupTmpPath, serialized, 'utf-8');
+    fs.renameSync(backupTmpPath, UNIFIED_DB_BACKUP_PATH);
   } catch (e) {
     console.error('[CentralDB] Failed to save unified database:', e);
   }
 }
 
-// Save initial DB on boot if file didn't exist or demo purge changed records
+// Save initial DB on boot if file didn't exist, was empty, or recovery/purge changed records
 if (!fs.existsSync(UNIFIED_DB_PATH) || loadedDbResult.needsSave) {
   recalculateSchoolRanks();
   saveCentralDb();
@@ -1201,6 +1376,24 @@ export function getSchoolLiveStudentCount(school: any): number {
     }
     return false;
   }).length;
+}
+
+export function getDistrictLiveParticipantCount(region?: string, district?: string): number {
+  const targetDistrict = String(district || '').trim().toLowerCase();
+  const targetRegion = String(region || '').trim().toLowerCase();
+  if (!targetDistrict) return 0;
+
+  const usersList = Object.values(centralDb.users || {});
+  const seenUids = new Set<string>();
+  for (const u of usersList as any[]) {
+    if (!u || typeof u !== 'object') continue;
+    const uDist = String(u.district || '').trim().toLowerCase();
+    const uReg = String(u.region || '').trim().toLowerCase();
+    if (uDist !== targetDistrict) continue;
+    if (targetRegion && uReg && uReg !== targetRegion) continue;
+    seenUids.add(String(u.uid));
+  }
+  return seenUids.size;
 }
 
 export function getLiveSchoolsList(includeAdminEmail = false): any[] {
@@ -1248,6 +1441,9 @@ export function computeLiveMetrics() {
   ]).size;
 
   const botUserIds = new Set<string>();
+  for (const starterKey of Object.keys(centralDb.botStarters || {})) {
+    if (starterKey) botUserIds.add(String(starterKey));
+  }
   for (const u of usersList as any[]) {
     if (u?.telegramId || u?.telegramChatId || u?.chatId || u?.telegramAuth || u?.telegramUsername) {
       const key = String(u.telegramId || u.telegramChatId || u.chatId || u.uid);
@@ -1326,9 +1522,11 @@ export function findOrCreateSchool(params: {
   const normalizedNameLower = cleanName.toLowerCase().replace(/[^a-z0-9a-zA-Zа-яА-Яўқғҳ]/g, '');
 
   let school = centralDb.schools.find((s) => {
-    if (params.schoolId && s.id === params.schoolId) return true;
     const sameRegion = String(s.region || '').toLowerCase() === region.toLowerCase();
     const sameDistrict = !district || String(s.district || '').toLowerCase() === district.toLowerCase();
+    if (params.schoolId && params.schoolId !== 'school_custom' && s.id === params.schoolId && sameRegion && sameDistrict) {
+      return true;
+    }
     if (!sameRegion) return false;
     const sNum = normalizeSchoolNumber(s.name, s.number);
     if (sameDistrict && number && sNum === number && /\d/.test(cleanName)) return true;
@@ -1621,4 +1819,9 @@ export function addAuditLog(entry: {
   }
   saveCentralDb();
   return log;
+}
+
+export function removeDeletedId(id: string) {
+  if (!id || !Array.isArray(centralDb.deletedIds)) return;
+  centralDb.deletedIds = centralDb.deletedIds.filter((entry) => entry !== id);
 }

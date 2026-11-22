@@ -26,6 +26,11 @@ import {
   FileText,
   Wand2,
   Check,
+  Flame,
+  Trophy,
+  Users,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { useEco } from '../context/EcoContext';
 import {
@@ -34,9 +39,20 @@ import {
   MissionType,
   QuizQuestionItem,
 } from '../types/eco';
-import { openAdTargetUrl, resolveMediaUrl } from '../utils/api';
+import { isInsideTelegramWebApp, normalizeAdTargetUrl, openAdTargetUrl, resolveMediaUrl } from '../utils/api';
+import { useLiveCountdown } from '../utils/countdown';
+import dailyQuestChestImg from '../assets/images/daily_quest_chest_1795179383259.jpg';
 
-type MissionFilter = 'all' | MissionType;
+type MissionFilter =
+  | 'all'
+  | 'daily'
+  | 'ecology'
+  | 'quiz'
+  | 'team'
+  | 'recycle'
+  | 'activity'
+  | 'special'
+  | 'completed';
 type PageTab = 'missions' | 'submissions';
 type QuizBuilderTab = 'manual' | 'import';
 
@@ -125,6 +141,11 @@ export const EcoMissionsPage: React.FC = () => {
     ecoMissions,
     missionSubmissions,
     missionCompletions,
+    weeklyChallenge,
+    schoolTeamMission,
+    joinWeeklyChallenge,
+    claimWeeklyChallenge,
+    setActiveTab,
     createMission,
     updateMission,
     deleteMission,
@@ -145,6 +166,9 @@ export const EcoMissionsPage: React.FC = () => {
 
   const [pageTab, setPageTab] = useState<PageTab>('missions');
   const [filterType, setFilterType] = useState<MissionFilter>('all');
+  const [expandedDescriptions, setExpandedDescriptions] = useState<Record<string, boolean>>({});
+  const [proofModalMission, setProofModalMission] = useState<EcoMission | null>(null);
+  const [joiningWeekly, setJoiningWeekly] = useState(false);
 
   // Sequential Multi-Question Quiz Runner Modal State
   const [activeQuizMission, setActiveQuizMission] = useState<EcoMission | null>(null);
@@ -173,13 +197,59 @@ export const EcoMissionsPage: React.FC = () => {
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
   const [reviewingSubId, setReviewingSubId] = useState<string | null>(null);
 
+  // Channel subscription inline errors & click tracking
+  const [channelErrors, setChannelErrors] = useState<Record<string, string>>({});
+  const [visitedChannels, setVisitedChannels] = useState<Record<string, boolean>>({});
+
+  const weeklyCountdown = useLiveCountdown({
+    endsAt: weeklyChallenge?.endIso,
+    serverNow: weeklyChallenge?.serverNow,
+    fallbackDays: weeklyChallenge?.daysRemaining ?? 5,
+    fallbackHours: weeklyChallenge?.hoursRemaining ?? 0,
+    fallbackMinutes: weeklyChallenge?.minutesRemaining ?? 0,
+    fallbackSeconds: weeklyChallenge?.secondsRemaining ?? 0,
+  });
+
+  const getMissionChannelHref = (mission: EcoMission): string => {
+    const rawUser = String(mission.channelUsername || '').trim();
+    const cleanHandle = rawUser.replace(/^@/, '');
+    const rawUrl = String(mission.channelUrl || '').trim();
+    const isInvite = /t\.me\/(\+|joinchat\/)/i.test(rawUrl);
+    if (isInvite) return normalizeAdTargetUrl(rawUrl);
+    if (rawUrl && cleanHandle) {
+      const m = rawUrl.match(/t\.me\/([A-Za-z0-9_]+)/i);
+      if (m && m[1].toLowerCase() === cleanHandle.toLowerCase()) {
+        return normalizeAdTargetUrl(rawUrl);
+      }
+      // Prefer explicit @username when channelUrl was left pointing at a mismatched default handle
+      return `https://t.me/${cleanHandle}`;
+    }
+    if (rawUrl) return normalizeAdTargetUrl(rawUrl);
+    if (cleanHandle) return `https://t.me/${cleanHandle}`;
+    return 'https://t.me/Ecoheros_channel';
+  };
+
   const visibleMissions = useMemo(() => {
     const list = canManageMissions
       ? ecoMissions
       : ecoMissions.filter(m => m.status === 'active');
     if (filterType === 'all') return list;
-    return list.filter(m => m.type === filterType);
-  }, [ecoMissions, canManageMissions, filterType]);
+    return list.filter(m => {
+      const cat = String(m.category || '').toLowerCase();
+      const title = String(m.title || '').toLowerCase();
+      const desc = String(m.description || '').toLowerCase();
+      const haystack = `${cat} ${title} ${desc}`;
+      if (filterType === 'completed') return missionCompletions.includes(m.id);
+      if (filterType === 'quiz') return m.type === 'quiz';
+      if (filterType === 'activity') return m.type === 'custom_task';
+      if (filterType === 'team') return m.type === 'channel_subscribe' || /jamoa|maktab|guruh|team/i.test(haystack);
+      if (filterType === 'daily') return /kunlik|daily|har kun/i.test(haystack) || m.rewardCoins <= 100;
+      if (filterType === 'ecology') return /ekolog|daraxt|tabiat|ko'chat|suv|yashil/i.test(haystack);
+      if (filterType === 'recycle') return /qayta|plastik|qog'oz|saralash|chiqindi|recycle/i.test(haystack);
+      if (filterType === 'special') return /maxsus|special|chempion|aksiy/i.test(haystack) || m.rewardCoins >= 200;
+      return true;
+    });
+  }, [ecoMissions, canManageMissions, filterType, missionCompletions]);
 
   const pendingSubmissions = useMemo(
     () => missionSubmissions.filter(s => s.status === 'pending'),
@@ -426,12 +496,23 @@ export const EcoMissionsPage: React.FC = () => {
             }
           : {}),
         ...(form.type === 'channel_subscribe'
-          ? {
-              channelUsername: form.channelUsername.trim(),
-              channelUrl:
-                form.channelUrl.trim() ||
-                `https://t.me/${form.channelUsername.trim().replace(/^@/, '')}`,
-            }
+          ? (() => {
+              let cleanUser = form.channelUsername.trim();
+              const urlFromUser = cleanUser.match(/(?:https?:\/\/)?(?:t\.me|telegram\.me)\/([A-Za-z0-9_]+)/i);
+              if (urlFromUser && !urlFromUser[1].startsWith('+')) {
+                cleanUser = `@${urlFromUser[1]}`;
+              } else if (cleanUser && !cleanUser.startsWith('@') && !/^-?\d+$/.test(cleanUser)) {
+                cleanUser = `@${cleanUser}`;
+              }
+              const trimmedUrl = form.channelUrl.trim();
+              const cleanHandle = cleanUser.replace(/^@/, '');
+              return {
+                channelUsername: cleanUser,
+                channelUrl:
+                  trimmedUrl ||
+                  (cleanHandle && !/^-?\d+$/.test(cleanHandle) ? `https://t.me/${cleanHandle}` : ''),
+              };
+            })()
           : {}),
         ...(form.type === 'custom_task'
           ? {
@@ -485,6 +566,11 @@ export const EcoMissionsPage: React.FC = () => {
 
   const handleChannelVerify = async (mission: EcoMission) => {
     setSubmittingMissionId(mission.id);
+    setChannelErrors(prev => {
+      const next = { ...prev };
+      delete next[mission.id];
+      return next;
+    });
     try {
       const res = await submitMission(mission.id, {});
       if (res.success) {
@@ -495,7 +581,10 @@ export const EcoMissionsPage: React.FC = () => {
           'success'
         );
       } else {
-        showNotification(res.error || 'Obuna tasdiqlanmadi.', 'warning');
+        const errMsg = res.error || 'Obuna tasdiqlanmadi. Avval kanalga obuna bo‘ling.';
+        setChannelErrors(prev => ({ ...prev, [mission.id]: errMsg }));
+        triggerHaptic('warning');
+        showNotification(errMsg, 'warning');
       }
     } finally {
       setSubmittingMissionId(null);
@@ -554,6 +643,7 @@ export const EcoMissionsPage: React.FC = () => {
         );
         setProofTexts(prev => ({ ...prev, [mission.id]: '' }));
         setProofMediaUrls(prev => ({ ...prev, [mission.id]: '' }));
+        setProofModalMission(null);
       } else {
         showNotification(res.error || 'Topshiriqni yuborishda xatolik.', 'warning');
       }
@@ -624,72 +714,249 @@ export const EcoMissionsPage: React.FC = () => {
       ? Math.round(((quizStepIndex + (quizDraftOption !== null ? 0.5 : 0)) / activeQuizQuestions.length) * 100)
       : 0;
 
+  const totalXp = Number(user.totalCoinsEarned || user.ecoCoins || 0) * 4;
+  const userLevel = Math.max(1, Math.floor(totalXp / 1000) + 1);
+  const xpIntoLevel = totalXp % 1000;
+  const xpLevelPct = Math.min(100, Math.round((xpIntoLevel / 1000) * 100));
+  const completedCount = missionCompletions.length;
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 pb-28 space-y-8">
-      {/* Structured Header Banner */}
-      <section className="relative overflow-hidden rounded-[32px] bg-gradient-to-br from-slate-900 via-emerald-950/60 to-slate-950 border border-emerald-500/20 p-6 sm:p-10 text-white shadow-2xl">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="space-y-3 max-w-2xl">
-            <div className="inline-flex items-center gap-2 text-emerald-400 text-xs font-black uppercase tracking-widest">
-              <Sparkles className="w-4 h-4" />
-              <span>EcoHero Ta'lim & Topshiriqlar</span>
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 pb-24 space-y-5">
+      {/* 1. Compact Gamification Hero Header */}
+      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#062118] via-[#071B14] to-[#030B08] border border-emerald-500/25 p-4 sm:p-6 text-white shadow-lg">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5 max-w-2xl">
+            <div className="hidden sm:block w-16 h-16 rounded-2xl overflow-hidden border border-emerald-400/30 shrink-0 bg-[#040D0A]">
+              <img
+                src={dailyQuestChestImg}
+                referrerPolicy="no-referrer"
+                alt="Missiyalar"
+                className="w-full h-full object-cover"
+              />
             </div>
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tight leading-tight">
-              Missiyalarni Bajaring, <span className="text-emerald-400">EcoCoin Yuting</span>
-            </h1>
-            <p className="text-sm sm:text-base text-slate-300 leading-relaxed">
-              Ko‘p savolli ekologiya quizlaridan 70%+ natija bilan o‘ting, rasmiy kanallarga
-              qo‘shiling va amaliy topshiriqlar orqali tangalar jamg‘aring.
-            </p>
+            <div className="space-y-1.5 flex-1 min-w-0">
+              <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400">
+                <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                <span>Level {userLevel} · {totalXp.toLocaleString()} XP</span>
+              </div>
+              <div className="flex items-baseline justify-between gap-2">
+                <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Missiyalar</h1>
+                <span className="text-xs sm:text-sm font-mono font-bold text-emerald-300 tabular-nums shrink-0">
+                  {completedCount} / {activeCount}
+                </span>
+              </div>
+              <div className="w-full max-w-sm h-2 rounded-full bg-[#030A07] border border-emerald-500/20 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-teal-400 to-lime-300 transition-all duration-500"
+                  style={{ width: `${Math.max(5, xpLevelPct)}%` }}
+                />
+              </div>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="px-4 py-3 rounded-2xl bg-slate-950/75 border border-white/10 flex items-center gap-3">
-              <Coins className="w-6 h-6 text-amber-400 shrink-0" />
+          <div className="grid grid-cols-3 sm:flex sm:flex-wrap items-center gap-2">
+            <div className="px-3 py-2 rounded-xl bg-black/40 border border-emerald-500/20 flex items-center gap-2">
+              <Flame className="w-4 h-4 text-orange-400 shrink-0" />
               <div>
-                <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">
-                  Balansingiz
-                </div>
-                <div className="text-lg font-black text-amber-300 font-mono tabular-nums">
-                  {user.ecoCoins.toLocaleString()} EC
+                <div className="text-[10px] text-slate-400">Streak</div>
+                <div className="text-xs sm:text-sm font-bold font-mono tabular-nums">{user.streakDays || 1} kun</div>
+              </div>
+            </div>
+            <div className="px-3 py-2 rounded-xl bg-black/40 border border-emerald-500/20 flex items-center gap-2">
+              <Coins className="w-4 h-4 text-amber-400 shrink-0" />
+              <div>
+                <div className="text-[10px] text-slate-400">EcoCoin</div>
+                <div className="text-xs sm:text-sm font-bold font-mono tabular-nums text-amber-300">
+                  {user.ecoCoins.toLocaleString()}
                 </div>
               </div>
             </div>
-
-            <div className="px-4 py-3 rounded-2xl bg-slate-950/75 border border-white/10 flex items-center gap-3">
-              <Award className="w-6 h-6 text-emerald-400 shrink-0" />
+            <div className="px-3 py-2 rounded-xl bg-black/40 border border-emerald-500/20 flex items-center gap-2">
+              <Trophy className="w-4 h-4 text-emerald-400 shrink-0" />
               <div>
-                <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">
-                  Bajarilgan
-                </div>
-                <div className="text-lg font-black text-emerald-300 font-mono tabular-nums">
-                  {missionCompletions.length} / {activeCount}
+                <div className="text-[10px] text-slate-400">Maktab</div>
+                <div className="text-xs sm:text-sm font-bold font-mono tabular-nums text-emerald-300">
+                  {schoolTeamMission?.schoolRank ? `#${schoolTeamMission.schoolRank}` : 'Top'}
                 </div>
               </div>
             </div>
-
             {canManageMissions && (
               <button
                 onClick={() => openCreateModal('quiz')}
-                className="min-h-[44px] px-5 py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-emerald-500/25 cursor-pointer transition-all active:scale-95"
+                className="col-span-3 sm:col-span-1 min-h-[42px] px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all"
               >
                 <Plus className="w-4 h-4" />
-                <span>Yangi Quiz / Missiya</span>
+                <span>Yangi missiya</span>
               </button>
             )}
           </div>
         </div>
       </section>
 
-      {/* Filter Bar & Admin Switch */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-2">
+      {/* 2. Weekly Challenge & School Team Mission Strip */}
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {/* Live Weekly Challenge Card */}
+        <div className="p-4 rounded-2xl bg-white dark:bg-[#061812] border border-emerald-500/25 flex flex-col justify-between gap-3 shadow-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1 min-w-0">
+              <div className="flex items-center gap-2 text-[11px] font-semibold text-emerald-500">
+                <Clock className="w-3.5 h-3.5 shrink-0" />
+                <span className="font-mono tabular-nums">
+                  Haftalik Chellenj · {weeklyCountdown.days}k {String(weeklyCountdown.hours).padStart(2, '0')}s{' '}
+                  {String(weeklyCountdown.minutes).padStart(2, '0')}d {String(weeklyCountdown.seconds).padStart(2, '0')}son qoldi
+                </span>
+              </div>
+              <h2 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white truncate">
+                {weeklyChallenge?.title || "Haftalik Eko-Marafon"}
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
+                {weeklyChallenge?.description || "Ushbu haftada kamida 3 ta ekologik missiyani yakunlang va bonus oling."}
+              </p>
+            </div>
+            <div className="text-right shrink-0">
+              <div className="text-sm font-black font-mono tabular-nums text-amber-500">
+                +{weeklyChallenge?.rewardCoins || 250} EC
+              </div>
+              <div className="text-[10px] text-slate-400 tabular-nums">
+                {weeklyChallenge?.participantsCount || 0} qatnashchi
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 dark:text-slate-300 tabular-nums">
+              <span>Progress</span>
+              <span>
+                {weeklyChallenge?.progress || 0} / {weeklyChallenge?.targetActions || 3} amal
+              </span>
+            </div>
+            <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-[#040D0A] overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-300"
+                style={{
+                  width: `${Math.min(
+                    100,
+                    Math.round(((weeklyChallenge?.progress || 0) / Math.max(1, weeklyChallenge?.targetActions || 3)) * 100)
+                  )}%`,
+                }}
+              />
+            </div>
+
+            <div className="pt-1">
+              {weeklyChallenge?.claimed ? (
+                <div className="min-h-[40px] px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-xs font-bold flex items-center justify-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Haftalik bonus olindi</span>
+                </div>
+              ) : weeklyChallenge?.completed ? (
+                <button
+                  type="button"
+                  disabled={joiningWeekly}
+                  onClick={async () => {
+                    setJoiningWeekly(true);
+                    try {
+                      await claimWeeklyChallenge();
+                    } finally {
+                      setJoiningWeekly(false);
+                    }
+                  }}
+                  className="w-full min-h-[42px] px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs cursor-pointer transition-all"
+                >
+                  +{weeklyChallenge?.rewardCoins || 250} EcoCoin mukofotni olish
+                </button>
+              ) : weeklyChallenge?.joined ? (
+                <div className="min-h-[40px] px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-500 text-xs font-bold flex items-center justify-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Qatnashyapsiz · Missiyalarni bajaring</span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  disabled={joiningWeekly}
+                  onClick={async () => {
+                    setJoiningWeekly(true);
+                    try {
+                      await joinWeeklyChallenge();
+                    } finally {
+                      setJoiningWeekly(false);
+                    }
+                  }}
+                  className="w-full min-h-[42px] px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs cursor-pointer transition-all"
+                >
+                  Chellenjga qo'shilish
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Live Maktab Jamoaviy Missiyasi Card */}
+        <div className="p-4 rounded-2xl bg-white dark:bg-[#061812] border border-emerald-500/25 flex flex-col justify-between gap-3 shadow-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1 min-w-0">
+              <div className="flex items-center gap-2 text-[11px] font-semibold text-teal-400">
+                <Users className="w-3.5 h-3.5 shrink-0" />
+                <span>Maktab jamoaviy missiyasi</span>
+              </div>
+              <h2 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white truncate">
+                {schoolTeamMission?.schoolName || user.schoolName || 'Maktabingiz'}
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
+                Maktab o'quvchilarining har bir bajargan missiyasi umumiy maktab reytingini oshiradi.
+              </p>
+            </div>
+            <div className="text-right shrink-0">
+              <div className="text-sm font-black font-mono tabular-nums text-emerald-400">
+                {schoolTeamMission?.schoolRank ? `#${schoolTeamMission.schoolRank}` : 'Jonli'}
+              </div>
+              <div className="text-[10px] text-slate-400 tabular-nums">
+                {schoolTeamMission?.membersCount || 0} o'quvchi
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 dark:text-slate-300 tabular-nums">
+              <span>Jamoaviy XP maqsadi</span>
+              <span>
+                {(schoolTeamMission?.currentXp || 0).toLocaleString()} / {(schoolTeamMission?.targetXp || 5000).toLocaleString()} XP
+              </span>
+            </div>
+            <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-[#040D0A] overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-teal-400 to-emerald-400 transition-all duration-300"
+                style={{ width: `${Math.max(4, schoolTeamMission?.progressPct || 0)}%` }}
+              />
+            </div>
+
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => setActiveTab('championship')}
+                className="w-full min-h-[42px] px-4 py-2 rounded-xl bg-slate-100 dark:bg-[#040D0A] hover:bg-emerald-500/15 border border-slate-200 dark:border-emerald-500/25 text-slate-800 dark:text-emerald-300 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all"
+              >
+                <Trophy className="w-4 h-4 text-amber-400" />
+                <span>Maktablar ligasini ko'rish</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 3. Horizontal Scrollable Category Tabs + Admin Review Toggle */}
+      <div className="space-y-2.5">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
           {(
             [
               { id: 'all', label: 'Barchasi' },
-              { id: 'quiz', label: 'Eko-Quiz Testlar' },
-              { id: 'channel_subscribe', label: 'Telegram Kanallar' },
-              { id: 'custom_task', label: 'Amaliy Topshiriqlar' },
+              { id: 'daily', label: 'Kunlik' },
+              { id: 'ecology', label: 'Ekologiya' },
+              { id: 'quiz', label: 'Quiz' },
+              { id: 'team', label: 'Jamoaviy' },
+              { id: 'recycle', label: 'Qayta ishlash' },
+              { id: 'activity', label: 'Faollik' },
+              { id: 'special', label: 'Maxsus' },
+              { id: 'completed', label: 'Bajarilgan' },
             ] as { id: MissionFilter; label: string }[]
           ).map(f => (
             <button
@@ -698,10 +965,10 @@ export const EcoMissionsPage: React.FC = () => {
                 setPageTab('missions');
                 setFilterType(f.id);
               }}
-              className={`min-h-[40px] px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap shrink-0 transition-all cursor-pointer border ${
                 pageTab === 'missions' && filterType === f.id
-                  ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                  : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:border-emerald-500/40'
+                  ? 'bg-emerald-500 border-emerald-400 text-slate-950 shadow-sm'
+                  : 'bg-white dark:bg-[#061812] border-slate-200 dark:border-emerald-500/20 text-slate-600 dark:text-slate-300 hover:border-emerald-400/50'
               }`}
             >
               {f.label}
@@ -715,8 +982,8 @@ export const EcoMissionsPage: React.FC = () => {
               onClick={() => setPageTab('missions')}
               className={`min-h-[40px] px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-all tabular-nums ${
                 pageTab === 'missions'
-                  ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950'
-                  : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400'
+                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/35'
+                  : 'bg-white dark:bg-[#061812] text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-emerald-500/15'
               }`}
             >
               Missiyalar ({visibleMissions.length})
@@ -725,13 +992,13 @@ export const EcoMissionsPage: React.FC = () => {
               onClick={() => setPageTab('submissions')}
               className={`min-h-[40px] px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition-all ${
                 pageTab === 'submissions'
-                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                  : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800'
+                  ? 'bg-amber-500 text-slate-950'
+                  : 'bg-white dark:bg-[#061812] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-emerald-500/15'
               }`}
             >
-              <span>Kelgan Arizalar</span>
+              <span>Kelgan arizalar</span>
               {pendingSubmissions.length > 0 && (
-                <span className="px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-black tabular-nums">
+                <span className="px-1.5 py-0.5 rounded-md bg-rose-500 text-white text-[10px] font-black tabular-nums">
                   {pendingSubmissions.length}
                 </span>
               )}
@@ -740,20 +1007,20 @@ export const EcoMissionsPage: React.FC = () => {
         )}
       </div>
 
-      {/* MISSIONS GRID */}
+      {/* 4. COMPACT 2-COLUMN MOBILE MISSIONS GRID */}
       {pageTab === 'missions' ? (
         visibleMissions.length === 0 ? (
-          <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-12 text-center space-y-3">
-            <Target className="w-10 h-10 text-emerald-500 mx-auto" />
-            <h3 className="text-lg font-black text-slate-900 dark:text-white">
-              Hozircha bu bo‘limda missiya yo‘q
+          <div className="rounded-3xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 p-10 text-center space-y-2">
+            <Target className="w-9 h-9 text-emerald-500 mx-auto" />
+            <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+              Bu bo‘limda missiya topilmadi
             </h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Admin tez orada yangi topshiriq va quiz testlarni joylaydi.
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Boshqa kategoriyani tanlang yoki admin yangi missiya qo'shishini kuting.
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-4">
             {visibleMissions.map(mission => {
               const meta = typeMeta(mission.type);
               const MetaIcon = meta.icon;
@@ -762,277 +1029,192 @@ export const EcoMissionsPage: React.FC = () => {
               const isBusy = submittingMissionId === mission.id;
               const qCount = mission.type === 'quiz' ? getMissionQuestions(mission).length : 0;
               const passThreshold = mission.passingPercent || 70;
+              const rewardXp = mission.rewardCoins * 4;
+              const isExpanded = Boolean(expandedDescriptions[mission.id]);
+              const channelHref = mission.type === 'channel_subscribe' ? getMissionChannelHref(mission) : '';
+              const channelErr = channelErrors[mission.id];
+              const hasVisited = Boolean(visitedChannels[mission.id]);
 
               return (
                 <div
                   key={mission.id}
-                  className={`rounded-3xl border p-6 flex flex-col justify-between gap-5 transition-all bg-white dark:bg-slate-900/85 shadow-lg ${
+                  className={`relative rounded-2xl bg-white dark:bg-[#061812] border p-3 sm:p-4 flex flex-col justify-between gap-2.5 transition-all shadow-sm h-full ${
                     mission.status === 'paused'
-                      ? 'border-amber-500/30 opacity-75'
+                      ? 'border-amber-500/35 opacity-75'
                       : isCompleted
-                      ? 'border-emerald-500/45'
-                      : 'border-slate-200 dark:border-slate-800 hover:border-emerald-500/40'
+                      ? 'border-emerald-400/60'
+                      : 'border-slate-200 dark:border-emerald-500/20 hover:border-emerald-400/50'
                   }`}
                 >
-                  <div className="space-y-4">
-                    {/* Clean Unboxed Top Metadata Strip + Admin Controls */}
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs font-bold">
-                        <span className={`inline-flex items-center gap-1.5 ${meta.accent}`}>
-                          <MetaIcon className="w-4 h-4" />
-                          <span>{meta.label}</span>
-                        </span>
-                        <span className="text-slate-400 dark:text-slate-600">·</span>
-                        <span className="text-amber-500 font-black tabular-nums">
-                          +{mission.rewardCoins} EC
-                        </span>
-                        {mission.type === 'quiz' && (
-                          <>
-                            <span className="text-slate-400 dark:text-slate-600">·</span>
-                            <span className="text-slate-500 dark:text-slate-400 tabular-nums">
-                              {qCount} ta savol · {passThreshold}%
-                            </span>
-                          </>
-                        )}
-                        {isCompleted && (
-                          <>
-                            <span className="text-slate-400 dark:text-slate-600">·</span>
-                            <span className="text-emerald-400 inline-flex items-center gap-1 font-black">
-                              <CheckCircle2 className="w-3.5 h-3.5" /> Bajarilgan
-                            </span>
-                          </>
-                        )}
-                        {mission.status === 'paused' && (
-                          <>
-                            <span className="text-slate-400 dark:text-slate-600">·</span>
-                            <span className="text-amber-400">To‘xtatilgan</span>
-                          </>
-                        )}
+                  <div className="space-y-2">
+                    {/* Compact Header Strip */}
+                    <div className="flex items-start justify-between gap-1.5">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-100 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/15 flex items-center justify-center shrink-0 ${meta.accent}`}>
+                          <MetaIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-[10px] font-bold text-slate-400 truncate">{meta.label}</div>
+                          <div className="text-[11px] font-extrabold font-mono tabular-nums text-amber-500 dark:text-amber-400 truncate">
+                            +{mission.rewardCoins} EC · +{rewardXp} XP
+                          </div>
+                        </div>
                       </div>
 
                       {canManageMissions && (
-                        <div className="flex items-center gap-1 shrink-0">
+                        <div className="flex items-center gap-0.5 shrink-0">
                           <button
                             onClick={() => openEditModal(mission)}
                             title="Tahrirlash"
-                            className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-emerald-400 cursor-pointer"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 cursor-pointer"
                           >
-                            <Edit2 className="w-4 h-4" />
+                            <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => handleToggleStatus(mission)}
                             title={mission.status === 'active' ? "To'xtatish" : 'Faollashtirish'}
-                            className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-amber-400 cursor-pointer"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-amber-400 cursor-pointer"
                           >
                             {mission.status === 'active' ? (
-                              <PauseCircle className="w-4 h-4" />
+                              <PauseCircle className="w-3.5 h-3.5" />
                             ) : (
-                              <PlayCircle className="w-4 h-4" />
+                              <PlayCircle className="w-3.5 h-3.5" />
                             )}
                           </button>
                           <button
                             onClick={() => handleDeleteMission(mission)}
                             title="O'chirish"
-                            className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-rose-400 cursor-pointer"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 cursor-pointer"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       )}
                     </div>
 
-                    {/* Title & Description */}
-                    <div className="space-y-1.5">
-                      <h3 className="text-xl font-black text-slate-900 dark:text-white leading-snug">
+                    {/* Title & Expandable Description */}
+                    <div className="space-y-1">
+                      <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white leading-snug line-clamp-2">
                         {mission.title}
                       </h3>
-                      <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                      <p className={`text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed ${isExpanded ? '' : 'line-clamp-2'}`}>
                         {mission.description}
                       </p>
-                    </div>
-
-                    {/* QUIZ SUMMARY STAGE */}
-                    {mission.type === 'quiz' && (
-                      <div className="p-4 rounded-2xl bg-sky-500/5 border border-sky-500/20 flex items-center justify-between gap-3">
-                        <div className="space-y-0.5 text-xs">
-                          <div className="font-black text-slate-900 dark:text-white tabular-nums">
-                            {qCount} ta test savoli · O‘tish chegarasi: {passThreshold}%
-                          </div>
-                          <div className="text-slate-500 dark:text-slate-400">
-                            Test davomida natijalar yashiriladi va yakunda umumiy foiz hisoblanadi.
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* CHANNEL SUBSCRIBE BODY */}
-                    {mission.type === 'channel_subscribe' && (
-                      <div className="p-4 rounded-2xl bg-indigo-500/5 border border-indigo-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div>
-                          <div className="text-[11px] font-bold text-indigo-400 uppercase tracking-wider">
-                            Rasmiy Kanal
-                          </div>
-                          <div className="text-sm font-black text-slate-900 dark:text-white">
-                            {mission.channelUsername || '@Ecoheros_channel'}
-                          </div>
-                        </div>
+                      {(mission.description || '').length > 55 && (
                         <button
                           type="button"
                           onClick={() =>
-                            openAdTargetUrl(
-                              mission.channelUrl ||
-                                `https://t.me/${(mission.channelUsername || 'Ecoheros_channel').replace(/^@/, '')}`
-                            )
+                            setExpandedDescriptions(prev => ({ ...prev, [mission.id]: !isExpanded }))
                           }
-                          className="min-h-[40px] inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white text-xs font-black transition-all cursor-pointer"
+                          className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-500 cursor-pointer"
                         >
-                          <span>Kanalga o‘tish</span>
-                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>{isExpanded ? 'Yopish' : 'Batafsil'}</span>
+                          {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                         </button>
+                      )}
+                    </div>
+
+                    {/* Concise Status / Extra Info */}
+                    {mission.type === 'quiz' && (
+                      <div className="text-[11px] font-semibold text-sky-400 tabular-nums">
+                        {qCount} savol · {passThreshold}% o'tish
                       </div>
                     )}
 
-                    {/* CUSTOM TASK BODY */}
-                    {mission.type === 'custom_task' && !isCompleted && (
-                      <div className="space-y-3 pt-1">
-                        {latestSub && (
-                          <div
-                            className={`p-3 rounded-2xl border text-xs font-semibold flex items-start gap-2 ${
-                              latestSub.status === 'pending'
-                                ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
-                                : latestSub.status === 'approved'
-                                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                                : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
-                            }`}
-                          >
-                            <Clock className="w-4 h-4 shrink-0 mt-0.5" />
-                            <div className="space-y-1">
-                              <div>
-                                Holat:{' '}
-                                {latestSub.status === 'pending'
-                                  ? 'Admin tekshiruvida'
-                                  : latestSub.status === 'approved'
-                                  ? 'Tasdiqlandi'
-                                  : 'Rad etildi'}
-                              </div>
-                              {latestSub.aiCheck?.verdictUz && (
-                                <div className="opacity-80">AI: {latestSub.aiCheck.verdictUz}</div>
-                              )}
-                              {latestSub.adminNote && (
-                                <div className="opacity-80">Izoh: {latestSub.adminNote}</div>
-                              )}
-                            </div>
-                          </div>
-                        )}
+                    {mission.type === 'channel_subscribe' && (
+                      <div className="text-[11px] font-semibold text-indigo-400 truncate">
+                        {mission.channelUsername || '@Ecoheros_channel'}
+                      </div>
+                    )}
 
-                        <textarea
-                          rows={2}
-                          value={proofTexts[mission.id] || ''}
-                          onChange={e =>
-                            setProofTexts(prev => ({ ...prev, [mission.id]: e.target.value }))
-                          }
-                          placeholder="Bajarilgan ish haqida qisqa izoh yozing..."
-                          className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
-                        />
+                    {mission.type === 'custom_task' && latestSub && !isCompleted && (
+                      <div
+                        className={`text-[11px] font-semibold ${
+                          latestSub.status === 'pending'
+                            ? 'text-amber-400'
+                            : latestSub.status === 'approved'
+                            ? 'text-emerald-400'
+                            : 'text-rose-400'
+                        }`}
+                      >
+                        {latestSub.status === 'pending'
+                          ? 'Tekshiruvda...'
+                          : latestSub.status === 'approved'
+                          ? 'Tasdiqlangan'
+                          : 'Rad etildi · Qayta yuboring'}
+                      </div>
+                    )}
 
-                        <div className="flex flex-wrap items-center gap-3">
-                          <label className="min-h-[42px] inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 cursor-pointer transition-all">
-                            {uploadingMissionId === mission.id ? (
-                              <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
-                            ) : (
-                              <Upload className="w-4 h-4 text-emerald-500" />
-                            )}
-                            <span>
-                              {uploadingMissionId === mission.id
-                                ? 'Yuklanmoqda...'
-                                : 'Dalil Rasmi / Video Yuklash'}
-                            </span>
-                            <input
-                              type="file"
-                              accept="image/*,video/*,.mp4,.mov,.webm"
-                              className="hidden"
-                              onChange={e => handleProofFileChange(mission.id, e)}
-                            />
-                          </label>
-
-                          {proofMediaUrls[mission.id] && (
-                            <div className="flex items-center gap-2">
-                              {/\.(mp4|mov|webm|m4v)(\?|$)/i.test(proofMediaUrls[mission.id]) ? (
-                                <video
-                                  src={resolveMediaUrl(proofMediaUrls[mission.id])}
-                                  className="w-14 h-11 rounded-xl object-cover border border-emerald-500/40 bg-black"
-                                />
-                              ) : (
-                                <img
-                                  src={resolveMediaUrl(proofMediaUrls[mission.id])}
-                                  alt="Dalil"
-                                  className="w-11 h-11 rounded-xl object-cover border border-emerald-500/40"
-                                />
-                              )}
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setProofMediaUrls(prev => ({ ...prev, [mission.id]: '' }))
-                                }
-                                className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 cursor-pointer"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          )}
-                        </div>
+                    {channelErr && (
+                      <div className="text-[10px] text-rose-400 font-semibold leading-snug">
+                        {channelErr}
                       </div>
                     )}
                   </div>
 
-                  {/* Footer CTA */}
-                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80">
+                  {/* Compact Footer Actions */}
+                  <div className="pt-2 border-t border-slate-100 dark:border-emerald-500/15 space-y-1.5">
                     {isCompleted ? (
-                      <div className="w-full min-h-[44px] py-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2">
-                        <CheckCircle2 className="w-4 h-4" />
-                        <span>Mukofot Olingan (+{mission.rewardCoins} EC)</span>
+                      <div className="w-full min-h-[40px] py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-bold flex items-center justify-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>Bajarilgan</span>
                       </div>
                     ) : mission.type === 'quiz' ? (
                       <button
                         disabled={mission.status === 'paused' || qCount === 0}
                         onClick={() => openQuizRunner(mission)}
-                        className="w-full min-h-[44px] py-3 rounded-2xl bg-sky-500 hover:bg-sky-400 disabled:opacity-50 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all"
+                        className="w-full min-h-[40px] sm:min-h-[44px] px-2.5 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 disabled:opacity-50 text-slate-950 font-bold text-[11px] flex items-center justify-center gap-1.5 cursor-pointer transition-all"
                       >
-                        <ShieldCheck className="w-4 h-4" />
-                        <span>Testni Boshlash ({qCount} savol · +{mission.rewardCoins} EC)</span>
+                        <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                        <span>Testni boshlash</span>
                       </button>
                     ) : mission.type === 'channel_subscribe' ? (
-                      <button
-                        disabled={isBusy || mission.status === 'paused'}
-                        onClick={() => handleChannelVerify(mission)}
-                        className="w-full min-h-[44px] py-3 rounded-2xl bg-indigo-500 hover:bg-indigo-400 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all"
-                      >
-                        {isBusy ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <CheckCircle2 className="w-4 h-4" />
-                        )}
-                        <span>Obunani Tekshirish (+{mission.rewardCoins} Coin)</span>
-                      </button>
+                      <div className="space-y-1.5">
+                        <a
+                          href={channelHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={e => {
+                            setVisitedChannels(prev => ({ ...prev, [mission.id]: true }));
+                            setChannelErrors(prev => {
+                              const next = { ...prev };
+                              delete next[mission.id];
+                              return next;
+                            });
+                            if (isInsideTelegramWebApp()) {
+                              e.preventDefault();
+                              openAdTargetUrl(channelHref);
+                            }
+                          }}
+                          className={`w-full min-h-[38px] px-2.5 py-1.5 rounded-xl text-white text-[11px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer no-underline ${
+                            hasVisited ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-indigo-500 hover:bg-indigo-400'
+                          }`}
+                        >
+                          <span className="truncate">{hasVisited ? 'Kanalga qayta' : "Kanalga o'tish"}</span>
+                          <ExternalLink className="w-3 h-3 shrink-0" />
+                        </a>
+                        <button
+                          disabled={isBusy || mission.status === 'paused'}
+                          onClick={() => handleChannelVerify(mission)}
+                          className="w-full min-h-[40px] px-2.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-[11px] flex items-center justify-center gap-1 cursor-pointer transition-all"
+                        >
+                          {isBusy ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                          )}
+                          <span>Tekshirish</span>
+                        </button>
+                      </div>
                     ) : (
                       <button
-                        disabled={
-                          isBusy ||
-                          mission.status === 'paused' ||
-                          latestSub?.status === 'pending'
-                        }
-                        onClick={() => handleCustomTaskSubmit(mission)}
-                        className="w-full min-h-[44px] py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all"
+                        disabled={mission.status === 'paused' || latestSub?.status === 'pending'}
+                        onClick={() => setProofModalMission(mission)}
+                        className="w-full min-h-[40px] sm:min-h-[44px] px-2.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-[11px] flex items-center justify-center gap-1.5 cursor-pointer transition-all"
                       >
-                        {isBusy ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Send className="w-4 h-4" />
-                        )}
+                        <Upload className="w-3.5 h-3.5 shrink-0" />
                         <span>
-                          {latestSub?.status === 'pending'
-                            ? 'Tekshiruv kutilmoqda...'
-                            : `Topshiriqni Yuborish (+${mission.rewardCoins} Coin)`}
+                          {latestSub?.status === 'pending' ? 'Kutilmoqda' : 'Dalil yuborish'}
                         </span>
                       </button>
                     )}
@@ -1046,12 +1228,12 @@ export const EcoMissionsPage: React.FC = () => {
         /* ADMIN SUBMISSIONS REVIEW TAB */
         <div className="space-y-4">
           {sortedSubmissions.length === 0 ? (
-            <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-12 text-center space-y-2">
+            <div className="eco-surface rounded-[28px] p-12 text-center space-y-2">
               <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
-              <div className="text-base font-black text-slate-900 dark:text-white">
+              <div className="text-base font-black text-slate-900 dark:text-white font-display">
                 Tekshiruv uchun ariza yo‘q
               </div>
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-slate-500 dark:text-emerald-100/65">
                 O‘quvchilar topshiriq yuborganida bu yerda ko‘rinadi.
               </p>
             </div>
@@ -1061,7 +1243,7 @@ export const EcoMissionsPage: React.FC = () => {
               return (
                 <div
                   key={sub.id}
-                  className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 p-5 flex flex-col md:flex-row gap-5 justify-between"
+                  className="eco-surface rounded-[28px] p-5 flex flex-col md:flex-row gap-5 justify-between shadow-lg"
                 >
                   <div className="flex flex-col sm:flex-row gap-4 flex-1 min-w-0">
                     {sub.mediaUrl ? (
@@ -1175,23 +1357,128 @@ export const EcoMissionsPage: React.FC = () => {
         </div>
       )}
 
+      {/* CUSTOM TASK PROOF SUBMISSION MODAL */}
+      {proofModalMission && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/30 p-5 sm:p-6 space-y-4 shadow-2xl my-8">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-xs font-bold text-emerald-500">+{proofModalMission.rewardCoins} EcoCoin</div>
+                <h3 className="text-lg font-extrabold text-slate-900 dark:text-white leading-snug">
+                  {proofModalMission.title}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setProofModalMission(null)}
+                className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-300 flex items-center justify-center cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+              {proofModalMission.description}
+            </p>
+
+            <textarea
+              rows={3}
+              value={proofTexts[proofModalMission.id] || ''}
+              onChange={e =>
+                setProofTexts(prev => ({ ...prev, [proofModalMission.id]: e.target.value }))
+              }
+              placeholder="Bajarilgan ish haqida qisqa izoh yozing..."
+              className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/25 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+            />
+
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="min-h-[44px] inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/25 text-xs font-bold text-slate-700 dark:text-emerald-200 cursor-pointer">
+                {uploadingMissionId === proofModalMission.id ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+                ) : (
+                  <Upload className="w-4 h-4 text-emerald-500" />
+                )}
+                <span>
+                  {uploadingMissionId === proofModalMission.id ? 'Yuklanmoqda...' : 'Rasm / Video yuklash'}
+                </span>
+                <input
+                  type="file"
+                  accept="image/*,video/*,.mp4,.mov,.webm"
+                  className="hidden"
+                  onChange={e => handleProofFileChange(proofModalMission.id, e)}
+                />
+              </label>
+
+              {proofMediaUrls[proofModalMission.id] && (
+                <div className="flex items-center gap-2">
+                  {/\.(mp4|mov|webm|m4v)(\?|$)/i.test(proofMediaUrls[proofModalMission.id]) ? (
+                    <video
+                      src={resolveMediaUrl(proofMediaUrls[proofModalMission.id])}
+                      className="w-14 h-11 rounded-xl object-cover border border-emerald-500/40 bg-black"
+                    />
+                  ) : (
+                    <img
+                      src={resolveMediaUrl(proofMediaUrls[proofModalMission.id])}
+                      alt="Dalil"
+                      className="w-11 h-11 rounded-xl object-cover border border-emerald-500/40"
+                    />
+                  )}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setProofMediaUrls(prev => ({ ...prev, [proofModalMission.id]: '' }))
+                    }
+                    className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setProofModalMission(null)}
+                className="min-h-[44px] px-4 py-2 rounded-xl bg-slate-100 dark:bg-white/10 text-xs font-bold text-slate-600 dark:text-slate-300 cursor-pointer"
+              >
+                Bekor qilish
+              </button>
+              <button
+                type="button"
+                disabled={submittingMissionId === proofModalMission.id}
+                onClick={() => handleCustomTaskSubmit(proofModalMission)}
+                className="min-h-[44px] px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                {submittingMissionId === proofModalMission.id ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
+                <span>Yuborish</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MULTI-QUESTION SEQUENTIAL QUIZ RUNNER MODAL */}
       {activeQuizMission && (
-        <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-          <div className="w-full max-w-2xl rounded-[32px] bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-2xl my-8 space-y-6">
+        <div className="fixed inset-0 z-50 bg-[#020806]/90 backdrop-blur-lg flex items-center justify-center p-4 overflow-y-auto">
+          <div className="w-full max-w-2xl rounded-[32px] bg-white dark:bg-[#071812] border border-slate-200 dark:border-emerald-500/25 p-6 sm:p-8 shadow-2xl my-8 space-y-6">
             {/* Quiz Header */}
             <div className="flex items-start justify-between gap-4">
               <div className="space-y-1">
-                <div className="text-[11px] font-black uppercase tracking-widest text-sky-400">
+                <div className="text-[11px] font-black uppercase tracking-widest text-emerald-500 dark:text-emerald-400">
                   Eko-Quiz Test · +{activeQuizMission.rewardCoins} EcoCoin
                 </div>
-                <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
+                <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white font-display">
                   {activeQuizMission.title}
                 </h2>
               </div>
               <button
                 onClick={() => setActiveQuizMission(null)}
-                className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
+                className="p-2.5 rounded-xl bg-slate-100 dark:bg-[#0D261D] text-slate-400 hover:text-white cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1201,22 +1488,22 @@ export const EcoMissionsPage: React.FC = () => {
               <div className="space-y-6">
                 {/* Completion Progress Bar ONLY — NO running score shown */}
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400 tabular-nums">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-emerald-100/70 tabular-nums">
                     <span>
                       Savol {quizStepIndex + 1} / {activeQuizQuestions.length}
                     </span>
                     <span>O‘tish bali: {activeQuizMission.passingPercent || 70}%</span>
                   </div>
-                  <div className="w-full h-2.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                  <div className="w-full h-2.5 rounded-full bg-slate-100 dark:bg-[#040D0A] border border-emerald-500/15 overflow-hidden">
                     <div
-                      className="h-full bg-gradient-to-r from-sky-500 to-emerald-500 transition-all duration-300 rounded-full"
+                      className="h-full bg-gradient-to-r from-sky-500 via-emerald-400 to-lime-300 transition-all duration-300 rounded-full"
                       style={{ width: `${Math.max(8, quizProgressPct)}%` }}
                     />
                   </div>
                 </div>
 
                 {/* Question Prompt */}
-                <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800">
+                <div className="p-5 rounded-2xl bg-slate-50 dark:bg-[#040D0A]/85 border border-slate-200 dark:border-emerald-500/20">
                   <p className="text-base sm:text-lg font-black text-slate-900 dark:text-white leading-snug">
                     {currentQuizQuestion.question}
                   </p>
@@ -1413,15 +1700,15 @@ export const EcoMissionsPage: React.FC = () => {
 
       {/* ADMIN CREATE / EDIT MISSION MODAL */}
       {modalOpen && canManageMissions && (
-        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-          <div className="w-full max-w-2xl rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 sm:p-7 space-y-5 shadow-2xl my-8 max-h-[92vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-[#020806]/85 backdrop-blur-lg flex items-center justify-center p-4 overflow-y-auto">
+          <div className="w-full max-w-2xl rounded-3xl bg-white dark:bg-[#071812] border border-slate-200 dark:border-emerald-500/25 p-6 sm:p-7 space-y-5 shadow-2xl my-8 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-black text-slate-900 dark:text-white">
+              <h2 className="text-xl font-black text-slate-900 dark:text-white font-display">
                 {editingMissionId ? 'Missiyani Tahrirlash' : 'Yangi Missiya / Quiz Yaratish'}
               </h2>
               <button
                 onClick={() => setModalOpen(false)}
-                className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
+                className="p-2 rounded-xl bg-slate-100 dark:bg-[#0D261D] text-slate-400 hover:text-white cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1736,33 +2023,64 @@ export const EcoMissionsPage: React.FC = () => {
 
               {/* CHANNEL SPECIFIC */}
               {form.type === 'channel_subscribe' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 rounded-2xl bg-indigo-500/5 border border-indigo-500/20">
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-indigo-400 uppercase">
-                      Kanal Username
-                    </label>
-                    <input
-                      type="text"
-                      value={form.channelUsername}
-                      onChange={e =>
-                        setForm(prev => ({ ...prev, channelUsername: e.target.value }))
-                      }
-                      placeholder="@Ecoheros_channel"
-                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-sm text-slate-900 dark:text-white"
-                    />
+                <div className="space-y-3 p-4 rounded-2xl bg-indigo-500/5 border border-indigo-500/20">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-indigo-400 uppercase">
+                        Kanal Username
+                      </label>
+                      <input
+                        type="text"
+                        value={form.channelUsername}
+                        onChange={e => {
+                          const val = e.target.value;
+                          const cleanNew = val
+                            .trim()
+                            .replace(/^https?:\/\/(?:t\.me|telegram\.me)\//i, '')
+                            .replace(/^@/, '')
+                            .split(/[/?#]/)[0];
+                          setForm(prev => {
+                            const oldClean = prev.channelUsername.trim().replace(/^@/, '');
+                            const currentUrl = prev.channelUrl.trim();
+                            const isPrivateInvite = /t\.me\/\+/i.test(currentUrl);
+                            const shouldAutoSyncUrl =
+                              !currentUrl ||
+                              (!isPrivateInvite &&
+                                (currentUrl.includes(oldClean) ||
+                                  currentUrl.includes('Ecoheros_bot') ||
+                                  currentUrl.includes('Ecoheros_channel') ||
+                                  currentUrl.includes('Ecoheros_uz') ||
+                                  /^https?:\/\/(?:t\.me|telegram\.me)\/[A-Za-z0-9_]+\/?$/i.test(currentUrl)));
+                            return {
+                              ...prev,
+                              channelUsername: val,
+                              channelUrl:
+                                shouldAutoSyncUrl && cleanNew && !/^-?\d+$/.test(cleanNew)
+                                  ? `https://t.me/${cleanNew}`
+                                  : prev.channelUrl,
+                            };
+                          });
+                        }}
+                        placeholder="@Ecoherouz"
+                        className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-sm text-slate-900 dark:text-white"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-indigo-400 uppercase">
+                        Kanal Havolasi
+                      </label>
+                      <input
+                        type="text"
+                        value={form.channelUrl}
+                        onChange={e => setForm(prev => ({ ...prev, channelUrl: e.target.value }))}
+                        placeholder="https://t.me/Ecoherouz"
+                        className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-sm text-slate-900 dark:text-white"
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-indigo-400 uppercase">
-                      Kanal Havolasi
-                    </label>
-                    <input
-                      type="text"
-                      value={form.channelUrl}
-                      onChange={e => setForm(prev => ({ ...prev, channelUrl: e.target.value }))}
-                      placeholder="https://t.me/Ecoheros_channel"
-                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-sm text-slate-900 dark:text-white"
-                    />
-                  </div>
+                  <p className="text-[11px] text-indigo-400/90 leading-relaxed">
+                    Haqiqiy obuna tekshiruvi ishlashi uchun ECO HERO botini ushbu Telegram kanalga admin qilib qo‘shing.
+                  </p>
                 </div>
               )}
 

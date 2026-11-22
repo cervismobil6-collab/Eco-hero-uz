@@ -47,6 +47,7 @@ import {
   Edit2,
   Send,
   ExternalLink,
+  Megaphone,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useEco } from '../context/EcoContext';
@@ -62,6 +63,7 @@ import { SuperAdminModerationView } from '../components/dashboard/SuperAdminMode
 import { ModeratorDashboardView } from '../components/dashboard/ModeratorDashboardView';
 import { VoucherVerifierPanel } from '../components/shop/VoucherVerifierPanel';
 import { GiftGateConfigEditor } from '../components/shop/GiftGateConfigEditor';
+import { HomePostsManagerPanel } from '../components/dashboard/HomePostsManagerPanel';
 
 function getDefaultTabForRole(role: string): string {
   switch (role) {
@@ -145,6 +147,7 @@ export const AdminDashboardPage: React.FC = () => {
 
   const [newAdTitle, setNewAdTitle] = useState('');
   const [newAdSponsor, setNewAdSponsor] = useState('');
+  const [newAdSponsorLogo, setNewAdSponsorLogo] = useState('');
   const [newAdHeadline, setNewAdHeadline] = useState('');
   const [newAdSubheadline, setNewAdSubheadline] = useState('');
   const [newAdCtaText, setNewAdCtaText] = useState("Batafsil ko'rish");
@@ -160,6 +163,7 @@ export const AdminDashboardPage: React.FC = () => {
   const [savingAdItem, setSavingAdItem] = useState(false);
   const [uploadingShopImg, setUploadingShopImg] = useState(false);
   const [uploadingAdImg, setUploadingAdImg] = useState(false);
+  const [uploadingAdLogo, setUploadingAdLogo] = useState(false);
   const [uploadingAdVideo, setUploadingAdVideo] = useState(false);
 
   const openCreateShopModal = () => {
@@ -200,6 +204,7 @@ export const AdminDashboardPage: React.FC = () => {
     setEditingAdItem(null);
     setNewAdTitle('');
     setNewAdSponsor('');
+    setNewAdSponsorLogo('');
     setNewAdHeadline('');
     setNewAdSubheadline('');
     setNewAdCtaText("Batafsil ko'rish");
@@ -219,6 +224,7 @@ export const AdminDashboardPage: React.FC = () => {
     setEditingAdItem(ad);
     setNewAdTitle(ad.title || '');
     setNewAdSponsor(ad.sponsorName || '');
+    setNewAdSponsorLogo(ad.sponsorLogo || '');
     setNewAdHeadline(ad.headline || '');
     setNewAdSubheadline(ad.subheadline || '');
     setNewAdCtaText(ad.ctaText || "Batafsil ko'rish");
@@ -243,7 +249,7 @@ export const AdminDashboardPage: React.FC = () => {
 
   const handleAdminFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
-    target: 'shop_img' | 'ad_img' | 'ad_video'
+    target: 'shop_img' | 'ad_img' | 'ad_logo' | 'ad_video'
   ) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -254,12 +260,14 @@ export const AdminDashboardPage: React.FC = () => {
     }
     if (target === 'shop_img') setUploadingShopImg(true);
     if (target === 'ad_img') setUploadingAdImg(true);
+    if (target === 'ad_logo') setUploadingAdLogo(true);
     if (target === 'ad_video') setUploadingAdVideo(true);
     try {
       const up = await uploadMediaFile(file, file.name);
       if (up.success && up.url) {
         if (target === 'shop_img') setNewShopImageUrl(up.url);
         if (target === 'ad_img') setNewAdImageUrl(up.url);
+        if (target === 'ad_logo') setNewAdSponsorLogo(up.url);
         if (target === 'ad_video') {
           setNewAdVideoUrl(up.url);
           setNewAdType('video');
@@ -271,6 +279,7 @@ export const AdminDashboardPage: React.FC = () => {
     } finally {
       setUploadingShopImg(false);
       setUploadingAdImg(false);
+      setUploadingAdLogo(false);
       setUploadingAdVideo(false);
       e.target.value = '';
     }
@@ -416,6 +425,7 @@ export const AdminDashboardPage: React.FC = () => {
     { id: 'voucher_verifier', label: 'Vaucher Tekshirgich', icon: QrCode, roles: ['super_admin', 'moderator', 'school_admin', 'district_coordinator', 'regional_coordinator'] },
     { id: 'shop_orders', label: 'Buyurtmalar', icon: Clock, roles: ['super_admin', 'sponsor', 'school_admin'] },
     { id: 'ads', label: 'Reklama (ADS)', icon: Sparkles, roles: ['super_admin', 'sponsor'] },
+    { id: 'home_posts', label: 'Bosh Sahifa Postlari', icon: Megaphone, roles: ['super_admin'] },
     { id: 'telegram', label: 'Telegram Bot', icon: Bot, roles: ['super_admin'] },
     { id: 'audit', label: 'Audit Log', icon: History, roles: ['super_admin'] },
     { id: 'firebase_guide', label: 'Firebase Info', icon: Database, roles: ['super_admin'] },
@@ -1506,10 +1516,16 @@ export const AdminDashboardPage: React.FC = () => {
                   {ecoAds.map(ad => (
                     <div key={ad.id} className="p-5 bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 space-y-4">
                       <div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-900">
-                        {ad.videoUrl ? (
-                          <video src={resolveMediaUrl(ad.videoUrl)} controls playsInline className="w-full h-full object-cover" />
-                        ) : (
-                          <img src={resolveMediaUrl(ad.imageUrl)} alt={ad.title} className="w-full h-full object-cover" />
+                        <img
+                          src={resolveMediaUrl(ad.imageUrl)}
+                          alt={ad.title}
+                          loading="lazy"
+                          className="w-full h-full object-cover"
+                        />
+                        {ad.videoUrl && (
+                          <span className="absolute bottom-2.5 left-2.5 px-2 py-0.5 rounded-lg bg-black/75 text-white text-[10px] font-bold">
+                            VIDEO
+                          </span>
                         )}
                         <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
                           <span className="px-2 py-0.5 rounded-lg bg-slate-950/75 text-white text-[10px] font-black uppercase tabular-nums">
@@ -1533,8 +1549,28 @@ export const AdminDashboardPage: React.FC = () => {
                       </div>
 
                       <div className="space-y-1">
-                        <div className="flex items-start justify-between gap-2">
-                          <h4 className="text-base font-black leading-tight">{ad.title}</h4>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-8 h-8 rounded-full overflow-hidden bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                              {/^(https?:\/\/|\/uploads\/|\/assets\/|data:image\/)/i.test(String(ad.sponsorLogo || '').trim()) ? (
+                                <img
+                                  src={resolveMediaUrl(ad.sponsorLogo || '')}
+                                  alt={ad.sponsorName}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <span className="text-xs font-black text-emerald-500">
+                                  {ad.sponsorLogo && ad.sponsorLogo.trim().length <= 3
+                                    ? ad.sponsorLogo
+                                    : (ad.sponsorName || 'E').slice(0, 1).toUpperCase()}
+                                </span>
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <h4 className="text-base font-black leading-tight truncate">{ad.title}</h4>
+                              <div className="text-[11px] font-bold text-emerald-500 truncate">{ad.sponsorName}</div>
+                            </div>
+                          </div>
                           <span className="text-[10px] font-bold text-slate-400 shrink-0">{ad.placement}</span>
                         </div>
                         <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">{ad.headline} — {ad.subheadline}</p>
@@ -1580,6 +1616,9 @@ export const AdminDashboardPage: React.FC = () => {
                 </div>
               </div>
             )}
+
+            {/* SUPER ADMIN HOME POSTS CMS */}
+            {activeTab === 'home_posts' && user.role === 'super_admin' && <HomePostsManagerPanel />}
 
             {/* FIREBASE INFO GUIDE */}
             {activeTab === 'firebase_guide' && (
@@ -1735,8 +1774,8 @@ export const AdminDashboardPage: React.FC = () => {
                     const ok = await updateShopItem(editingShopItem.id, payload);
                     if (!ok) return;
                   } else {
-                    await createShopItem(payload);
-                    showNotification("Yangi sovg'a do'konga qo'shildi!", 'success');
+                    const ok = await createShopItem(payload);
+                    if (!ok) return;
                   }
                   setShowShopCreateModal(false);
                   setEditingShopItem(null);
@@ -1875,6 +1914,54 @@ export const AdminDashboardPage: React.FC = () => {
                 onChange={e => setNewAdSubheadline(e.target.value)}
                 className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
               />
+              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
+                <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                  Reklama profil rasmi (Avatar / Logotip)
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-full overflow-hidden bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                    {/^(https?:\/\/|\/uploads\/|\/assets\/|data:image\/)/i.test(newAdSponsorLogo.trim()) ? (
+                      <img
+                        src={resolveMediaUrl(newAdSponsorLogo)}
+                        alt="Avatar"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-sm font-black text-emerald-500">
+                        {newAdSponsorLogo && newAdSponsorLogo.trim().length <= 3
+                          ? newAdSponsorLogo
+                          : (newAdSponsor || newAdTitle || 'E').slice(0, 1).toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                  <label className="flex-1 px-3 py-2.5 rounded-xl bg-emerald-500/10 border border-dashed border-emerald-500/40 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer">
+                    <ImageIcon className="w-4 h-4 shrink-0" />
+                    <span>{uploadingAdLogo ? 'Yuklanmoqda...' : 'Profil rasmi yuklash'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={e => handleAdminFileUpload(e, 'ad_logo')}
+                      className="hidden"
+                    />
+                  </label>
+                  {/^(https?:\/\/|\/uploads\/|\/assets\/|data:image\/)/i.test(newAdSponsorLogo.trim()) && (
+                    <button
+                      type="button"
+                      onClick={() => setNewAdSponsorLogo('')}
+                      className="px-2.5 py-2 rounded-xl bg-rose-500/10 text-rose-500 text-[10px] font-bold cursor-pointer"
+                    >
+                      O&lsquo;chirish
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  placeholder="Yoki profil rasmi URL manzili (ixtiyoriy)"
+                  value={newAdSponsorLogo}
+                  onChange={e => setNewAdSponsorLogo(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-[11px] font-bold outline-none"
+                />
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <label className="px-3 py-3 rounded-2xl bg-sky-500/10 border border-dashed border-sky-500/40 text-sky-600 dark:text-sky-400 text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer">
                   <ImageIcon className="w-4 h-4 shrink-0" />
@@ -1980,18 +2067,20 @@ export const AdminDashboardPage: React.FC = () => {
               </label>
             </div>
             <button
-              disabled={savingAdItem || uploadingAdImg || uploadingAdVideo}
+              disabled={savingAdItem || uploadingAdImg || uploadingAdLogo || uploadingAdVideo}
               onClick={async () => {
                 if (!newAdTitle.trim() || savingAdItem) return;
                 setSavingAdItem(true);
                 try {
                   const cleanSkip = Math.max(5, Math.min(300, Number(newAdSkipSeconds) || 15));
                   const cleanReward = Math.max(10, Number(newAdRewardCoins) || 100);
+                  const cleanLogo = newAdSponsorLogo.trim() || '🌿';
                   const resolvedType = newAdVideoUrl.trim() ? 'video' : newAdType;
                   if (editingAdItem) {
                     const res = await updateEcoAd(editingAdItem.id, {
                       title: newAdTitle.trim(),
                       sponsorName: newAdSponsor.trim() || 'Eco Sponsor',
+                      sponsorLogo: cleanLogo,
                       type: resolvedType,
                       placement: newAdPlacement,
                       headline: newAdHeadline.trim() || newAdTitle.trim(),
@@ -2009,11 +2098,11 @@ export const AdminDashboardPage: React.FC = () => {
                     });
                     if (!res.success) return;
                   } else {
-                    await createEcoAd({
+                    const ok = await createEcoAd({
                       title: newAdTitle.trim(),
                       sponsorId: `sp_${Date.now()}`,
                       sponsorName: newAdSponsor.trim() || 'Eco Sponsor',
-                      sponsorLogo: '🌿',
+                      sponsorLogo: cleanLogo,
                       type: resolvedType,
                       placement: newAdPlacement,
                       headline: newAdHeadline.trim() || newAdTitle.trim(),
@@ -2041,11 +2130,12 @@ export const AdminDashboardPage: React.FC = () => {
                       rewardCoins: newAdPlacement === 'earn_coins' ? cleanReward : 0,
                       skipAfterSeconds: cleanSkip,
                     });
-                    showNotification('Yangi reklama yaratildi!', 'success');
+                    if (!ok) return;
                   }
                   setShowAdCreateModal(false);
                   setEditingAdItem(null);
                   setNewAdTitle('');
+                  setNewAdSponsorLogo('');
                   setNewAdHeadline('');
                   setNewAdSubheadline('');
                   setNewAdVideoUrl('');

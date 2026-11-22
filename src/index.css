@@ -3,6 +3,20 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @layer base {
+  :root {
+    --eco-void: #f4f8f5;
+    --eco-canopy: #ffffff;
+    --eco-moss: #e8f3ec;
+    --eco-accent: #10b981;
+  }
+
+  .dark {
+    --eco-void: #040d0a;
+    --eco-canopy: #081913;
+    --eco-moss: #0d261d;
+    --eco-accent: #34d399;
+  }
+
   html,
   body,
   #root {
@@ -16,9 +30,40 @@
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
     overscroll-behavior-x: none;
   }
+
+  h1, h2, h3, .font-display {
+    font-family: 'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif;
+  }
+
   code, pre, .font-mono {
     font-family: 'JetBrains Mono', monospace;
   }
+}
+
+.eco-glass {
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(16, 185, 129, 0.16);
+}
+
+.dark .eco-glass {
+  background: rgba(7, 23, 17, 0.78);
+  border: 1px solid rgba(52, 211, 153, 0.16);
+}
+
+.eco-surface {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.96), rgba(244, 250, 246, 0.94));
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.dark .eco-surface {
+  background: linear-gradient(160deg, rgba(10, 31, 23, 0.92), rgba(5, 16, 12, 0.96));
+  border: 1px solid rgba(52, 211, 153, 0.14);
+}
+
+.eco-neon-glow {
+  box-shadow: 0 0 28px -8px rgba(16, 185, 129, 0.35);
 }
 
 @keyframes eco-marquee {
@@ -38,6 +83,35 @@
   animation: eco-marquee 24s linear infinite;
 }
 
+@keyframes eco-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.eco-skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(16, 185, 129, 0.06) 25%,
+    rgba(52, 211, 153, 0.14) 50%,
+    rgba(16, 185, 129, 0.06) 75%
+  );
+  background-size: 200% 100%;
+  animation: eco-shimmer 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee,
+  .eco-skeleton,
+  .animate-ping,
+  .animate-bounce {
+    animation: none !important;
+  }
+}
+
 /* MapLibre GL JS Theme Integration */
 .maplibregl-map {
   font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
@@ -54,7 +128,7 @@
 }
 
 .dark .maplibregl-ctrl-attrib {
-  background-color: rgba(15, 23, 42, 0.86) !important;
+  background-color: rgba(4, 13, 10, 0.88) !important;
   color: #cbd5e1 !important;
 }
 
@@ -65,16 +139,17 @@
 .maplibregl-popup-content {
   border-radius: 16px !important;
   padding: 12px 14px !important;
-  box-shadow: 0 20px 35px -10px rgba(15, 23, 42, 0.25) !important;
+  box-shadow: 0 20px 35px -10px rgba(4, 13, 10, 0.35) !important;
 }
 
 .dark .maplibregl-popup-content {
-  background-color: #0f172a !important;
+  background-color: #071912 !important;
   color: #f8fafc !important;
-  border: 1px solid #1e293b !important;
+  border: 1px solid rgba(52, 211, 153, 0.22) !important;
 }
 
 .dark .maplibregl-popup-tip {
-  border-top-color: #0f172a !important;
-  border-bottom-color: #0f172a !important;
+  border-top-color: #071912 !important;
+  border-bottom-color: #071912 !important;
 }
+

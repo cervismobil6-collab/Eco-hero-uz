@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { WifiOff, RefreshCw, CheckCircle2, CloudUpload } from 'lucide-react';
 import { useEco } from '../../context/EcoContext';
 import { getPendingReports, removePendingReport } from '../../services/offlineQueue';
-import { apiUrl, isHtmlContentType } from '../../utils/api';
+import { isHtmlContentType } from '../../utils/api';
 
 export const OfflineSyncBanner: React.FC = () => {
-  const { isOnline, syncBootstrap, showNotification } = useEco();
+  const { isOnline, syncBootstrap, showNotification, apiFetch } = useEco();
   const [pendingCount, setPendingCount] = useState<number>(0);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
@@ -40,9 +40,8 @@ export const OfflineSyncBanner: React.FC = () => {
 
       for (const rep of pending) {
         try {
-          const res = await fetch(apiUrl('/api/reports/submit'), {
+          const res = await apiFetch('/api/reports/submit', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               clientReportId: rep.id,
               title: rep.title,
@@ -56,10 +55,7 @@ export const OfflineSyncBanner: React.FC = () => {
               lng: rep.lng,
               imageUrl: rep.imageUrl,
               imageBase64: rep.imageBase64,
-              authorUid: rep.authorUid,
-              authorName: rep.authorName,
               authorSchool: rep.authorSchool,
-              authorTelegramId: rep.authorTelegramId,
             }),
           });
 

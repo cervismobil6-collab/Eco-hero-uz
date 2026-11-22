@@ -44,6 +44,27 @@ export default defineConfig(() => {
       alias: {
         '@': path.resolve(__dirname, 'src'),
       },
+      dedupe: ['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime'],
+    },
+    optimizeDeps: {
+      include: [
+        'react',
+        'react-dom',
+        'react-dom/client',
+        'react/jsx-runtime',
+        'react/jsx-dev-runtime',
+        'lucide-react',
+        'framer-motion',
+        'motion',
+        'qrcode',
+        'canvas-confetti',
+        'idb',
+        'firebase/app',
+        'firebase/auth',
+        'firebase/firestore',
+        '@vis.gl/react-google-maps',
+        'maplibre-gl',
+      ],
     },
     server: {
       allowedHosts: true as const,

@@ -25,6 +25,7 @@ const CATEGORY_LABELS: Record<HomePostCategory, string> = {
 
 export const HomePostsManagerPanel: React.FC = () => {
   const {
+    user,
     apiFetch,
     homePosts,
     createHomePost,
@@ -34,6 +35,7 @@ export const HomePostsManagerPanel: React.FC = () => {
     showNotification,
   } = useEco();
 
+  const isSuperAdmin = user.role === 'super_admin';
   const [managedPosts, setManagedPosts] = useState<HomePost[]>(homePosts);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -53,6 +55,7 @@ export const HomePostsManagerPanel: React.FC = () => {
   const [editImageUrl, setEditImageUrl] = useState('');
 
   const refreshManaged = async () => {
+    if (!isSuperAdmin) return;
     try {
       const res = await apiFetch('/api/home-posts?scope=manage');
       const data = await res.json();
@@ -65,8 +68,14 @@ export const HomePostsManagerPanel: React.FC = () => {
   };
 
   useEffect(() => {
-    refreshManaged();
-  }, [homePosts.length]);
+    if (isSuperAdmin) {
+      refreshManaged();
+    }
+  }, [homePosts.length, isSuperAdmin]);
+
+  if (!isSuperAdmin) {
+    return null;
+  }
 
   const handleImageUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,

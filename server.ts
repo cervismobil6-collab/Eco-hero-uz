@@ -10,6 +10,9 @@ import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import JSZip from 'jszip';
 import { WebSocketServer, WebSocket } from 'ws';
 import compression from 'compression';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import QRCode from 'qrcode';
 import { computeUserStreakState, getUzbekistanDateKey } from './src/utils/streak';
 import {
   centralDb,
@@ -29,14 +32,30 @@ import {
   isWithinPeriod,
   getLiveSchoolsList,
   getSchoolLiveStudentCount,
+  getDistrictLiveParticipantCount,
   computeLiveMetrics,
+  getCurrentWeekWindow,
+  createDefaultWeeklyChallenge,
+  SchoolStudentRatingConfig,
+  DistrictStudentRatingConfig,
+  removeDeletedId,
 } from './server-db';
+import {
+  fetchAllCatalogFromFirestoreRest,
+  upsertCatalogDocToFirestoreRest,
+  deleteCatalogDocFromFirestoreRest,
+  mergeCatalogListWithFirestore,
+} from './server-firestore';
 import {
   attachAuthUser,
   requireAuth,
   requireRoles,
   hasAnyRole,
   checkIsSuperAdmin,
+  isSuperAdminTelegramId,
+  getSuperAdminTelegramIdList,
+  hashPassword,
+  verifyPassword,
   issueSessionToken,
   verifySessionToken,
   verifyFirebaseIdToken,
@@ -95,6 +114,7 @@ export const PERMANENT_PRODUCTION_URL = isPrivateAiStudioOrLocalUrl(candidatePro
 export let APP_URL = PERMANENT_PRODUCTION_URL || 'http://localhost:3000';
 
 const app = express();
+app.set('trust proxy', 1);
 const httpServer = http.createServer(app);
 const port = Number(process.env.SERVER_PORT || process.env.PORT) || 3000;
 
@@ -107,25 +127,111 @@ interface ConnectedWsClient {
   district: string;
   schoolId: string;
   isSuperAdmin: boolean;
+  isPublicReadOnly?: boolean;
 }
 
 const chatWss = new WebSocketServer({ noServer: true });
 const wsClients = new Set<ConnectedWsClient>();
 
 app.use(
+  helmet({
+    xFrameOptions: false,
+    crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          "'unsafe-eval'",
+          'https://maps.googleapis.com',
+          'https://*.googleapis.com',
+          'https://telegram.org',
+          'https://apis.google.com',
+          'https://www.gstatic.com',
+          'https://cesium.com',
+          'https://*.cesium.com',
+          'blob:',
+        ],
+        workerSrc: ["'self'", 'blob:', 'data:'],
+        styleSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          'https://fonts.googleapis.com',
+          'https://unpkg.com',
+          'https://cesium.com',
+          'https://*.cesium.com',
+        ],
+        imgSrc: ["'self'", 'data:', 'blob:', 'https:', 'http:'],
+        fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com'],
+        connectSrc: ["'self'", 'https:', 'wss:', 'ws:', 'blob:', 'data:'],
+        frameSrc: [
+          "'self'",
+          'https://*.firebaseapp.com',
+          'https://accounts.google.com',
+          'https://oauth.telegram.org',
+          'https://telegram.org',
+        ],
+        frameAncestors: [
+          "'self'",
+          'https://*.telegram.org',
+          'https://telegram.org',
+          'https://aistudio.google.com',
+          'https://studio.google.com',
+          'https://*.google.com',
+          'https://*.usercontent.goog',
+          'https://*.googleusercontent.com',
+        ],
+        mediaSrc: ["'self'", 'data:', 'blob:', 'https:', 'http:'],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        upgradeInsecureRequests: null,
+      },
+    },
+  })
+);
+
+app.use(
   compression({
     threshold: 512,
     filter: (req, res) => {
       const accept = String(req.headers.accept || '');
-      if (accept.includes('text/event-stream') || req.path.includes('/stream')) {
+      if (
+        accept.includes('text/event-stream') ||
+        req.path.includes('/stream') ||
+        req.path.startsWith('/uploads/')
+      ) {
         return false;
       }
       return compression.filter(req, res);
     },
   })
 );
-app.use(express.json({ limit: '65mb' }));
-app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '7d' }));
+
+const standardJsonParser = express.json({ limit: '2mb' });
+const largeMediaJsonParser = express.json({ limit: '75mb' });
+const LARGE_MEDIA_JSON_PATHS = new Set([
+  '/api/storage/upload',
+  '/api/reports/submit',
+  '/api/media',
+  '/api/ai/analyze-problem',
+  '/api/ai/eco-assistant',
+  '/api/ai/eco-assistant/stream',
+]);
+
+app.use((req, res, next) => {
+  if (req.path === '/api/storage/upload-binary') {
+    return next();
+  }
+  const isLargeMediaRoute =
+    LARGE_MEDIA_JSON_PATHS.has(req.path) ||
+    /^\/api\/reports\/[^/]+\/(workflow|ambassador-resolve)$/.test(req.path) ||
+    /^\/api\/missions\/[^/]+\/submit$/.test(req.path);
+  return (isLargeMediaRoute ? largeMediaJsonParser : standardJsonParser)(req, res, next);
+});
+app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '7d', acceptRanges: true }));
 app.use(
   '/cesium',
   express.static(path.resolve(__dirname, 'node_modules/cesium/Build/Cesium'), {
@@ -214,12 +320,17 @@ function isAllowedCorsOrigin(origin?: string): boolean {
 
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  if (origin && isAllowedCorsOrigin(origin)) {
-    res.header('Access-Control-Allow-Origin', origin);
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Vary', 'Origin');
-  } else {
-    res.header('Access-Control-Allow-Origin', '*');
+  if (origin) {
+    if (isAllowedCorsOrigin(origin)) {
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Access-Control-Allow-Credentials', 'true');
+      res.header('Vary', 'Origin');
+    } else {
+      res.header('Vary', 'Origin');
+      if (req.method === 'OPTIONS') {
+        return res.sendStatus(403);
+      }
+    }
   }
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Cache-Control');
@@ -232,6 +343,52 @@ app.use((req, res, next) => {
 
 // Attach verified authUser when Bearer sessionToken is supplied
 app.use(attachAuthUser);
+
+const authRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  validate: false,
+  message: {
+    error: "Juda ko'p kirish urinishi. 15 daqiqadan so'ng qayta urinib ko'ring.",
+    code: 'RATE_LIMITED',
+  },
+});
+
+const aiRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  validate: false,
+  keyGenerator: (req: AuthenticatedRequest) =>
+    req.authUser?.uid ? `u:${req.authUser.uid}` : `ip:${req.ip || 'unknown'}`,
+  message: {
+    error: "AI so'rovlari limiti tugadi. 1 daqiqa kuting.",
+    code: 'RATE_LIMITED',
+  },
+});
+
+const apiGeneralLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 300,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  validate: false,
+  skip: (req) => req.path === '/health' || req.path === '/telegram/webhook',
+  message: {
+    error: "So'rovlar soni juda ko'p. Biroz kuting.",
+    code: 'RATE_LIMITED',
+  },
+});
+
+app.use('/api/auth/session', authRateLimiter);
+app.use('/api/auth/register-user', authRateLimiter);
+app.use('/api/auth/login-user', authRateLimiter);
+app.use('/api/telegram/auth-webapp', authRateLimiter);
+app.use('/api/ai', aiRateLimiter);
+app.use('/api', apiGeneralLimiter);
 
 // Shared Gemini Client using @google/genai standard pattern & telemetry header
 function getGeminiClient(): GoogleGenAI {
@@ -274,7 +431,13 @@ function getTashkentMonthStatus(nowDate = new Date()) {
   const day = tDate.getUTCDate();
   const daysInMonth = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
   const isLastDayOfMonth = day === daysInMonth;
-  const daysRemainingInMonth = Math.max(0, daysInMonth - day);
+  const monthEndTashkentMs = Date.UTC(year, monthIndex + 1, 1, 0, 0, 0);
+  const remainingMs = Math.max(0, monthEndTashkentMs - tashkentMs);
+  const daysRemainingInMonth = Math.floor(remainingMs / (24 * 3600 * 1000));
+  const hoursRemaining = Math.floor((remainingMs % (24 * 3600 * 1000)) / (3600 * 1000));
+  const minutesRemaining = Math.floor((remainingMs % (3600 * 1000)) / (60 * 1000));
+  const secondsRemaining = Math.floor((remainingMs % (60 * 1000)) / 1000);
+  const endsAt = new Date(monthEndTashkentMs - 5 * 3600 * 1000).toISOString();
   const periodKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
   const lastDayDateLabel = `${String(daysInMonth).padStart(2, '0')}.${String(monthIndex + 1).padStart(2, '0')}.${year}`;
   const yymm = `${String(year).slice(-2)}${String(monthIndex + 1).padStart(2, '0')}`;
@@ -287,6 +450,10 @@ function getTashkentMonthStatus(nowDate = new Date()) {
     daysInMonth,
     isLastDayOfMonth,
     daysRemainingInMonth,
+    hoursRemaining,
+    minutesRemaining,
+    secondsRemaining,
+    endsAt,
     periodKey,
     periodLabel,
     lastDayDateLabel,
@@ -442,6 +609,7 @@ app.get('/api/bootstrap', (req: AuthenticatedRequest, res) => {
       sponsorshipProjects: centralDb.sponsorshipProjects,
       sponsorshipProposals: isSuperAdmin || hasAnyRole(caller, ['sponsor']) ? centralDb.sponsorshipProposals : [],
       ecoAds: centralDb.ecoAds.filter((a) => a.status === 'active' || isSuperAdmin),
+      adWatchState: caller ? buildUserAdWatchState(caller.uid) : null,
       referrals: !caller ? [] : isSuperAdmin ? centralDb.referrals : centralDb.referrals.filter((r) => r.referrerUid === caller.uid),
       broadcasts: isSuperAdmin || isModerator ? centralDb.broadcasts : [],
       auditLogs: isSuperAdmin || isModerator ? centralDb.auditLogs.slice(0, 100) : [],
@@ -449,21 +617,21 @@ app.get('/api/bootstrap', (req: AuthenticatedRequest, res) => {
       homePosts: (centralDb.homePosts || [])
         .filter((p) => {
           if (p.status === 'active') return true;
-          if (!caller) return false;
-          if (isSuperAdmin || isModerator) return true;
-          if (p.authorUid === caller.uid) return true;
-          if (isCaptain && p.schoolId && p.schoolId === caller.schoolId) return true;
-          return false;
+          return Boolean(caller && isSuperAdmin);
         })
         .sort((a: any, b: any) => {
           if (Boolean(b.isPinned) !== Boolean(a.isPinned)) return b.isPinned ? 1 : -1;
           return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
         }),
       monthlyAwards: centralDb.monthlyAwards || [],
+      serverNow: new Date().toISOString(),
       liveMetrics: computeLiveMetrics(),
       ecoMissions: visibleMissions,
       missionSubmissions: visibleMissionSubmissions,
       missionCompletions: callerCompletedMissions,
+      weeklyChallenge: buildWeeklyChallengeSummary(caller),
+      schoolTeamMission: buildSchoolTeamMissionSummary(caller),
+      championshipMeta: buildChampionshipEligibility(caller),
       studentsLeaderboard: sanitizePublicUsersList()
         .sort((a: any, b: any) => (b.totalCoinsEarned || b.ecoCoins || 0) - (a.totalCoinsEarned || a.ecoCoins || 0))
         .slice(0, 50),
@@ -472,6 +640,361 @@ app.get('/api/bootstrap', (req: AuthenticatedRequest, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+function recordDeletedId(id: string) {
+  if (!id) return;
+  if (!Array.isArray(centralDb.deletedIds)) centralDb.deletedIds = [];
+  if (!centralDb.deletedIds.includes(id)) {
+    centralDb.deletedIds.push(id);
+  }
+}
+
+function getFirebaseTokenFromReq(req: express.Request): string | null {
+  const tok = String(req.headers['x-firebase-id-token'] || '').trim();
+  return tok && tok.length > 20 ? tok : null;
+}
+
+async function hydrateCatalogFromFirestoreOnBoot(): Promise<void> {
+  try {
+    const remote = await fetchAllCatalogFromFirestoreRest();
+    if (!remote) return;
+
+    const deletedSet = new Set<string>(
+      Array.isArray(centralDb.deletedIds) ? centralDb.deletedIds.map(String) : []
+    );
+    let anyChanged = false;
+
+    if (remote.missions.length > 0 || remote.tombstones.some((t) => t.collectionName === 'eco_missions')) {
+      const mRes = mergeCatalogListWithFirestore(
+        centralDb.ecoMissions || [],
+        remote.missions,
+        remote.tombstones,
+        'eco_missions',
+        deletedSet
+      );
+      if (mRes.changed) {
+        centralDb.ecoMissions = mRes.merged;
+        anyChanged = true;
+      }
+    }
+
+    if (remote.shopItems.length > 0 || remote.tombstones.some((t) => t.collectionName === 'shopItems')) {
+      const sRes = mergeCatalogListWithFirestore(
+        centralDb.shopItems || [],
+        remote.shopItems,
+        remote.tombstones,
+        'shopItems',
+        deletedSet
+      );
+      if (sRes.changed) {
+        centralDb.shopItems = sRes.merged;
+        anyChanged = true;
+      }
+    }
+
+    if (remote.ecoAds.length > 0 || remote.tombstones.some((t) => t.collectionName === 'eco_ads')) {
+      const aRes = mergeCatalogListWithFirestore(
+        centralDb.ecoAds || [],
+        remote.ecoAds,
+        remote.tombstones,
+        'eco_ads',
+        deletedSet
+      );
+      if (aRes.changed) {
+        centralDb.ecoAds = aRes.merged;
+        anyChanged = true;
+      }
+    }
+
+    if (remote.homePosts.length > 0 || remote.tombstones.some((t) => t.collectionName === 'home_posts')) {
+      const hRes = mergeCatalogListWithFirestore(
+        centralDb.homePosts || [],
+        remote.homePosts,
+        remote.tombstones,
+        'home_posts',
+        deletedSet
+      );
+      if (hRes.changed) {
+        centralDb.homePosts = hRes.merged;
+        anyChanged = true;
+      }
+    }
+
+    if (remote.rewardSettings && remote.rewardSettings.updatedAt) {
+      const remoteTs = Date.parse(String(remote.rewardSettings.updatedAt)) || 0;
+      const localTs = Date.parse(String(centralDb.rewardSettings?.updatedAt || '')) || 0;
+      if (remoteTs > localTs) {
+        const { id: _ignoreId, ...rest } = remote.rewardSettings;
+        centralDb.rewardSettings = {
+          ...centralDb.rewardSettings,
+          ...rest,
+        };
+        anyChanged = true;
+      }
+    }
+
+    const nextDeleted = Array.from(deletedSet);
+    if (nextDeleted.length !== (centralDb.deletedIds || []).length) {
+      centralDb.deletedIds = nextDeleted;
+      anyChanged = true;
+    }
+
+    if (anyChanged) {
+      saveCentralDb();
+      broadcastRealtimeEvent('db:updated', { scope: 'catalog' });
+      console.log('[FirestoreBootSync] Katalog ma\'lumotlari Firestore bilan sinxronlandi.');
+    }
+  } catch (err: any) {
+    console.warn('[FirestoreBootSync] Katalog sinxronizatsiyasi o\'tkazib yuborildi:', err?.message || err);
+  }
+}
+
+function recordBotStarter(chatId: string | number, username?: string, firstName?: string) {
+  const key = String(chatId || '').trim();
+  if (!key) return;
+  if (!centralDb.botStarters || typeof centralDb.botStarters !== 'object') {
+    centralDb.botStarters = {};
+  }
+  const nowIso = new Date().toISOString();
+  const isNew = !centralDb.botStarters[key];
+  centralDb.botStarters[key] = {
+    chatId: key,
+    username: username || centralDb.botStarters[key]?.username || '',
+    firstName: firstName || centralDb.botStarters[key]?.firstName || '',
+    startedAt: centralDb.botStarters[key]?.startedAt || nowIso,
+    lastSeenAt: nowIso,
+  };
+  saveCentralDb();
+  if (isNew) {
+    broadcastRealtimeEvent('db:updated', { scope: 'metrics' });
+  }
+}
+
+function ensureCurrentWeeklyChallenge() {
+  const win = getCurrentWeekWindow();
+  if (!centralDb.weeklyChallenge || centralDb.weeklyChallenge.weekKey !== win.weekKey) {
+    centralDb.weeklyChallenge = createDefaultWeeklyChallenge();
+    saveCentralDb();
+  }
+  return { challenge: centralDb.weeklyChallenge, win };
+}
+
+function computeWeeklyActionsForUser(uid: string, weekKey: string): number {
+  const weekStartMs = new Date(`${weekKey}T00:00:00+05:00`).getTime();
+  let count = 0;
+  for (const tx of centralDb.transactions || []) {
+    if (tx.userId === uid && (tx.type === 'earn' || tx.type === 'bonus') && tx.status !== 'rejected') {
+      const ts = new Date(tx.createdAt || 0).getTime();
+      if (!Number.isNaN(ts) && ts >= weekStartMs) count += 1;
+    }
+  }
+  for (const rep of centralDb.reports || []) {
+    if (rep.reporterUid === uid) {
+      const ts = new Date(rep.createdAt || 0).getTime();
+      if (!Number.isNaN(ts) && ts >= weekStartMs) count += 1;
+    }
+  }
+  for (const med of centralDb.mediaSubmissions || []) {
+    if (med.userId === uid) {
+      const ts = new Date(med.createdAt || 0).getTime();
+      if (!Number.isNaN(ts) && ts >= weekStartMs) count += 1;
+    }
+  }
+  return count;
+}
+
+function buildWeeklyChallengeSummary(caller: any | null) {
+  const { challenge, win } = ensureCurrentWeeklyChallenge();
+  const participantsMap = challenge.participants || {};
+  const participantsCount = Object.keys(participantsMap).length;
+  const entry = caller ? participantsMap[caller.uid] : null;
+  const liveProgress = caller ? computeWeeklyActionsForUser(caller.uid, win.weekKey) : 0;
+  if (entry && liveProgress > (entry.progress || 0)) {
+    entry.progress = liveProgress;
+  }
+  const progress = entry ? Math.max(entry.progress || 0, liveProgress) : liveProgress;
+  const targetActions = Number(challenge.targetActions) || 3;
+  return {
+    weekKey: win.weekKey,
+    title: challenge.title,
+    description: challenge.description,
+    targetActions,
+    rewardCoins: Number(challenge.rewardCoins) || 250,
+    endIso: win.endIso,
+    serverNow: new Date().toISOString(),
+    daysRemaining: win.daysRemaining,
+    hoursRemaining: win.hoursRemaining,
+    minutesRemaining: win.minutesRemaining,
+    secondsRemaining: win.secondsRemaining,
+    participantsCount,
+    joined: Boolean(entry),
+    progress,
+    completed: progress >= targetActions,
+    claimed: Boolean(entry?.claimed),
+  };
+}
+
+function buildSchoolTeamMissionSummary(caller: any | null) {
+  recalculateSchoolRanks();
+  const school =
+    (caller?.schoolId && centralDb.schools.find((s) => s.id === caller.schoolId)) ||
+    (caller?.schoolName && centralDb.schools.find((s) => s.name === caller.schoolName)) ||
+    centralDb.schools[0] ||
+    null;
+
+  if (!school) {
+    return {
+      schoolId: '',
+      schoolName: "Maktab biriktirilmagan",
+      membersCount: 0,
+      currentXp: 0,
+      targetXp: 5000,
+      rewardCoins: 300,
+      schoolRank: null,
+      progressPct: 0,
+    };
+  }
+  const membersCount = getSchoolLiveStudentCount(school);
+  const currentXp = Number(school.totalCoins || 0) * 4;
+  const targetXp = Math.max(5000, Math.ceil((currentXp + 1500) / 5000) * 5000);
+  const progressPct = Math.min(100, Math.round((currentXp / targetXp) * 100));
+  return {
+    schoolId: school.id,
+    schoolName: school.name,
+    region: school.region,
+    district: school.district,
+    membersCount,
+    currentXp,
+    targetXp,
+    rewardCoins: 300,
+    schoolRank: school.ratingRank || null,
+    progressPct,
+  };
+}
+
+function getTashkentQuarterStatus(nowDate = new Date()) {
+  const tashkentMs = nowDate.getTime() + 5 * 3600 * 1000;
+  const tDate = new Date(tashkentMs);
+  const year = tDate.getUTCFullYear();
+  const monthIndex = tDate.getUTCMonth();
+  const quarterEndMonthIndex = Math.floor(monthIndex / 3) * 3 + 2; // 2, 5, 8, 11
+  const quarterEndUtc = Date.UTC(year, quarterEndMonthIndex + 1, 1, 0, 0, 0);
+  const remainingMs = Math.max(0, quarterEndUtc - tashkentMs);
+  const daysRemaining = Math.floor(remainingMs / (24 * 3600 * 1000));
+  const hoursRemaining = Math.floor((remainingMs % (24 * 3600 * 1000)) / (3600 * 1000));
+  const minutesRemaining = Math.floor((remainingMs % (3600 * 1000)) / (60 * 1000));
+  const secondsRemaining = Math.floor((remainingMs % (60 * 1000)) / 1000);
+  const endsAt = new Date(quarterEndUtc - 5 * 3600 * 1000).toISOString();
+  const quarterNumber = Math.floor(monthIndex / 3) + 1;
+  return {
+    quarterKey: `${year}-Q${quarterNumber}`,
+    daysRemaining,
+    hoursRemaining,
+    minutesRemaining,
+    secondsRemaining,
+    endsAt,
+  };
+}
+
+function buildChampionshipEligibility(caller: any | null) {
+  const nowDate = new Date();
+  const serverNow = nowDate.toISOString();
+  const monthStatus = getTashkentMonthStatus(nowDate);
+  const quarterStatus = getTashkentQuarterStatus(nowDate);
+
+  const isPrivileged = Boolean(
+    caller && hasAnyRole(caller, ['super_admin', 'moderator', 'regional_coordinator', 'district_coordinator'])
+  );
+
+  let callerDistrictRank: number | null = null;
+  let callerSchoolDistrictRank: number | null = null;
+  let isQualifiedTop3 = false;
+
+  if (caller && caller.district) {
+    const distDetails = computeDistrictLeaderboardDetails({
+      region: caller.region,
+      district: caller.district,
+      viewerUid: caller.uid,
+      viewerSchoolId: caller.schoolId,
+    });
+    callerSchoolDistrictRank = distDetails.mySchoolRating?.rank ?? null;
+
+    // Also check individual student ranking in caller's district
+    const distStudents = buildDistrictStudentRatingPayload({
+      region: caller.region,
+      district: caller.district,
+      viewerUid: caller.uid,
+    });
+    callerDistrictRank = distStudents.myEntry?.rank ?? null;
+
+    const awardedTop3District = (centralDb.studentMonthlyAwards || []).some(
+      (aw: any) =>
+        aw.scope === 'district' &&
+        Array.isArray(aw.winners) &&
+        aw.winners.some((w: any) => w.uid === caller.uid && Number(w.rank) <= 3)
+    );
+    const awardedSchoolTop3 = (centralDb.monthlyAwards || []).some(
+      (aw: any) =>
+        Array.isArray(aw.topSchools) &&
+        aw.topSchools.some((sc: any) => sc.id === caller.schoolId && Number(sc.rank) <= 3)
+    );
+
+    isQualifiedTop3 = Boolean(
+      (callerDistrictRank && callerDistrictRank <= 3) ||
+        (callerSchoolDistrictRank && callerSchoolDistrictRank <= 3) ||
+        awardedTop3District ||
+        awardedSchoolTop3
+    );
+  }
+
+  const regionalUnlocked = isPrivileged || isQualifiedTop3;
+  return {
+    districtUnlocked: true,
+    regionalUnlocked,
+    nationalUnlocked: true,
+    isPrivileged,
+    isQualifiedTop3,
+    callerDistrictRank,
+    callerSchoolDistrictRank,
+    reasonUz: regionalUnlocked
+      ? isPrivileged
+        ? "Moderator/Administrator ruxsati bilan viloyat bosqichi ochiq."
+        : "Tabriklaymiz! Tuman bosqichida TOP-3 o'rin olganingiz uchun Viloyat bosqichi siz uchun ochiq!"
+      : "Viloyat bosqichi faqat Tuman bosqichida 1, 2 yoki 3-o'rin olgan g'olib o'quvchilar va TOP-3 maktablar uchun ochiladi.",
+    stageSchedule: {
+      district: {
+        cycleLabel: '1 oyda 1 marta',
+        periodKey: monthStatus.periodKey,
+        endsAt: monthStatus.endsAt,
+        serverNow,
+        daysRemaining: monthStatus.daysRemainingInMonth,
+        hoursRemaining: monthStatus.hoursRemaining,
+        minutesRemaining: monthStatus.minutesRemaining,
+        secondsRemaining: monthStatus.secondsRemaining,
+      },
+      regional: {
+        cycleLabel: '3 oyda 1 marta',
+        periodKey: quarterStatus.quarterKey,
+        endsAt: quarterStatus.endsAt,
+        serverNow,
+        daysRemaining: quarterStatus.daysRemaining,
+        hoursRemaining: quarterStatus.hoursRemaining,
+        minutesRemaining: quarterStatus.minutesRemaining,
+        secondsRemaining: quarterStatus.secondsRemaining,
+      },
+      national: {
+        cycleLabel: '3 oyda 1 marta',
+        periodKey: quarterStatus.quarterKey,
+        endsAt: quarterStatus.endsAt,
+        serverNow,
+        daysRemaining: quarterStatus.daysRemaining,
+        hoursRemaining: quarterStatus.hoursRemaining,
+        minutesRemaining: quarterStatus.minutesRemaining,
+        secondsRemaining: quarterStatus.secondsRemaining,
+      },
+    },
+  };
+}
 
 // ==========================================
 // 2. AI ANALYZER, TREE PLANNER, MODERATION & CHAT
@@ -610,11 +1133,53 @@ function formatGeminiError(error: any): { statusCode: number; message: string; r
   };
 }
 
+let hydrogenBackoffUntil = 0;
+
+function markPrimaryModelUnhealthy(statusCode: number) {
+  if (statusCode === 503 || statusCode === 504 || statusCode === 429 || statusCode === 404 || statusCode >= 500) {
+    hydrogenBackoffUntil = Date.now() + 5 * 60 * 1000;
+  }
+}
+
+function shouldUseLiteDirectly(): boolean {
+  return Date.now() < hydrogenBackoffUntil;
+}
+
+function shouldFallbackToLiteModel(error: any): boolean {
+  const formatted = formatGeminiError(error);
+  // Only skip fallback on hard client/auth errors (bad request schema or invalid/forbidden API key)
+  if (formatted.statusCode === 400 || formatted.statusCode === 403) {
+    return false;
+  }
+  return true;
+}
+
+function stripThinkingConfig(config?: Record<string, any>): Record<string, any> | undefined {
+  if (!config) return undefined;
+  const copy = { ...config };
+  if ('thinkingConfig' in copy) {
+    delete copy.thinkingConfig;
+  }
+  return copy;
+}
+
 async function generateContentWithModelFallback(
   params: { contents: any; config?: Record<string, any> },
-  timeoutMs = 25000
+  timeoutMs = 28000,
+  primaryTimeoutMs?: number
 ): Promise<any> {
   const client = getGeminiClient();
+  if (shouldUseLiteDirectly()) {
+    return await withAiTimeout(
+      client.models.generateContent({
+        model: 'gemini-3.1-flash-lite',
+        contents: params.contents,
+        config: stripThinkingConfig(params.config),
+      }),
+      timeoutMs
+    );
+  }
+  const firstBudgetMs = Math.min(timeoutMs, primaryTimeoutMs ?? 6000);
   try {
     return await withAiTimeout(
       client.models.generateContent({
@@ -622,53 +1187,98 @@ async function generateContentWithModelFallback(
         contents: params.contents,
         config: params.config,
       }),
-      timeoutMs
+      firstBudgetMs
     );
   } catch (err: any) {
+    if (!shouldFallbackToLiteModel(err)) throw err;
     const formatted = formatGeminiError(err);
-    if (formatted.statusCode !== 503) throw err;
-    const fallbackConfig = params.config ? { ...params.config } : undefined;
-    if (fallbackConfig && 'thinkingConfig' in fallbackConfig) {
-      delete fallbackConfig.thinkingConfig;
-    }
+    markPrimaryModelUnhealthy(formatted.statusCode);
+    console.warn(`[Gemini Fallback] generateContent -> gemini-3.1-flash-lite (${formatted.statusCode}):`, formatted.message);
     return await withAiTimeout(
       client.models.generateContent({
         model: 'gemini-3.1-flash-lite',
         contents: params.contents,
-        config: fallbackConfig,
+        config: stripThinkingConfig(params.config),
       }),
       timeoutMs
     );
   }
 }
 
+async function openGeminiStreamWithFirstChunkGuard(
+  client: GoogleGenAI,
+  model: string,
+  contents: any,
+  config: Record<string, any> | undefined,
+  firstChunkTimeoutMs: number,
+  chunkIdleTimeoutMs = 30000
+): Promise<AsyncIterable<any>> {
+  const stream = await withAiTimeout(
+    client.models.generateContentStream({
+      model,
+      contents,
+      config,
+    }),
+    firstChunkTimeoutMs
+  );
+  const iterator = stream[Symbol.asyncIterator]();
+  const firstStep = await withAiTimeout(iterator.next(), firstChunkTimeoutMs);
+
+  async function* guardedStream(): AsyncGenerator<any> {
+    if (!firstStep.done && firstStep.value !== undefined) {
+      yield firstStep.value;
+    }
+    if (firstStep.done) return;
+
+    while (true) {
+      const nextStep = await withAiTimeout(iterator.next(), chunkIdleTimeoutMs);
+      if (nextStep.done) break;
+      if (nextStep.value !== undefined) {
+        yield nextStep.value;
+      }
+    }
+  }
+
+  return guardedStream();
+}
+
 async function generateContentStreamWithModelFallback(
   params: { contents: any; config?: Record<string, any> },
-  timeoutMs = 25000
+  timeoutMs = 32000,
+  primaryTimeoutMs = 4500
 ): Promise<AsyncIterable<any>> {
   const client = getGeminiClient();
+  if (shouldUseLiteDirectly()) {
+    return await openGeminiStreamWithFirstChunkGuard(
+      client,
+      'gemini-3.1-flash-lite',
+      params.contents,
+      stripThinkingConfig(params.config),
+      timeoutMs,
+      timeoutMs
+    );
+  }
+  const firstBudgetMs = Math.min(timeoutMs, primaryTimeoutMs);
   try {
-    return await withAiTimeout(
-      client.models.generateContentStream({
-        model: 'gemini-4-hydrogen',
-        contents: params.contents,
-        config: params.config,
-      }),
+    return await openGeminiStreamWithFirstChunkGuard(
+      client,
+      'gemini-4-hydrogen',
+      params.contents,
+      params.config,
+      firstBudgetMs,
       timeoutMs
     );
   } catch (err: any) {
+    if (!shouldFallbackToLiteModel(err)) throw err;
     const formatted = formatGeminiError(err);
-    if (formatted.statusCode !== 503) throw err;
-    const fallbackConfig = params.config ? { ...params.config } : undefined;
-    if (fallbackConfig && 'thinkingConfig' in fallbackConfig) {
-      delete fallbackConfig.thinkingConfig;
-    }
-    return await withAiTimeout(
-      client.models.generateContentStream({
-        model: 'gemini-3.1-flash-lite',
-        contents: params.contents,
-        config: fallbackConfig,
-      }),
+    markPrimaryModelUnhealthy(formatted.statusCode);
+    console.warn(`[Gemini Stream Fallback] -> gemini-3.1-flash-lite (${formatted.statusCode}):`, formatted.message);
+    return await openGeminiStreamWithFirstChunkGuard(
+      client,
+      'gemini-3.1-flash-lite',
+      params.contents,
+      stripThinkingConfig(params.config),
+      timeoutMs,
       timeoutMs
     );
   }
@@ -691,7 +1301,7 @@ app.get('/api/ai/status', (_req, res) => {
   });
 });
 
-app.post('/api/ai/analyze-problem', async (req, res) => {
+app.post('/api/ai/analyze-problem', requireAuth, async (req: AuthenticatedRequest, res) => {
   const { title, description, region, imageBase64, mimeType = 'image/jpeg' } = req.body || {};
 
   try {
@@ -753,7 +1363,7 @@ Natijani FAQAT toza JSON formatida qaytaring.`;
   }
 });
 
-app.post('/api/ai/tree-plan', async (req, res) => {
+app.post('/api/ai/tree-plan', requireAuth, async (req: AuthenticatedRequest, res) => {
   const { region, soilType, waterAccess } = req.body || {};
 
   try {
@@ -788,7 +1398,7 @@ Ushbu sharoitga eng mos daraxt turlari, ekish chuqurligi, sug'orish tartibi va p
   }
 });
 
-app.post('/api/ai/moderate-report', async (req, res) => {
+app.post('/api/ai/moderate-report', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const { title, description, region, existingReports } = req.body || {};
     if (!(process.env.GEMINI_API_KEY || '').trim()) {
@@ -941,23 +1551,24 @@ async function buildEcoHeroAiPayload(
   const userSchool = userInfo?.schoolName || '';
   const userRegion = userInfo?.region || '';
 
-  const systemInstruction = `Siz «EcoHero AI» — kuchli, aqlli, samimiy va keng bilimli sun'iy intellekt yordamchisisiz.
+  const systemInstruction = `Siz «EcoHero AI» — ChatGPT darajasidagi kuchli, zukko, samimiy va universal sun'iy intellekt yordamchisisiz.
 
-ASOSIY QOIDALAR:
-1. HAR QANDAY MAVZUDA ANIQ JAVOB BERING: Foydalanuvchi qaysi mavzuda so'rasa (matematika, fizika, kimyo, biologiya, dasturlash, ingliz tili, tarix, biznes, kundalik maslahatlar, matn yozish, tarjima, tahlil, oddiy samimiy suhbat YOKI ekologiya), savoldan qochmasdan, chalg'itmasdan, to'g'ridan-to'g'ri, chuqur, aniq va mazmunli javob bering.
-2. EKOLOGIYAGA MAJBURLAMANG: Agar foydalanuvchi dasturlash, matematika, tarix yoki oddiy hayotiy mavzuda gaplashsa, javobni sun'iy ravishda ekologiyaga burmang — faqat o'sha savolning o'ziga professional javob bering. Agar ekologiya, "Yashil Makon", daraxt ekish, chiqindilarni saralash yoki EcoHero platformasi haqida so'rasa, O'zbekiston sharoitiga mos kuchli ekspert tavsiyalarini bering.
-3. FAYL VA RASMLARNI CHUQUR TAHLIL QILING: Agar foydalanuvchi rasm, PDF hujjat, Word (.docx), jadval (CSV), kod yoki matn fayli yuborsa, uning ichidagi barcha tafsilotlarni (matnlar, jadvallar, formulalar, xatolar, rasmdagi obyektlar) diqqat bilan o'qib, aniq tahlil va xulosalar bering.
-4. USLUB VA FORMAT:
-   - Tabiiy, jonli va tushunarli tilda yozing (shablon va quruq gaplardan qoching).
-   - O'zbek tilida (lotin yozuvida) javob bering; agar foydalanuvchi rus yoki ingliz tilida yozsa, o'sha tilda javob qaytaring.
-   - Javoblarni o'qishga qulay qilib Markdown formatida (sarlavhalar, ro'yxatlar, qalin muhim so'zlar, kod bloklari, jadvallar) tuzing.
-   - Suhbat davomida har safar salomlashishni takrorlamang, bevosita javobga o'ting.
-${userSchool || userRegion ? `\nFoydalanuvchi konteksti (faqat kerak bo'lganda foydalaning): Ismi ${userName}${userSchool ? `, ${userSchool}` : ''}${userRegion ? `, ${userRegion}` : ''}.` : ''}`;
+ASOSIY TAMOYILLAR:
+1. HAR QANDAY MAVZUDA PROFESSIONAL JAVOB: Matematika, fizika, kimyo, biologiya, dasturlash (Python, JS/TS, C++, HTML/CSS va h.k.), ingliz/rus/o'zbek tillari, tarix, biznes, matn yozish, tarjima, g'oyalar generatsiyasi, maktab darslari, oddiy kundalik suhbat YOKI ekologiya — foydalanuvchi nima so'rasa, to'g'ridan-to'g'ri, aniq, chuqur va mantiqli javob bering.
+2. EKOLOGIYAGA MAJBURLAMANG: Agar savol dasturlash, matematika, til o'rganish yoki shunchaki suhbat haqida bo'lsa, mavzuni sun'iy ravishda ekologiyaga burmang. Ekologiya, "Yashil Makon", daraxt ekish, chiqindilarni qayta ishlash yoki EcoHero haqida so'ralganda esa O'zbekiston sharoitiga mos amaliy ekspert tavsiyalari bering.
+3. TABIIY CHATGPT USLUBI:
+   - Qisqa salomlashuv ("Salom", "Hi", "Qalaysan") yuborilsa, xuddi jonli suhbatdoshdek samimiy, qisqa va ochiq javob bering hamda qanday yordam kerakligini so'rang.
+   - Murakkab savollarni mantiqiy bo'limlarga ajrating: Markdown sarlavhalar, qalin urg'u (**...**), raqamli/nuqtali ro'yxatlar, jadvallar va til nomi ko'rsatilgan kod bloklaridan o'rinli foydalaning.
+   - Foydalanuvchi qaysi tilda yozsa (o'zbek lotin, o'zbek kirill, rus yoki ingliz), o'sha tilda ravon javob bering. Standart til: o'zbekcha (lotin).
+   - Suhbat davomida avvalgi xabarlar kontekstini aniq eslab qoling va har safar salomlashishni takrorlamang.
+4. FAYL VA RASMLAR TAHLILI: Rasm, PDF, Word (.docx), jadval (CSV) yoki kod fayllari biriktirilganda undagi matn, formula, jadval va xatolarni batafsil o'qib, aniq xulosa hamda yechim taqdim eting.
+${userSchool || userRegion ? `\nFoydalanuvchi profili (faqat kerak bo'lganda foydalaning): Ismi ${userName}${userSchool ? `, ${userSchool}` : ''}${userRegion ? `, ${userRegion}` : ''}.` : ''}`;
 
   const contents: any[] = [];
   if (Array.isArray(chatHistory)) {
-    for (const item of chatHistory.slice(-14)) {
-      if (item && (item.text || (Array.isArray(item.attachments) && item.attachments.length > 0))) {
+    for (const item of chatHistory.slice(-16)) {
+      if (!item || item.isError) continue;
+      if (item.text || (Array.isArray(item.attachments) && item.attachments.length > 0)) {
         const histText = [
           item.text || '',
           Array.isArray(item.attachments) && item.attachments.length > 0
@@ -985,6 +1596,7 @@ ${userSchool || userRegion ? `\nFoydalanuvchi konteksti (faqat kerak bo'lganda f
   return {
     systemInstruction,
     contents,
+    hasHeavyAttachment,
     thinkingLevel: hasHeavyAttachment ? ThinkingLevel.MEDIUM : ThinkingLevel.LOW,
   };
 }
@@ -999,7 +1611,7 @@ async function generateEcoHeroAiResponse(
     throw new Error("GEMINI_API_KEY sozlanmagan. Settings > Secrets bo'limida API kalitini tekshiring.");
   }
 
-  const { systemInstruction, contents, thinkingLevel } = await buildEcoHeroAiPayload(
+  const { systemInstruction, contents, thinkingLevel, hasHeavyAttachment } = await buildEcoHeroAiPayload(
     message,
     chatHistory,
     userInfo,
@@ -1014,26 +1626,29 @@ async function generateEcoHeroAiResponse(
         thinkingConfig: { thinkingLevel },
       },
     },
-    25000
+    30000,
+    hasHeavyAttachment ? 8000 : 4500
   );
   const replyText = response?.text?.trim();
   if (replyText) return replyText;
   throw new Error("AI bo'sh javob qaytardi.");
 }
 
-app.post('/api/ai/eco-assistant', async (req, res) => {
+app.post('/api/ai/eco-assistant', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
-    const { message, chatHistory, attachments, userId, telegramId, fullName, schoolName, region } = req.body || {};
+    const { message, chatHistory, attachments } = req.body || {};
     const hasMessage = Boolean(String(message || '').trim());
     const hasAttachments = Array.isArray(attachments) && attachments.length > 0;
     if (!hasMessage && !hasAttachments) {
       return res.status(400).json({ error: 'Xabar matni yoki fayl kiritilishi shart' });
     }
 
-    const userProfile = findUserByAnyIdentifier({ uid: userId, telegramId }) || {
-      fullName: fullName || 'Foydalanuvchi',
-      schoolName: schoolName || '',
-      region: region || '',
+    const caller = req.authUser;
+    const userProfile = {
+      fullName: caller?.fullName || 'Foydalanuvchi',
+      schoolName: caller?.schoolName || '',
+      region: caller?.region || '',
+      role: caller?.role || 'student',
     };
 
     const reply = await generateEcoHeroAiResponse(
@@ -1053,7 +1668,7 @@ app.post('/api/ai/eco-assistant', async (req, res) => {
   }
 });
 
-app.post('/api/ai/eco-assistant/stream', async (req, res) => {
+app.post('/api/ai/eco-assistant/stream', requireAuth, async (req: AuthenticatedRequest, res) => {
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
@@ -1062,7 +1677,17 @@ app.post('/api/ai/eco-assistant/stream', async (req, res) => {
   res.write(': connected\n\n');
 
   let closed = false;
+  const heartbeat = setInterval(() => {
+    if (closed || res.writableEnded) return;
+    try {
+      res.write(': ping\n\n');
+    } catch {
+      closed = true;
+    }
+  }, 3500);
+
   res.on('close', () => {
+    clearInterval(heartbeat);
     if (!res.writableEnded) {
       closed = true;
     }
@@ -1078,7 +1703,7 @@ app.post('/api/ai/eco-assistant/stream', async (req, res) => {
   };
 
   try {
-    const { message, chatHistory, attachments, userId, telegramId, fullName, schoolName, region } = req.body || {};
+    const { message, chatHistory, attachments } = req.body || {};
     const hasMessage = Boolean(String(message || '').trim());
     const hasAttachments = Array.isArray(attachments) && attachments.length > 0;
     if (!hasMessage && !hasAttachments) {
@@ -1091,13 +1716,15 @@ app.post('/api/ai/eco-assistant/stream', async (req, res) => {
       return res.end();
     }
 
-    const userProfile = findUserByAnyIdentifier({ uid: userId, telegramId }) || {
-      fullName: fullName || 'Foydalanuvchi',
-      schoolName: schoolName || '',
-      region: region || '',
+    const caller = req.authUser;
+    const userProfile = {
+      fullName: caller?.fullName || 'Foydalanuvchi',
+      schoolName: caller?.schoolName || '',
+      region: caller?.region || '',
+      role: caller?.role || 'student',
     };
 
-    const { systemInstruction, contents, thinkingLevel } = await buildEcoHeroAiPayload(
+    const { systemInstruction, contents, thinkingLevel, hasHeavyAttachment } = await buildEcoHeroAiPayload(
       String(message || ''),
       chatHistory || [],
       userProfile,
@@ -1112,7 +1739,8 @@ app.post('/api/ai/eco-assistant/stream', async (req, res) => {
           thinkingConfig: { thinkingLevel },
         },
       },
-      25000
+      35000,
+      hasHeavyAttachment ? 8000 : 4500
     );
 
     let fullText = '';
@@ -1122,6 +1750,23 @@ app.post('/api/ai/eco-assistant/stream', async (req, res) => {
       if (delta) {
         fullText += delta;
         sendEvent({ delta });
+      }
+    }
+
+    if (!fullText.trim() && !closed && !res.writableEnded) {
+      const client = getGeminiClient();
+      const fallbackResp = await withAiTimeout(
+        client.models.generateContent({
+          model: 'gemini-3.1-flash-lite',
+          contents,
+          config: { systemInstruction },
+        }),
+        20000
+      );
+      const fallbackText = fallbackResp?.text?.trim() || '';
+      if (fallbackText) {
+        fullText = fallbackText;
+        sendEvent({ delta: fallbackText });
       }
     }
 
@@ -1136,6 +1781,8 @@ app.post('/api/ai/eco-assistant/stream', async (req, res) => {
       error: formatted.message,
     });
     if (!res.writableEnded) res.end();
+  } finally {
+    clearInterval(heartbeat);
   }
 });
 
@@ -1261,7 +1908,7 @@ app.get('/api/reports', (req: AuthenticatedRequest, res) => {
   res.json({ success: true, reports: centralDb.reports.filter((r) => canViewReport(r, caller)) });
 });
 
-app.post('/api/reports/submit', async (req: AuthenticatedRequest, res) => {
+app.post('/api/reports/submit', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const {
       title,
@@ -1276,14 +1923,9 @@ app.post('/api/reports/submit', async (req: AuthenticatedRequest, res) => {
       imageUrl,
       videoUrl,
       imageBase64,
-      authorUid,
-      reporterUid,
-      authorName,
-      reporterName,
       schoolId,
       authorSchool,
       schoolName,
-      authorTelegramId,
       clientReportId,
       idempotencyKey,
     } = req.body;
@@ -1324,12 +1966,12 @@ app.post('/api/reports/submit', async (req: AuthenticatedRequest, res) => {
       });
     }
 
-    const uid = req.authUser?.uid || authorUid || reporterUid || 'unknown';
-    const userRec = req.authUser || findUserByAnyIdentifier({ uid, telegramId: authorTelegramId });
-    const rName = userRec?.fullName || authorName || reporterName || "O'quvchi";
+    const userRec = req.authUser;
+    const uid = String(userRec.uid);
+    const rName = userRec?.fullName || "O'quvchi";
     const sName = userRec?.schoolName || authorSchool || schoolName || 'Maktab';
     const resolvedSchool = findOrCreateSchool({
-      schoolId: schoolId || userRec?.schoolId,
+      schoolId: userRec?.schoolId || schoolId,
       schoolName: sName,
       region: region || userRec?.region || 'Toshkent shahri',
       district: district || userRec?.district || 'Yunusobod tumani',
@@ -1363,9 +2005,9 @@ app.post('/api/reports/submit', async (req: AuthenticatedRequest, res) => {
       reporterName: rName,
       authorUid: uid,
       authorName: rName,
-      schoolId: resolvedSchool?.id || schoolId || userRec?.schoolId || '',
+      schoolId: resolvedSchool?.id || userRec?.schoolId || schoolId || '',
       schoolName: resolvedSchool?.name || sName,
-      authorTelegramId: authorTelegramId || userRec?.telegramId || null,
+      authorTelegramId: userRec?.telegramId || null,
       isHazardous: hazardCheck.isHazardous,
       ...(hazardCheck.safetyWarning ? { safetyWarning: hazardCheck.safetyWarning } : {}),
       ...(hazardCheck.recommendedEscalation ? { escalationTarget: hazardCheck.recommendedEscalation } : {}),
@@ -1409,8 +2051,6 @@ app.post('/api/reports/submit', async (req: AuthenticatedRequest, res) => {
       details: { title: reportData.title, severity: reportData.severity, isHazardous: reportData.isHazardous },
     });
 
-    // Notify Super Admin on Telegram (@jasurdost / 8832599080)
-    const superAdminChatId = '8832599080';
     const caption =
       `📸 <b>YANGI EKOLOGIK HISOBOT (AI TASDIQLADI → MAKTAB ADMINIGA YUBORILDI)</b>\n\n` +
       `📌 <b>Sarlavha:</b> ${reportData.title}\n` +
@@ -1428,15 +2068,11 @@ app.post('/api/reports/submit', async (req: AuthenticatedRequest, res) => {
       [{ text: "🌍 Admin Paneldan ko'rish", web_app: { url: APP_URL } }],
     ];
 
-    if (reportData.imageUrl && String(reportData.imageUrl).startsWith('http')) {
-      sendTelegramPhoto(superAdminChatId, reportData.imageUrl, caption, {
-        reply_markup: { inline_keyboard: inlineKeyboard },
-      }).catch(() => {});
-    } else {
-      sendTelegramMessage(superAdminChatId, caption, {
-        reply_markup: { inline_keyboard: inlineKeyboard },
-      }).catch(() => {});
-    }
+    notifySuperAdminsTelegram(
+      caption,
+      { reply_markup: { inline_keyboard: inlineKeyboard } },
+      reportData.imageUrl && String(reportData.imageUrl).startsWith('http') ? reportData.imageUrl : undefined
+    ).catch(() => {});
 
     res.json({
       success: true,
@@ -2245,14 +2881,13 @@ app.delete('/api/reports/:id', requireRoles('super_admin', 'moderator'), (req: A
   }
 });
 
-app.post('/api/reports/:id/upvote', (req: AuthenticatedRequest, res) => {
+app.post('/api/reports/:id/upvote', requireAuth, (req: AuthenticatedRequest, res) => {
   try {
-    const { userId } = req.body;
     const report = centralDb.reports.find((r) => r.id === req.params.id);
     if (!report) return res.status(404).json({ error: 'Hisobot topilmadi' });
     if (!Array.isArray(report.upvotedBy)) report.upvotedBy = [];
 
-    const uid = String(req.authUser?.uid || userId || 'guest');
+    const uid = String(req.authUser.uid);
     if (report.upvotedBy.includes(uid)) {
       report.upvotedBy = report.upvotedBy.filter((x: string) => x !== uid);
       report.upvotes = Math.max(0, (report.upvotes || 1) - 1);
@@ -2271,21 +2906,50 @@ app.post('/api/reports/:id/upvote', (req: AuthenticatedRequest, res) => {
 // 4. AUTH, SESSION ISSUANCE, REGISTRATION & ONBOARDING
 // ==========================================
 
-// Exchange Firebase ID Token or verified credentials for a server-signed HMAC sessionToken
+// Exchange strictly verified Firebase ID Token for a server-signed HMAC sessionToken
 app.post('/api/auth/session', async (req, res) => {
   try {
-    const { idToken: rawIdToken, firebaseIdToken, uid, email, fullName } = req.body || {};
+    const { idToken: rawIdToken, firebaseIdToken, email, fullName } = req.body || {};
     const idToken = rawIdToken || firebaseIdToken;
-    let verifiedFb = idToken ? await verifyFirebaseIdToken(String(idToken)) : null;
+    if (!idToken || typeof idToken !== 'string') {
+      return res.status(401).json({
+        error: "Sessiya yaratish uchun tasdiqlangan Firebase ID token talab qilinadi",
+      });
+    }
 
-    let user = verifiedFb
-      ? findUserByAnyIdentifier({ uid: verifiedFb.uid, email: verifiedFb.email })
-      : uid
-      ? findUserByAnyIdentifier({ uid })
-      : null;
+    const verifiedFb = await verifyFirebaseIdToken(String(idToken));
+    if (!verifiedFb) {
+      return res.status(401).json({
+        error: "Firebase ID token tasdiqlanmadi yoki muddati o'tgan",
+      });
+    }
 
-    if (verifiedFb && !user) {
-      const isJasur = Boolean(verifiedFb.emailVerified && checkIsSuperAdmin({ email: verifiedFb.email }));
+    let user = findUserByAnyIdentifier({ uid: verifiedFb.uid, email: verifiedFb.email });
+    const isVerifiedSuper = Boolean(
+      verifiedFb.emailVerified && checkIsSuperAdmin({ email: verifiedFb.email, verifiedEmail: true })
+    );
+
+    if (user) {
+      if (isVerifiedSuper && user.role !== 'super_admin') {
+        user = upsertUser({
+          ...user,
+          role: 'super_admin',
+          approvedRoles: [
+            'student',
+            'ambassador',
+            'school_admin',
+            'district_coordinator',
+            'regional_coordinator',
+            'moderator',
+            'super_admin',
+            'sponsor',
+          ],
+          isVerified: true,
+          isOnboarded: true,
+        });
+        saveCentralDb();
+      }
+    } else {
       const welcomeBonus = getConfiguredReward('welcomeBonus');
       user = upsertUser({
         uid: verifiedFb.uid,
@@ -2293,14 +2957,14 @@ app.post('/api/auth/session', async (req, res) => {
         email: verifiedFb.email || email || '',
         avatarUrl: verifiedFb.photoUrl || DEFAULT_AVATAR,
         profileImage: verifiedFb.photoUrl || DEFAULT_AVATAR,
-        role: isJasur ? 'super_admin' : 'student',
-        approvedRoles: isJasur
+        role: isVerifiedSuper ? 'super_admin' : 'student',
+        approvedRoles: isVerifiedSuper
           ? ['student', 'ambassador', 'school_admin', 'district_coordinator', 'regional_coordinator', 'moderator', 'super_admin', 'sponsor']
           : ['student'],
-        ecoCoins: isJasur ? 50000 : welcomeBonus,
-        totalCoinsEarned: isJasur ? 50000 : welcomeBonus,
-        isVerified: isJasur,
-        isOnboarded: isJasur,
+        ecoCoins: welcomeBonus,
+        totalCoinsEarned: welcomeBonus,
+        isVerified: isVerifiedSuper,
+        isOnboarded: isVerifiedSuper,
         welcomeBonusClaimed: true,
         region: 'Toshkent shahri',
         district: 'Shayxontohur tumani',
@@ -2308,38 +2972,9 @@ app.post('/api/auth/session', async (req, res) => {
         schoolName: 'Toshkent sh. 17-sonli ixtisoslashtirilgan maktab',
         schoolNumber: '17',
         registrationDate: new Date().toISOString(),
-        activityStats: { reportsCount: 0, cleanupsCount: 0, treesPlanted: 0, streakDays: 1, totalCoinsEarned: isJasur ? 50000 : welcomeBonus },
+        activityStats: { reportsCount: 0, cleanupsCount: 0, treesPlanted: 0, streakDays: 1, totalCoinsEarned: welcomeBonus },
       });
-    }
-
-    // Security guard: without cryptographic idToken, NEVER mint session for elevated roles
-    if (!verifiedFb && user && user.role !== 'student') {
-      return res.status(401).json({
-        error: "Imtiyozli rol uchun tasdiqlangan autentifikatsiya (Firebase ID token yoki parol) talab qilinadi",
-      });
-    }
-
-    if (!user && uid) {
-      user = upsertUser({
-        uid: String(uid),
-        fullName: fullName || "O'quvchi",
-        email: email || '',
-        role: 'student',
-        approvedRoles: ['student'],
-        ecoCoins: 0,
-        totalCoinsEarned: 0,
-        region: 'Toshkent shahri',
-        district: 'Shayxontohur tumani',
-        schoolId: 'school_tashkent_17',
-        schoolName: 'Toshkent sh. 17-sonli ixtisoslashtirilgan maktab',
-        isOnboarded: false,
-        registrationDate: new Date().toISOString(),
-        activityStats: { reportsCount: 0, cleanupsCount: 0, treesPlanted: 0, streakDays: 1, totalCoinsEarned: 0 },
-      });
-    }
-
-    if (!user) {
-      return res.status(401).json({ error: "Sessiya yaratish uchun tasdiqlangan hisob topilmadi" });
+      saveCentralDb();
     }
 
     const sessionToken = issueSessionToken(user);
@@ -2349,12 +2984,16 @@ app.post('/api/auth/session', async (req, res) => {
   }
 });
 
-app.post('/api/auth/register-user', (req, res) => {
+app.post('/api/auth/register-user', async (req, res) => {
   try {
-    const { email, password, fullName, phoneNumber, schoolName, schoolNumber, region, district, grade } = req.body;
+    const { email, password, fullName, phoneNumber, schoolName, schoolNumber, region, district, grade } = req.body || {};
 
     if (!email || !fullName) {
       return res.status(400).json({ error: "Email va to'liq ism talab qilinadi" });
+    }
+    const cleanPassword = String(password || '');
+    if (cleanPassword.length < 6) {
+      return res.status(400).json({ error: "Parol kamida 6 ta belgidan iborat bo'lishi shart" });
     }
 
     const existing = findUserByAnyIdentifier({ email, phoneNumber });
@@ -2362,7 +3001,7 @@ app.post('/api/auth/register-user', (req, res) => {
       return res.status(409).json({ error: "Ushbu email yoki telefon raqam bilan foydalanuvchi allaqachon ro'yxatdan o'tgan" });
     }
 
-    const isJasur = checkIsSuperAdmin({ email, phoneNumber });
+    const passwordHash = await hashPassword(cleanPassword);
     const welcomeBonus = getConfiguredReward('welcomeBonus');
     const cleanSchoolName = schoolName || 'Toshkent sh. 17-maktab';
     const cleanRegion = region || 'Toshkent shahri';
@@ -2376,32 +3015,30 @@ app.post('/api/auth/register-user', (req, res) => {
       incrementStudents: true,
     });
 
-    const uid = `user_web_${Date.now()}`;
+    const uid = `user_${crypto.randomUUID()}`;
     const userProfile = upsertUser({
       uid,
-      fullName,
+      fullName: String(fullName).trim(),
       email: String(email).trim().toLowerCase(),
-      passwordHash: password ? crypto.createHash('sha256').update(String(password)).digest('hex') : undefined,
+      passwordHash,
       phoneNumber: phoneNumber || '',
-      role: isJasur ? 'super_admin' : 'student',
-      approvedRoles: isJasur
-        ? ['student', 'ambassador', 'school_admin', 'district_coordinator', 'regional_coordinator', 'moderator', 'super_admin', 'sponsor']
-        : ['student'],
+      role: 'student',
+      approvedRoles: ['student'],
       schoolId: linkedSchool?.id || 'school_custom',
       schoolName: linkedSchool?.name || cleanSchoolName,
       schoolNumber: normalizeSchoolNumber(cleanSchoolName, schoolNumber),
       region: cleanRegion,
       district: cleanDistrict,
       grade: grade || '9-sinf',
-      ecoCoins: isJasur ? 10000 : welcomeBonus,
-      totalCoinsEarned: isJasur ? 10000 : welcomeBonus,
+      ecoCoins: welcomeBonus,
+      totalCoinsEarned: welcomeBonus,
       reportsCount: 0,
       cleanupsCount: 0,
       treesPlanted: 0,
       streakDays: 1,
-      badge: isJasur ? 'Bosh Administrator' : 'Yangi Eko-Qahramon',
-      referralCode: `ECO${uid.slice(-4).toUpperCase()}`,
-      isVerified: isJasur,
+      badge: 'Yangi Eko-Qahramon',
+      referralCode: `ECO${uid.replace(/[^a-zA-Z0-9]/g, '').slice(-4).toUpperCase()}`,
+      isVerified: false,
       isOnboarded: true,
       privacyConsentAccepted: true,
       welcomeBonusClaimed: true,
@@ -2413,7 +3050,7 @@ app.post('/api/auth/register-user', (req, res) => {
         cleanupsCount: 0,
         treesPlanted: 0,
         streakDays: 1,
-        totalCoinsEarned: isJasur ? 10000 : welcomeBonus,
+        totalCoinsEarned: welcomeBonus,
       },
     });
 
@@ -2429,12 +3066,12 @@ app.post('/api/auth/register-user', (req, res) => {
 
     addAuditLog({
       actorUid: userProfile.uid,
-      actorName: fullName,
+      actorName: userProfile.fullName,
       actorRole: userProfile.role,
       action: 'user_registered',
       targetCollection: 'users',
       targetId: userProfile.uid,
-      details: { email, schoolName: userProfile.schoolName, region: cleanRegion },
+      details: { email: userProfile.email, schoolName: userProfile.schoolName, region: cleanRegion },
     });
 
     const sessionToken = issueSessionToken(userProfile);
@@ -2444,13 +3081,18 @@ app.post('/api/auth/register-user', (req, res) => {
   }
 });
 
-app.post('/api/auth/login-user', (req, res) => {
+app.post('/api/auth/login-user', async (req, res) => {
   try {
-    const { email, identifier, phoneNumber, password } = req.body;
+    const { email, identifier, phoneNumber, password } = req.body || {};
     const rawId = String(email || identifier || phoneNumber || '').trim();
     if (!rawId) {
       return res.status(400).json({ error: 'Email yoki telefon raqami kiritilishi shart' });
     }
+    const rawPassword = String(password || '');
+    if (!rawPassword) {
+      return res.status(400).json({ error: 'Parol kiritilishi shart' });
+    }
+
     const user = findUserByAnyIdentifier({
       email: rawId.includes('@') ? rawId : undefined,
       phoneNumber: !rawId.includes('@') ? rawId : undefined,
@@ -2458,12 +3100,22 @@ app.post('/api/auth/login-user', (req, res) => {
     if (!user) {
       return res.status(404).json({ error: "Hisob topilmadi. Iltimos avval ro'yxatdan o'ting." });
     }
-    if (user.passwordHash) {
-      const hash = crypto.createHash('sha256').update(String(password || '')).digest('hex');
-      if (hash !== user.passwordHash) {
-        return res.status(401).json({ error: "Parol noto'g'ri kiritildi" });
-      }
+    if (!user.passwordHash) {
+      return res.status(401).json({
+        error: "Ushbu hisobda parol o'rnatilmagan. Google yoki Telegram orqali kiring.",
+      });
     }
+
+    const { valid, needsRehash } = await verifyPassword(rawPassword, user.passwordHash);
+    if (!valid) {
+      return res.status(401).json({ error: "Parol noto'g'ri kiritildi" });
+    }
+
+    if (needsRehash) {
+      user.passwordHash = await hashPassword(rawPassword);
+      saveCentralDb();
+    }
+
     const sessionToken = issueSessionToken(user);
     res.json({ success: true, sessionToken, user: sanitizeSelfUser(user) });
   } catch (err: any) {
@@ -2471,25 +3123,27 @@ app.post('/api/auth/login-user', (req, res) => {
   }
 });
 
-app.post('/api/user/onboarding', (req: AuthenticatedRequest, res) => {
+app.post('/api/user/onboarding', requireAuth, (req: AuthenticatedRequest, res) => {
   try {
-    const { uid, fullName, phoneNumber, region, district, schoolName, grade, telegramId, telegramUsername, email } = req.body;
-    if (!uid || !fullName || !phoneNumber) {
-      return res.status(400).json({ error: 'Ism, familiya va telefon raqami kiritilishi shart' });
+    const caller = req.authUser;
+    const { fullName, phoneNumber, region, district, schoolName, grade } = req.body || {};
+    const cleanFullName = String(fullName || '').trim();
+    const cleanPhone = String(phoneNumber || '').trim();
+    const phoneDigits = cleanPhone.replace(/\D/g, '');
+    if (!cleanFullName || phoneDigits.length < 9) {
+      return res.status(400).json({ error: "Ism-familiya va to'g'ri telefon raqami kiritilishi shart" });
     }
 
-    const existing = req.authUser || findUserByAnyIdentifier({ uid, telegramId, phoneNumber, email });
-    const cleanRegion = region || existing?.region || 'Toshkent shahri';
-    const cleanDistrict = district || existing?.district || 'Shayxontohur tumani';
-    const cleanSchoolName = schoolName || existing?.schoolName || '1-maktab';
-    const schoolNumber = normalizeSchoolNumber(cleanSchoolName);
+    const existing = centralDb.users[caller.uid] || caller;
+    const canonicalUid = String(existing.uid);
+    const callerTelegramId = existing.telegramId || null;
+    const callerTelegramUsername = existing.telegramUsername || '';
+    const callerEmail = existing.email || '';
 
-    const isJasur = checkIsSuperAdmin({
-      telegramUsername: telegramUsername || existing?.telegramUsername,
-      telegramId: telegramId || existing?.telegramId,
-      email: email || existing?.email,
-      phoneNumber,
-    });
+    const cleanRegion = String(region || existing?.region || 'Toshkent shahri').trim();
+    const cleanDistrict = String(district || existing?.district || 'Shayxontohur tumani').trim();
+    const cleanSchoolName = String(schoolName || existing?.schoolName || '1-maktab').trim();
+    const schoolNumber = normalizeSchoolNumber(cleanSchoolName);
 
     const welcomeBonus = getConfiguredReward('welcomeBonus');
     const isFirstWelcomeBonus = !existing?.welcomeBonusClaimed;
@@ -2497,43 +3151,41 @@ app.post('/api/user/onboarding', (req: AuthenticatedRequest, res) => {
     const newCoins = isFirstWelcomeBonus ? Math.max(baseCoins, 0) + welcomeBonus : baseCoins;
     const totalEarned = isFirstWelcomeBonus ? (existing?.totalCoinsEarned || 0) + welcomeBonus : (existing?.totalCoinsEarned || newCoins);
 
+    const isSameSchool = existing?.schoolName === cleanSchoolName && existing?.region === cleanRegion && existing?.district === cleanDistrict;
     const linkedSchool = findOrCreateSchool({
-      schoolId: existing?.schoolId,
+      schoolId: isSameSchool ? existing?.schoolId : undefined,
       schoolName: cleanSchoolName,
       schoolNumber,
       region: cleanRegion,
       district: cleanDistrict,
       coinsDelta: isFirstWelcomeBonus ? welcomeBonus : 0,
-      incrementStudents: !existing?.isOnboarded,
+      incrementStudents: !existing?.isOnboarded || !existing?.schoolId,
     });
 
-    const canonicalUid = existing?.uid || (telegramId ? `user_tg_${telegramId}` : uid);
     const profile = upsertUser({
       uid: canonicalUid,
       userId: canonicalUid,
-      chatId: telegramId ? String(telegramId) : existing?.chatId,
-      telegramId: telegramId || existing?.telegramId || null,
-      telegramUsername: telegramUsername || existing?.telegramUsername || '',
-      email: email || existing?.email || (telegramId ? `${telegramId}@telegram.ecohero.uz` : `${canonicalUid}@ecohero.uz`),
-      fullName: fullName.trim(),
-      phoneNumber: phoneNumber.trim(),
+      chatId: callerTelegramId ? String(callerTelegramId) : existing?.chatId,
+      telegramId: callerTelegramId,
+      telegramUsername: callerTelegramUsername,
+      email: callerEmail || (callerTelegramId ? `${callerTelegramId}@telegram.ecohero.uz` : `${canonicalUid}@ecohero.uz`),
+      fullName: cleanFullName,
+      phoneNumber: cleanPhone,
       region: cleanRegion,
       district: cleanDistrict,
       schoolId: linkedSchool?.id || existing?.schoolId || 'school_custom',
       schoolName: linkedSchool?.name || cleanSchoolName,
       schoolNumber,
       grade: grade || '9-sinf',
-      ecoCoins: isJasur ? Math.max(newCoins, 50000) : newCoins,
-      totalCoinsEarned: isJasur ? Math.max(totalEarned, 50000) : totalEarned,
+      ecoCoins: newCoins,
+      totalCoinsEarned: totalEarned,
       reportsCount: existing?.reportsCount || 0,
       treesPlanted: existing?.treesPlanted || 0,
       cleanupsCount: existing?.cleanupsCount || 0,
       streakDays: existing?.streakDays || 1,
-      role: isJasur ? 'super_admin' : existing?.role || 'student',
-      approvedRoles: isJasur
-        ? ['student', 'ambassador', 'school_admin', 'district_coordinator', 'regional_coordinator', 'moderator', 'super_admin', 'sponsor']
-        : existing?.approvedRoles || ['student'],
-      badge: isJasur ? 'Bosh Administrator' : existing?.badge || 'Yangi Eko-Qahramon',
+      role: existing?.role || 'student',
+      approvedRoles: existing?.approvedRoles || ['student'],
+      badge: existing?.badge || 'Yangi Eko-Qahramon',
       referralCode: existing?.referralCode || `ECO${String(canonicalUid).slice(-4).toUpperCase()}`,
       avatarUrl: existing?.avatarUrl || DEFAULT_AVATAR,
       profileImage: existing?.profileImage || DEFAULT_AVATAR,
@@ -2546,7 +3198,7 @@ app.post('/api/user/onboarding', (req: AuthenticatedRequest, res) => {
         cleanupsCount: existing?.cleanupsCount || 0,
         treesPlanted: existing?.treesPlanted || 0,
         streakDays: existing?.streakDays || 1,
-        totalCoinsEarned: isJasur ? Math.max(totalEarned, 50000) : totalEarned,
+        totalCoinsEarned: totalEarned,
       },
     });
 
@@ -2560,8 +3212,8 @@ app.post('/api/user/onboarding', (req: AuthenticatedRequest, res) => {
       });
     }
 
-    if (telegramId && centralDb.registrationSessions[String(telegramId)]) {
-      delete centralDb.registrationSessions[String(telegramId)];
+    if (callerTelegramId && centralDb.registrationSessions[String(callerTelegramId)]) {
+      delete centralDb.registrationSessions[String(callerTelegramId)];
     }
     saveCentralDb();
     broadcastRealtimeEvent('db:updated', { scope: 'users' });
@@ -3771,8 +4423,7 @@ app.post('/api/applications', requireAuth, (req: AuthenticatedRequest, res) => {
     });
 
     // Notify Super Admin via Telegram
-    sendTelegramMessage(
-      '8832599080',
+    notifySuperAdminsTelegram(
       `📋 <b>YANGI LAVOZIM ARIZASI</b>\n\n` +
         `👤 <b>Nomzod:</b> ${newApp.fullName}\n` +
         `🆔 <b>Telegram ID:</b> ${newApp.telegramId || 'Kiritilmagan'} ${newApp.telegramUsername || ''}\n` +
@@ -4101,8 +4752,7 @@ app.post('/api/roles/request', requireAuth, async (req: AuthenticatedRequest, re
     centralDb.roleRequests.unshift(newRequest);
     saveCentralDb();
 
-    sendTelegramMessage(
-      '8832599080',
+    notifySuperAdminsTelegram(
       `🛡 <b>YANGI ROL UCHUN RUXSAT SO'ROVI</b>\n\n` +
         `👤 <b>Foydalanuvchi:</b> ${newRequest.userName}\n` +
         `🏫 <b>Maktab:</b> ${newRequest.userSchool}\n` +
@@ -4127,7 +4777,7 @@ app.post('/api/roles/request', requireAuth, async (req: AuthenticatedRequest, re
   }
 });
 
-async function approveRoleRequestUnified(requestId: string, reviewedBy: string = '@jasurdost') {
+async function approveRoleRequestUnified(requestId: string, reviewedBy: string = 'Super Admin') {
   const request = centralDb.roleRequests.find((r) => r.id === requestId);
   if (!request) return null;
 
@@ -4450,6 +5100,7 @@ app.post('/api/media', requireAuth, (req: AuthenticatedRequest, res) => {
       mediaUrl: String(mediaUrl),
       fileHash: fileHash || '',
       description: String(description).trim(),
+      aiVerification: req.body?.aiVerification && typeof req.body.aiVerification === 'object' ? req.body.aiVerification : undefined,
       status: 'PENDING',
       awardedCoins: 0,
       createdAt: new Date().toISOString(),
@@ -4458,8 +5109,7 @@ app.post('/api/media', requireAuth, (req: AuthenticatedRequest, res) => {
     centralDb.mediaSubmissions.unshift(submission);
     saveCentralDb();
 
-    sendTelegramMessage(
-      '8832599080',
+    notifySuperAdminsTelegram(
       `🎬 <b>YANGI EKOLOGIK MEDIA FAOLIYAT (MODERATSIYA KUTILMOQDA)</b>\n\n` +
         `👤 <b>Muallif:</b> ${submission.userName} (${submission.schoolName})\n` +
         `🏷 <b>Toifa:</b> ${submission.activityCategory}\n` +
@@ -4772,6 +5422,8 @@ app.patch('/api/admin/reward-settings', requireRoles('super_admin'), (req: Authe
     updated.updatedBy = req.authUser.uid;
     centralDb.rewardSettings = updated;
     saveCentralDb();
+    broadcastRealtimeEvent('db:updated', { scope: 'reward_settings' });
+    upsertCatalogDocToFirestoreRest('reward_settings', 'default', updated, getFirebaseTokenFromReq(req)).catch(() => {});
 
     addAuditLog({
       actorUid: req.authUser.uid,
@@ -5107,6 +5759,48 @@ app.get('/api/leaderboards/:tier', (req: AuthenticatedRequest, res) => {
         regMap.set(s.region, cur);
       }
       items = Array.from(regMap.values());
+    } else if (tier === 'class' || tier === 'classes') {
+      const classMap = new Map<string, any>();
+      const usersList = Object.values(centralDb.users || {}) as any[];
+      const schoolFilter = req.query.schoolId ? String(req.query.schoolId).trim() : '';
+      for (const u of usersList) {
+        if (!u || typeof u !== 'object') continue;
+        const rawGrade = String(u.grade || '').trim().toUpperCase();
+        if (!rawGrade) continue;
+        const sId = String(u.schoolId || u.schoolName || 'unknown');
+        if (schoolFilter && schoolFilter !== 'all' && sId !== schoolFilter) continue;
+        const key = `${sId}__${rawGrade}`;
+        const cur = classMap.get(key) || {
+          id: key,
+          grade: rawGrade,
+          name: `${rawGrade} sinfi`,
+          schoolId: u.schoolId || '',
+          schoolName: u.schoolName || 'Maktab',
+          region: u.region || '',
+          district: u.district || '',
+          studentsCount: 0,
+          points: 0,
+          treesPlanted: 0,
+          reportsCount: 0,
+          topStudentName: u.fullName || "O'quvchi",
+          topStudentCoins: -1,
+        };
+        const uCoins = Number(u.totalCoinsEarned || u.ecoCoins || 0);
+        cur.studentsCount += 1;
+        cur.points += uCoins;
+        cur.treesPlanted += Number(u.treesPlanted || u.activityStats?.treesPlanted || 0);
+        cur.reportsCount += Number(u.reportsCount || u.activityStats?.reportsCount || 0);
+        if (uCoins > cur.topStudentCoins) {
+          cur.topStudentCoins = uCoins;
+          cur.topStudentName = u.fullName || cur.topStudentName;
+        }
+        classMap.set(key, cur);
+      }
+      items = Array.from(classMap.values()).map((c) => ({
+        ...c,
+        leagueTier:
+          c.points >= 3000 ? 'Olmos Liga' : c.points >= 1500 ? 'Oltin Liga' : c.points >= 500 ? 'Zumrad Liga' : 'Bronza Liga',
+      }));
     } else {
       return res.status(400).json({ error: "Noto'g'ri reyting turi" });
     }
@@ -5134,6 +5828,175 @@ app.get('/api/leaderboards/:tier', (req: AuthenticatedRequest, res) => {
       total,
       page,
       totalPages: Math.max(1, Math.ceil(total / limit)),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 3-Stage Live Championship Endpoint (District 1mo / Regional 3mo Top-3 Gated / National 3mo)
+app.get('/api/championship/live', (req: AuthenticatedRequest, res) => {
+  try {
+    const caller = req.authUser || null;
+    const level = (['district', 'regional', 'national'].includes(String(req.query.level))
+      ? String(req.query.level)
+      : 'district') as 'district' | 'regional' | 'national';
+    const entity = req.query.entity === 'students' ? 'students' : 'schools';
+    const regionFilter = req.query.region ? String(req.query.region).trim() : '';
+    const districtFilter = req.query.district ? String(req.query.district).trim() : '';
+
+    const eligibility = buildChampionshipEligibility(caller);
+
+    if (level === 'regional' && !eligibility.regionalUnlocked) {
+      return res.json({
+        success: true,
+        level,
+        entity,
+        serverNow: new Date().toISOString(),
+        locked: true,
+        lockReason: eligibility.reasonUz,
+        eligibility,
+        schools: [],
+        students: [],
+        totals: {
+          schoolsCount: 0,
+          studentsCount: 0,
+          allPlatformSchools: centralDb.schools.length,
+          allPlatformUsers: Object.keys(centralDb.users || {}).length,
+        },
+        recentWinners: [],
+      });
+    }
+
+    recalculateSchoolRanks();
+    const resolvedReports = (centralDb.reports || []).filter((r: any) =>
+      ['resolved', 'RESOLVED', 'verified'].includes(String(r.status || ''))
+    );
+    const approvedMedia = (centralDb.mediaSubmissions || []).filter((m: any) => m.status === 'APPROVED');
+    const allUsers = getAllPublicUsersForRankings() as any[];
+
+    const matchRegion = (reg?: string) =>
+      !regionFilter || regionFilter === 'all' || String(reg || '').trim().toLowerCase() === regionFilter.toLowerCase();
+    const matchDistrict = (dist?: string) =>
+      !districtFilter || districtFilter === 'all' || String(dist || '').trim().toLowerCase() === districtFilter.toLowerCase();
+
+    // When regional stage is open, show top-3 district qualifiers per district (or all active in region if none marked yet)
+    let schoolsList = centralDb.schools.filter((s: any) => {
+      if (level === 'district') return matchRegion(s.region) && matchDistrict(s.district);
+      if (level === 'regional') return matchRegion(s.region);
+      return true;
+    });
+
+    const enrichedSchools = schoolsList.map((s: any) => {
+      const resCount = resolvedReports.filter((r: any) => r.schoolId === s.id || r.schoolName === s.name).length;
+      const medCount = approvedMedia.filter((m: any) => m.schoolId === s.id || m.schoolName === s.name).length;
+      const studentsCount = getSchoolLiveStudentCount(s);
+      const points =
+        Number(s.totalCoins || 0) +
+        resCount * 150 +
+        medCount * 100 +
+        Number(s.treesPlanted || 0) * 15 +
+        Number(s.cleanupsCompleted || 0) * 80;
+      return {
+        id: s.id,
+        name: s.name,
+        number: s.number || '',
+        region: s.region || '',
+        district: s.district || '',
+        studentsCount,
+        treesPlanted: Number(s.treesPlanted || 0),
+        resolvedReports: resCount,
+        approvedMedia: medCount,
+        totalCoins: Number(s.totalCoins || 0),
+        points,
+        logoUrl: s.logoUrl || '',
+        isMine: Boolean(caller?.schoolId && caller.schoolId === s.id),
+      };
+    });
+
+    enrichedSchools.sort((a: any, b: any) => b.points - a.points);
+    const rankedSchools = enrichedSchools.map((s: any, idx: number) => ({
+      ...s,
+      rank: idx + 1,
+      qualified: idx < 3,
+    }));
+
+    const studentUsers = allUsers.filter((u: any) => {
+      if (!u || typeof u !== 'object') return false;
+      if (level === 'district') return matchRegion(u.region) && matchDistrict(u.district);
+      if (level === 'regional') return matchRegion(u.region);
+      return true;
+    });
+
+    const monthStatus = getTashkentMonthStatus();
+    const monthlyStats = computeMonthlyStudentActivityStats(monthStatus);
+
+    const enrichedStudents = studentUsers.map((u: any) => {
+      const mStat = monthlyStats.get(u.uid);
+      const totalEarned = Number(u.totalCoinsEarned || u.ecoCoins || 0);
+      const monthlyScore = mStat
+        ? mStat.earnedCoins + mStat.reportsCount * 50 + mStat.mediaCount * 40 + mStat.missionsCount * 30
+        : 0;
+      const score =
+        level === 'district' && mStat
+          ? Math.max(monthlyScore, totalEarned)
+          : totalEarned + Number(u.reportsCount || 0) * 100 + Number(u.treesPlanted || 0) * 30;
+      return {
+        uid: u.uid,
+        name: u.fullName || 'Eko-Qahramon',
+        schoolId: u.schoolId || '',
+        schoolName: u.schoolName || 'Maktab',
+        grade: u.grade || '',
+        region: u.region || '',
+        district: u.district || '',
+        avatarUrl: u.avatarUrl || u.profileImage || '',
+        badge: u.badge || 'Eko-Qahramon',
+        totalCoins: Number(u.ecoCoins || 0),
+        points: score,
+        treesPlanted: Number(u.treesPlanted || 0),
+        reportsCount: Number(u.reportsCount || 0),
+        isMe: Boolean(caller?.uid && caller.uid === u.uid),
+      };
+    });
+
+    enrichedStudents.sort((a: any, b: any) => b.points - a.points);
+    const rankedStudents = enrichedStudents.map((st: any, idx: number) => ({
+      ...st,
+      rank: idx + 1,
+      qualified: idx < 3,
+    }));
+
+    const recentWinners = [
+      ...(centralDb.studentMonthlyAwards || []).slice(0, 4).map((w: any) => ({
+        id: w.id,
+        title: `${w.periodLabel} · ${w.district || w.region}`,
+        winners: (w.winners || []).slice(0, 3).map((x: any) => `${x.rank}. ${x.fullName}`),
+        awardedAt: w.awardedAt,
+      })),
+      ...(centralDb.monthlyAwards || []).slice(0, 4).map((w: any) => ({
+        id: w.id,
+        title: `${w.periodLabel} · ${w.district} (Maktablar)`,
+        winners: (w.topSchools || []).slice(0, 3).map((x: any) => `${x.rank}. ${x.name}`),
+        awardedAt: w.awardedAt,
+      })),
+    ].slice(0, 6);
+
+    res.json({
+      success: true,
+      level,
+      entity,
+      serverNow: new Date().toISOString(),
+      locked: false,
+      eligibility,
+      schools: rankedSchools.slice(0, 50),
+      students: rankedStudents.slice(0, 50),
+      totals: {
+        schoolsCount: rankedSchools.length,
+        studentsCount: rankedStudents.length,
+        allPlatformSchools: centralDb.schools.length,
+        allPlatformUsers: Object.keys(centralDb.users || {}).length,
+      },
+      recentWinners,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -5697,6 +6560,1051 @@ app.post(
 );
 
 // ==========================================
+// 2A. SCHOOL (50+) & DISTRICT (500+) STUDENT MONTHLY RATINGS
+// ==========================================
+
+function ensureRatingConfigsContainer() {
+  if (!centralDb.ratingConfigs || typeof centralDb.ratingConfigs !== 'object') {
+    centralDb.ratingConfigs = { schoolRatings: {}, districtStudentRatings: {} };
+  }
+  if (!centralDb.ratingConfigs.schoolRatings) {
+    centralDb.ratingConfigs.schoolRatings = {};
+  }
+  if (!centralDb.ratingConfigs.districtStudentRatings) {
+    centralDb.ratingConfigs.districtStudentRatings = {};
+  }
+  if (!Array.isArray(centralDb.studentMonthlyAwards)) {
+    centralDb.studentMonthlyAwards = [];
+  }
+}
+
+function makeDistrictRatingKey(region?: string, district?: string): string {
+  const reg = String(region || '').trim().toLowerCase();
+  const dist = String(district || '').trim().toLowerCase();
+  return `${reg}__${dist}`;
+}
+
+function isDateInTashkentMonth(dateStr: string | undefined, monthStatus: ReturnType<typeof getTashkentMonthStatus>): boolean {
+  if (!dateStr) return false;
+  const ts = new Date(dateStr).getTime();
+  if (Number.isNaN(ts)) return false;
+  const tDate = new Date(ts + 5 * 3600 * 1000);
+  return tDate.getUTCFullYear() === monthStatus.year && tDate.getUTCMonth() === monthStatus.monthIndex;
+}
+
+function getEffectiveSchoolRatingConfig(params: {
+  schoolId: string;
+  schoolName: string;
+  region: string;
+  district: string;
+}): SchoolStudentRatingConfig {
+  ensureRatingConfigsContainer();
+  const existing = centralDb.ratingConfigs.schoolRatings[params.schoolId];
+  return {
+    schoolId: params.schoolId,
+    schoolName: existing?.schoolName || params.schoolName || 'Maktab',
+    region: existing?.region || params.region || '',
+    district: existing?.district || params.district || '',
+    enabled: Boolean(existing?.enabled),
+    minMembersThreshold: Math.max(1, Number(existing?.minMembersThreshold ?? 50)),
+    monthlyPrizeTitle:
+      existing?.monthlyPrizeTitle || "Maktabning Eng Faol O'quvchisi — Qimmatbaho Sovg'a",
+    bonusCoins: Math.max(0, Number(existing?.bonusCoins ?? 500)),
+    activatedAt: existing?.activatedAt,
+    activatedByUid: existing?.activatedByUid,
+    updatedAt: existing?.updatedAt || new Date().toISOString(),
+  };
+}
+
+function getEffectiveDistrictStudentRatingConfig(params: {
+  region: string;
+  district: string;
+}): DistrictStudentRatingConfig {
+  ensureRatingConfigsContainer();
+  const exactKey = makeDistrictRatingKey(params.region, params.district);
+  const byExact = centralDb.ratingConfigs.districtStudentRatings[exactKey];
+  const byDist =
+    byExact ||
+    Object.values(centralDb.ratingConfigs.districtStudentRatings).find(
+      (c) => String(c.district || '').trim().toLowerCase() === String(params.district || '').trim().toLowerCase()
+    );
+  const bonusesRaw = Array.isArray(byDist?.bonuses) ? byDist.bonuses : [1500, 1000, 700];
+  return {
+    key: byDist?.key || exactKey,
+    region: byDist?.region || params.region || '',
+    district: byDist?.district || params.district || '',
+    enabled: Boolean(byDist?.enabled),
+    minMembersThreshold: Math.max(1, Number(byDist?.minMembersThreshold ?? 500)),
+    top1Prize: byDist?.top1Prize || "1-o'rin: Smart-soat / Planshet + Oltin Diplom",
+    top2Prize: byDist?.top2Prize || "2-o'rin: Simsiz Quloqchin + Kumush Diplom",
+    top3Prize: byDist?.top3Prize || "3-o'rin: Eko-Ryukzak va Kitoblar To'plami",
+    bonuses: [
+      Math.max(0, Number(bonusesRaw[0] ?? 1500)),
+      Math.max(0, Number(bonusesRaw[1] ?? 1000)),
+      Math.max(0, Number(bonusesRaw[2] ?? 700)),
+    ],
+    activatedAt: byDist?.activatedAt,
+    activatedByUid: byDist?.activatedByUid,
+    updatedAt: byDist?.updatedAt || new Date().toISOString(),
+  };
+}
+
+function computeMonthlyStudentActivityStats(monthStatus: ReturnType<typeof getTashkentMonthStatus>) {
+  const statsMap = new Map<
+    string,
+    {
+      earnedCoins: number;
+      mediaCount: number;
+      reportsCount: number;
+      missionsCount: number;
+    }
+  >();
+
+  const ensure = (uid: string) => {
+    let rec = statsMap.get(uid);
+    if (!rec) {
+      rec = { earnedCoins: 0, mediaCount: 0, reportsCount: 0, missionsCount: 0 };
+      statsMap.set(uid, rec);
+    }
+    return rec;
+  };
+
+  for (const tx of centralDb.transactions || []) {
+    if (!tx?.userId || tx.status === 'rejected') continue;
+    if (tx.type !== 'earn' && tx.type !== 'bonus') continue;
+    const amt = Number(tx.amount || 0);
+    if (amt <= 0) continue;
+    if (!isDateInTashkentMonth(tx.createdAt, monthStatus)) continue;
+    ensure(String(tx.userId)).earnedCoins += amt;
+  }
+
+  for (const m of centralDb.mediaSubmissions || []) {
+    if (!m?.userId || m.status !== 'APPROVED') continue;
+    if (!isDateInTashkentMonth(m.createdAt, monthStatus)) continue;
+    ensure(String(m.userId)).mediaCount += 1;
+  }
+
+  for (const r of centralDb.reports || []) {
+    if (!r?.reporterUid) continue;
+    if (!['verified', 'in_progress', 'resolved', 'APPROVED', 'RESOLVED'].includes(String(r.status || ''))) {
+      continue;
+    }
+    if (!isDateInTashkentMonth(r.createdAt, monthStatus)) continue;
+    ensure(String(r.reporterUid)).reportsCount += 1;
+  }
+
+  for (const ms of centralDb.missionSubmissions || []) {
+    if (!ms?.userId || ms.status !== 'approved') continue;
+    if (!isDateInTashkentMonth(ms.createdAt, monthStatus)) continue;
+    ensure(String(ms.userId)).missionsCount += 1;
+  }
+
+  return statsMap;
+}
+
+function buildRankedStudentEntries(
+  usersSubset: any[],
+  statsMap: Map<string, { earnedCoins: number; mediaCount: number; reportsCount: number; missionsCount: number }>,
+  viewerUid?: string
+) {
+  const ranked = usersSubset
+    .filter((u) => u && typeof u === 'object' && (u.role === 'student' || u.role === 'ambassador'))
+    .map((u) => {
+      const st = statsMap.get(String(u.uid)) || {
+        earnedCoins: 0,
+        mediaCount: 0,
+        reportsCount: 0,
+        missionsCount: 0,
+      };
+      const monthlyScore =
+        st.earnedCoins + st.reportsCount * 50 + st.mediaCount * 40 + st.missionsCount * 30;
+      const totalCoins = Number(u.ecoCoins || 0);
+      return {
+        uid: String(u.uid),
+        fullName: String(u.fullName || "O'quvchi"),
+        grade: u.grade || '',
+        schoolId: u.schoolId || '',
+        schoolName: u.schoolName || '',
+        region: u.region || '',
+        district: u.district || '',
+        badge: u.badge || 'Eko-Qahramon',
+        avatarUrl: u.avatarUrl || u.profileImage || '',
+        role: u.role || 'student',
+        monthlyScore,
+        monthlyEarnedCoins: st.earnedCoins,
+        monthlyActivitiesCount: st.reportsCount + st.mediaCount + st.missionsCount,
+        monthlyReportsCount: st.reportsCount,
+        monthlyMediaCount: st.mediaCount,
+        monthlyMissionsCount: st.missionsCount,
+        totalCoins,
+        totalCoinsEarned: Number(u.totalCoinsEarned || totalCoins),
+        treesPlanted: Number(u.treesPlanted || u.activityStats?.treesPlanted || 0),
+        isMe: Boolean(viewerUid && String(u.uid) === String(viewerUid)),
+      };
+    })
+    .sort((a, b) => {
+      if (b.monthlyScore !== a.monthlyScore) return b.monthlyScore - a.monthlyScore;
+      if (b.totalCoinsEarned !== a.totalCoinsEarned) return b.totalCoinsEarned - a.totalCoinsEarned;
+      if (b.totalCoins !== a.totalCoins) return b.totalCoins - a.totalCoins;
+      return a.fullName.localeCompare(b.fullName);
+    })
+    .map(({ totalCoinsEarned: _tce, ...entry }, idx) => ({
+      ...entry,
+      rank: idx + 1,
+    }));
+
+  return ranked;
+}
+
+function resolveSchoolTargetForStudentRatings(params: { schoolId?: string; schoolName?: string; region?: string; district?: string }) {
+  const schoolsList = centralDb.schools || [];
+  let matchedSchool: any = null;
+  if (params.schoolId) {
+    matchedSchool = schoolsList.find((s) => s.id === params.schoolId);
+  }
+  if (!matchedSchool && params.schoolName) {
+    const cleanName = String(params.schoolName).trim().toLowerCase();
+    matchedSchool = schoolsList.find(
+      (s) =>
+        String(s.name || '').trim().toLowerCase() === cleanName &&
+        (!params.district || String(s.district || '').trim().toLowerCase() === String(params.district).trim().toLowerCase())
+    );
+  }
+  const schoolId =
+    matchedSchool?.id ||
+    params.schoolId ||
+    `school_${slugifyChatKey(params.schoolName || 'unknown')}`;
+  const schoolName = matchedSchool?.name || params.schoolName || 'Maktab biriktirilmagan';
+  const region = matchedSchool?.region || params.region || '';
+  const district = matchedSchool?.district || params.district || '';
+  return { matchedSchool, schoolId, schoolName, region, district };
+}
+
+function buildSchoolStudentRatingPayload(params: {
+  schoolId?: string;
+  schoolName?: string;
+  region?: string;
+  district?: string;
+  viewerUid?: string;
+  includeAdminPreview?: boolean;
+}) {
+  const monthStatus = getTashkentMonthStatus();
+  const resolved = resolveSchoolTargetForStudentRatings(params);
+  const config = getEffectiveSchoolRatingConfig({
+    schoolId: resolved.schoolId,
+    schoolName: resolved.schoolName,
+    region: resolved.region,
+    district: resolved.district,
+  });
+
+  const allUsers = Object.values(centralDb.users || {}) as any[];
+  const schoolUsers = allUsers.filter((u) => {
+    if (!u || typeof u !== 'object') return false;
+    if (resolved.matchedSchool) {
+      if (u.schoolId && String(u.schoolId).trim() === String(resolved.matchedSchool.id).trim()) return true;
+      const uName = String(u.schoolName || '').trim().toLowerCase();
+      const sName = String(resolved.matchedSchool.name || '').trim().toLowerCase();
+      if (sName && uName && uName === sName) return true;
+      if (
+        resolved.matchedSchool.number &&
+        u.schoolNumber &&
+        String(u.schoolNumber).trim() === String(resolved.matchedSchool.number).trim() &&
+        resolved.matchedSchool.district &&
+        String(u.district || '').trim().toLowerCase() === String(resolved.matchedSchool.district).trim().toLowerCase()
+      ) {
+        return true;
+      }
+      return false;
+    }
+    if (params.schoolId && u.schoolId === params.schoolId) return true;
+    if (params.schoolName && String(u.schoolName || '').trim().toLowerCase() === String(params.schoolName).trim().toLowerCase()) {
+      return true;
+    }
+    return false;
+  });
+
+  const currentMembersCount = resolved.matchedSchool
+    ? getSchoolLiveStudentCount(resolved.matchedSchool)
+    : schoolUsers.length;
+  const canActivate = currentMembersCount >= config.minMembersThreshold;
+  const isLiveActive = Boolean(config.enabled && canActivate);
+
+  const statsMap = computeMonthlyStudentActivityStats(monthStatus);
+  const ranked = buildRankedStudentEntries(schoolUsers, statsMap, params.viewerUid);
+
+  const top10Full = ranked.slice(0, 10);
+  const myEntryFull = ranked.find((e) => e.isMe) || null;
+  const myRank = myEntryFull ? myEntryFull.rank : null;
+  const isCallerInTop10 = Boolean(myRank && myRank <= 10);
+  const pointsToTop10 =
+    myEntryFull && !isCallerInTop10 && top10Full[9]
+      ? Math.max(1, top10Full[9].monthlyScore - myEntryFull.monthlyScore + 1)
+      : null;
+  const pointsToTop1 =
+    myEntryFull && myRank && myRank > 1 && top10Full[0]
+      ? Math.max(1, top10Full[0].monthlyScore - myEntryFull.monthlyScore + 1)
+      : null;
+
+  const recentWinners = (centralDb.studentMonthlyAwards || []).filter(
+    (aw: any) => aw.scope === 'school' && aw.schoolId === resolved.schoolId
+  );
+  const alreadyAwardedThisMonth = recentWinners.some(
+    (aw: any) => String(aw.periodKey) === monthStatus.periodKey
+  );
+
+  return {
+    scope: 'school' as const,
+    schoolId: resolved.schoolId,
+    schoolName: resolved.schoolName,
+    region: resolved.region,
+    district: resolved.district,
+    enabled: config.enabled,
+    minMembersThreshold: config.minMembersThreshold,
+    currentMembersCount,
+    canActivate,
+    isLiveActive,
+    periodKey: monthStatus.periodKey,
+    periodLabel: monthStatus.periodLabel,
+    daysRemainingInMonth: monthStatus.daysRemainingInMonth,
+    isLastDayOfMonth: monthStatus.isLastDayOfMonth,
+    lastDayDateLabel: monthStatus.lastDayDateLabel,
+    prizes: [
+      {
+        rank: 1,
+        title: config.monthlyPrizeTitle,
+        bonusCoins: config.bonusCoins,
+      },
+    ],
+    top10: isLiveActive ? top10Full : [],
+    ...(params.includeAdminPreview ? { previewTop10: top10Full } : {}),
+    totalParticipants: ranked.length,
+    myRank: isLiveActive ? myRank : null,
+    myEntry: isLiveActive ? myEntryFull : null,
+    isCallerInTop10: isLiveActive ? isCallerInTop10 : false,
+    pointsToTop10: isLiveActive ? pointsToTop10 : null,
+    pointsToTop1: isLiveActive ? pointsToTop1 : null,
+    alreadyAwardedThisMonth,
+    recentWinners: recentWinners.slice(0, 6),
+    rankedAll: ranked,
+  };
+}
+
+function buildDistrictStudentRatingPayload(params: {
+  region?: string;
+  district?: string;
+  viewerUid?: string;
+  includeAdminPreview?: boolean;
+}) {
+  const monthStatus = getTashkentMonthStatus();
+  const firstSchool = (centralDb.schools || [])[0];
+  const targetRegion = String(params.region || firstSchool?.region || '').trim();
+  const targetDistrict = String(params.district || firstSchool?.district || '').trim();
+
+  const config = getEffectiveDistrictStudentRatingConfig({
+    region: targetRegion,
+    district: targetDistrict,
+  });
+
+  const allUsers = Object.values(centralDb.users || {}) as any[];
+  const distNorm = targetDistrict.toLowerCase();
+  const regNorm = targetRegion.toLowerCase();
+  const districtUsers = allUsers.filter((u) => {
+    if (!u || typeof u !== 'object' || !distNorm) return false;
+    const uDist = String(u.district || '').trim().toLowerCase();
+    const uReg = String(u.region || '').trim().toLowerCase();
+    if (uDist !== distNorm) return false;
+    if (regNorm && uReg && uReg !== regNorm) return false;
+    return true;
+  });
+
+  const currentMembersCount = targetDistrict
+    ? getDistrictLiveParticipantCount(targetRegion, targetDistrict)
+    : 0;
+  const canActivate = Boolean(targetDistrict && currentMembersCount >= config.minMembersThreshold);
+  const isLiveActive = Boolean(config.enabled && canActivate);
+
+  const statsMap = computeMonthlyStudentActivityStats(monthStatus);
+  const ranked = buildRankedStudentEntries(districtUsers, statsMap, params.viewerUid);
+
+  const top10Full = ranked.slice(0, 10);
+  const myEntryFull = ranked.find((e) => e.isMe) || null;
+  const myRank = myEntryFull ? myEntryFull.rank : null;
+  const isCallerInTop10 = Boolean(myRank && myRank <= 10);
+  const pointsToTop10 =
+    myEntryFull && !isCallerInTop10 && top10Full[9]
+      ? Math.max(1, top10Full[9].monthlyScore - myEntryFull.monthlyScore + 1)
+      : null;
+  const pointsToTop3 =
+    myEntryFull && myRank && myRank > 3 && top10Full[2]
+      ? Math.max(1, top10Full[2].monthlyScore - myEntryFull.monthlyScore + 1)
+      : null;
+
+  const recentWinners = (centralDb.studentMonthlyAwards || []).filter(
+    (aw: any) =>
+      aw.scope === 'district' &&
+      String(aw.district || '').trim().toLowerCase() === distNorm
+  );
+  const alreadyAwardedThisMonth = recentWinners.some(
+    (aw: any) => String(aw.periodKey) === monthStatus.periodKey
+  );
+
+  return {
+    scope: 'district' as const,
+    region: targetRegion,
+    district: targetDistrict,
+    enabled: config.enabled,
+    minMembersThreshold: config.minMembersThreshold,
+    currentMembersCount,
+    canActivate,
+    isLiveActive,
+    periodKey: monthStatus.periodKey,
+    periodLabel: monthStatus.periodLabel,
+    daysRemainingInMonth: monthStatus.daysRemainingInMonth,
+    isLastDayOfMonth: monthStatus.isLastDayOfMonth,
+    lastDayDateLabel: monthStatus.lastDayDateLabel,
+    prizes: [
+      { rank: 1, title: config.top1Prize, bonusCoins: config.bonuses[0] },
+      { rank: 2, title: config.top2Prize, bonusCoins: config.bonuses[1] },
+      { rank: 3, title: config.top3Prize, bonusCoins: config.bonuses[2] },
+    ],
+    top10: isLiveActive ? top10Full : [],
+    ...(params.includeAdminPreview ? { previewTop10: top10Full } : {}),
+    totalParticipants: ranked.length,
+    myRank: isLiveActive ? myRank : null,
+    myEntry: isLiveActive ? myEntryFull : null,
+    isCallerInTop10: isLiveActive ? isCallerInTop10 : false,
+    pointsToTop10: isLiveActive ? pointsToTop10 : null,
+    pointsToTop3: isLiveActive ? pointsToTop3 : null,
+    alreadyAwardedThisMonth,
+    recentWinners: recentWinners.slice(0, 6),
+    rankedAll: ranked,
+  };
+}
+
+// Student Cabinet: School & District Monthly Student Ratings (Top 10 + Own Rank Below 10)
+app.get('/api/student-ratings/cabinet', requireAuth, (req: AuthenticatedRequest, res) => {
+  try {
+    const caller = req.authUser;
+    const isAdmin = checkIsSuperAdmin(caller);
+    const schoolId = isAdmin && req.query.schoolId ? String(req.query.schoolId) : caller.schoolId;
+    const schoolName = isAdmin && req.query.schoolName ? String(req.query.schoolName) : caller.schoolName;
+    const region = isAdmin && req.query.region ? String(req.query.region) : caller.region;
+    const district = isAdmin && req.query.district ? String(req.query.district) : caller.district;
+
+    const { rankedAll: _sa, ...schoolPayload } = buildSchoolStudentRatingPayload({
+      schoolId,
+      schoolName,
+      region,
+      district,
+      viewerUid: caller.uid,
+    });
+    const { rankedAll: _da, ...districtPayload } = buildDistrictStudentRatingPayload({
+      region,
+      district,
+      viewerUid: caller.uid,
+    });
+
+    res.json({
+      success: true,
+      school: schoolPayload,
+      district: districtPayload,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Management View for School Captains, District Coordinators & Super Admin (includes Top-10 preview)
+app.get(
+  '/api/student-ratings/manage',
+  requireRoles('school_admin', 'district_coordinator', 'regional_coordinator', 'super_admin'),
+  (req: AuthenticatedRequest, res) => {
+    try {
+      const caller = req.authUser;
+      const isAdmin = checkIsSuperAdmin(caller);
+      const isCaptain = hasAnyRole(caller, ['school_admin']);
+      const isDistCoord = hasAnyRole(caller, ['district_coordinator']);
+      const isRegCoord = hasAnyRole(caller, ['regional_coordinator']);
+
+      let schoolPayload = null;
+      if (isAdmin || isCaptain) {
+        const targetSchoolId = isAdmin && req.query.schoolId ? String(req.query.schoolId) : caller.schoolId;
+        const targetSchoolName = isAdmin && req.query.schoolName ? String(req.query.schoolName) : caller.schoolName;
+        const { rankedAll: _sa, ...builtSchool } = buildSchoolStudentRatingPayload({
+          schoolId: targetSchoolId,
+          schoolName: targetSchoolName,
+          region: caller.region,
+          district: caller.district,
+          viewerUid: caller.uid,
+          includeAdminPreview: true,
+        });
+        schoolPayload = builtSchool;
+      }
+
+      let districtPayload = null;
+      if (isAdmin || isDistCoord || isRegCoord) {
+        const targetRegion =
+          isAdmin && req.query.region ? String(req.query.region) : caller.region;
+        const targetDistrict =
+          (isAdmin || isRegCoord) && req.query.district ? String(req.query.district) : caller.district;
+        const { rankedAll: _da, ...builtDistrict } = buildDistrictStudentRatingPayload({
+          region: targetRegion,
+          district: targetDistrict,
+          viewerUid: caller.uid,
+          includeAdminPreview: true,
+        });
+        districtPayload = builtDistrict;
+      }
+
+      res.json({
+        success: true,
+        school: schoolPayload,
+        district: districtPayload,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+// School Captain / Super Admin: Toggle School Student Rating (requires threshold met, default 50) & Configure Top-1 Prize
+app.post(
+  '/api/student-ratings/school/config',
+  requireRoles('school_admin', 'super_admin'),
+  (req: AuthenticatedRequest, res) => {
+    try {
+      const caller = req.authUser;
+      const isAdmin = checkIsSuperAdmin(caller);
+      const requestedSchoolId = isAdmin && req.body.schoolId ? String(req.body.schoolId) : caller.schoolId;
+      const resolved = resolveSchoolTargetForStudentRatings({
+        schoolId: requestedSchoolId,
+        schoolName: isAdmin && req.body.schoolName ? String(req.body.schoolName) : caller.schoolName,
+        region: caller.region,
+        district: caller.district,
+      });
+
+      if (!resolved.schoolId || (!resolved.matchedSchool && !caller.schoolName)) {
+        return res.status(400).json({ error: 'Maktab aniqlanmadi.' });
+      }
+      if (!isAdmin && caller.schoolId && resolved.schoolId !== caller.schoolId) {
+        return res.status(403).json({ error: "Faqat o'z maktabingiz reytingini boshqara olasiz." });
+      }
+
+      ensureRatingConfigsContainer();
+      const prev = getEffectiveSchoolRatingConfig({
+        schoolId: resolved.schoolId,
+        schoolName: resolved.schoolName,
+        region: resolved.region,
+        district: resolved.district,
+      });
+
+      const minFloor = isAdmin ? 1 : 10;
+      const nextThreshold =
+        req.body.minMembersThreshold !== undefined
+          ? Math.max(minFloor, Math.min(5000, Math.round(Number(req.body.minMembersThreshold) || 50)))
+          : prev.minMembersThreshold;
+
+      const currentMembersCount = resolved.matchedSchool
+        ? getSchoolLiveStudentCount(resolved.matchedSchool)
+        : Object.values(centralDb.users || {}).filter(
+            (u: any) => u && (u.schoolId === resolved.schoolId || u.schoolName === resolved.schoolName)
+          ).length;
+
+      const nextEnabled =
+        typeof req.body.enabled === 'boolean' ? req.body.enabled : prev.enabled;
+
+      if (nextEnabled && currentMembersCount < nextThreshold) {
+        return res.status(400).json({
+          error: `Maktab reytingini yoqish uchun kamida ${nextThreshold} ta o'quvchi qo'shilgan bo'lishi kerak (hozir: ${currentMembersCount} ta).`,
+        });
+      }
+
+      const nextPrizeTitle =
+        typeof req.body.monthlyPrizeTitle === 'string' && req.body.monthlyPrizeTitle.trim()
+          ? req.body.monthlyPrizeTitle.trim().slice(0, 140)
+          : prev.monthlyPrizeTitle;
+      const nextBonusCoins =
+        req.body.bonusCoins !== undefined
+          ? Math.max(0, Math.min(50000, Math.round(Number(req.body.bonusCoins) || 0)))
+          : prev.bonusCoins;
+
+      const nowIso = new Date().toISOString();
+      const updatedConfig: SchoolStudentRatingConfig = {
+        schoolId: resolved.schoolId,
+        schoolName: resolved.schoolName,
+        region: resolved.region,
+        district: resolved.district,
+        enabled: nextEnabled,
+        minMembersThreshold: nextThreshold,
+        monthlyPrizeTitle: nextPrizeTitle,
+        bonusCoins: nextBonusCoins,
+        activatedAt: nextEnabled && !prev.enabled ? nowIso : prev.activatedAt,
+        activatedByUid: nextEnabled && !prev.enabled ? caller.uid : prev.activatedByUid,
+        updatedAt: nowIso,
+      };
+
+      centralDb.ratingConfigs.schoolRatings[resolved.schoolId] = updatedConfig;
+      saveCentralDb();
+      broadcastRealtimeEvent('db:updated', { scope: 'student_ratings', schoolId: resolved.schoolId });
+      addAuditLog({
+        actorUid: caller.uid,
+        actorName: caller.fullName,
+        actorRole: caller.role,
+        action: 'update_school_student_rating_config',
+        targetCollection: 'ratingConfigs',
+        targetId: resolved.schoolId,
+        details: { enabled: nextEnabled, minMembersThreshold: nextThreshold, currentMembersCount },
+      });
+
+      const { rankedAll: _sa, ...schoolPayload } = buildSchoolStudentRatingPayload({
+        schoolId: resolved.schoolId,
+        schoolName: resolved.schoolName,
+        region: resolved.region,
+        district: resolved.district,
+        viewerUid: caller.uid,
+        includeAdminPreview: true,
+      });
+
+      res.json({ success: true, config: updatedConfig, school: schoolPayload });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+// District Coordinator / Super Admin: Toggle District Student Rating (requires threshold met, default 500) & Configure Top-3 Prizes
+app.post(
+  '/api/student-ratings/district/config',
+  requireRoles('district_coordinator', 'regional_coordinator', 'super_admin'),
+  (req: AuthenticatedRequest, res) => {
+    try {
+      const caller = req.authUser;
+      const allowOverride = checkIsSuperAdmin(caller) || hasAnyRole(caller, ['regional_coordinator']);
+      const targetRegion =
+        checkIsSuperAdmin(caller) && req.body.region ? String(req.body.region).trim() : String(caller.region || '').trim();
+      const targetDistrict =
+        allowOverride && req.body.district ? String(req.body.district).trim() : String(caller.district || '').trim();
+
+      if (!targetDistrict) {
+        return res.status(400).json({ error: 'Tuman aniqlanmadi.' });
+      }
+
+      ensureRatingConfigsContainer();
+      const prev = getEffectiveDistrictStudentRatingConfig({
+        region: targetRegion,
+        district: targetDistrict,
+      });
+
+      const minFloor = checkIsSuperAdmin(caller) ? 1 : 100;
+      const nextThreshold =
+        req.body.minMembersThreshold !== undefined
+          ? Math.max(minFloor, Math.min(20000, Math.round(Number(req.body.minMembersThreshold) || 500)))
+          : prev.minMembersThreshold;
+
+      const currentMembersCount = getDistrictLiveParticipantCount(targetRegion, targetDistrict);
+      const nextEnabled =
+        typeof req.body.enabled === 'boolean' ? req.body.enabled : prev.enabled;
+
+      if (nextEnabled && currentMembersCount < nextThreshold) {
+        return res.status(400).json({
+          error: `Tuman reytingini yoqish uchun kamida ${nextThreshold} ta ishtirokchi qatnashgan bo'lishi kerak (hozir: ${currentMembersCount} ta).`,
+        });
+      }
+
+      const nextTop1 =
+        typeof req.body.top1Prize === 'string' && req.body.top1Prize.trim()
+          ? req.body.top1Prize.trim().slice(0, 140)
+          : prev.top1Prize;
+      const nextTop2 =
+        typeof req.body.top2Prize === 'string' && req.body.top2Prize.trim()
+          ? req.body.top2Prize.trim().slice(0, 140)
+          : prev.top2Prize;
+      const nextTop3 =
+        typeof req.body.top3Prize === 'string' && req.body.top3Prize.trim()
+          ? req.body.top3Prize.trim().slice(0, 140)
+          : prev.top3Prize;
+
+      const rawBonuses = Array.isArray(req.body.bonuses) ? req.body.bonuses : prev.bonuses;
+      const nextBonuses: [number, number, number] = [
+        Math.max(0, Math.min(100000, Math.round(Number(rawBonuses[0] ?? prev.bonuses[0]) || 0))),
+        Math.max(0, Math.min(100000, Math.round(Number(rawBonuses[1] ?? prev.bonuses[1]) || 0))),
+        Math.max(0, Math.min(100000, Math.round(Number(rawBonuses[2] ?? prev.bonuses[2]) || 0))),
+      ];
+
+      const key = makeDistrictRatingKey(targetRegion, targetDistrict);
+      const nowIso = new Date().toISOString();
+      const updatedConfig: DistrictStudentRatingConfig = {
+        key,
+        region: targetRegion,
+        district: targetDistrict,
+        enabled: nextEnabled,
+        minMembersThreshold: nextThreshold,
+        top1Prize: nextTop1,
+        top2Prize: nextTop2,
+        top3Prize: nextTop3,
+        bonuses: nextBonuses,
+        activatedAt: nextEnabled && !prev.enabled ? nowIso : prev.activatedAt,
+        activatedByUid: nextEnabled && !prev.enabled ? caller.uid : prev.activatedByUid,
+        updatedAt: nowIso,
+      };
+
+      centralDb.ratingConfigs.districtStudentRatings[key] = updatedConfig;
+      saveCentralDb();
+      broadcastRealtimeEvent('db:updated', { scope: 'student_ratings', district: targetDistrict });
+      addAuditLog({
+        actorUid: caller.uid,
+        actorName: caller.fullName,
+        actorRole: caller.role,
+        action: 'update_district_student_rating_config',
+        targetCollection: 'ratingConfigs',
+        targetId: key,
+        details: { district: targetDistrict, enabled: nextEnabled, minMembersThreshold: nextThreshold, currentMembersCount },
+      });
+
+      const { rankedAll: _da, ...districtPayload } = buildDistrictStudentRatingPayload({
+        region: targetRegion,
+        district: targetDistrict,
+        viewerUid: caller.uid,
+        includeAdminPreview: true,
+      });
+
+      res.json({ success: true, config: updatedConfig, district: districtPayload });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+// School Captain / Super Admin: Award the #1 Most Active Student in the School
+app.post(
+  '/api/student-ratings/school/award-top1',
+  requireRoles('school_admin', 'super_admin'),
+  (req: AuthenticatedRequest, res) => {
+    try {
+      const caller = req.authUser;
+      const isAdmin = checkIsSuperAdmin(caller);
+      const requestedSchoolId = isAdmin && req.body.schoolId ? String(req.body.schoolId) : caller.schoolId;
+      const built = buildSchoolStudentRatingPayload({
+        schoolId: requestedSchoolId,
+        schoolName: isAdmin && req.body.schoolName ? String(req.body.schoolName) : caller.schoolName,
+        region: caller.region,
+        district: caller.district,
+        viewerUid: caller.uid,
+        includeAdminPreview: true,
+      });
+
+      if (!isAdmin && caller.schoolId && built.schoolId !== caller.schoolId) {
+        return res.status(403).json({ error: "Faqat o'z maktabingiz o'quvchisini taqdirlay olasiz." });
+      }
+      if (!built.isLiveActive) {
+        return res.status(400).json({
+          error: `Avval maktab reytingini yoqing (kamida ${built.minMembersThreshold} ta o'quvchi bo'lishi kerak).`,
+        });
+      }
+      if (built.alreadyAwardedThisMonth) {
+        return res.status(400).json({
+          error: `${built.schoolName} uchun ${built.periodLabel} oyi g'olibi allaqachon taqdirlangan!`,
+        });
+      }
+      const winnerEntry = built.rankedAll[0];
+      if (!winnerEntry) {
+        return res.status(400).json({ error: "Maktab reytingida hali o'quvchilar mavjud emas." });
+      }
+
+      const monthStatus = getTashkentMonthStatus();
+      const prize = built.prizes[0];
+      const bonus = Number(prize?.bonusCoins ?? 500);
+      const prizeTitle = prize?.title || "Maktabning Eng Faol O'quvchisi Sovg'asi";
+      const promoCode = `ECO-MKO-${monthStatus.yymm}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+      const nowIso = new Date().toISOString();
+
+      const winnerUser = centralDb.users[winnerEntry.uid];
+      if (winnerUser) {
+        winnerUser.ecoCoins = Number(winnerUser.ecoCoins || 0) + bonus;
+        winnerUser.totalCoinsEarned = Number(winnerUser.totalCoinsEarned || 0) + bonus;
+        if (bonus > 0) {
+          recordTransaction({
+            userId: winnerUser.uid,
+            amount: bonus,
+            type: 'bonus',
+            status: 'approved',
+            reason: `${built.schoolName} · ${built.periodLabel} 1-o'rin g'olibi (${promoCode})`,
+          });
+        }
+        centralDb.notifications.unshift({
+          id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+          userId: winnerUser.uid,
+          title: `🏆 ${built.periodLabel} · Maktabda 1-o'rin!`,
+          message: `Tabriklaymiz! ${prizeTitle}. Promokod: ${promoCode} (+${bonus} EcoCoin). Sovg'angizni Maktab Sardoridan oling.`,
+          type: 'award',
+          read: false,
+          createdAt: nowIso,
+        });
+
+        if (winnerUser.telegramId || winnerUser.chatId) {
+          sendTelegramMessage(
+            winnerUser.telegramId || winnerUser.chatId,
+            `🏆 <b>TABRIKLAYMIZ! MAKTAB CHEMPIONI</b>\n\n` +
+              `Siz <b>${built.periodLabel}</b> oyida <b>${built.schoolName}</b> bo'yicha eng faol <b>1-o'rin</b> o'quvchisi bo'ldingiz!\n` +
+              `🎁 <b>Sovg'a:</b> ${prizeTitle}\n` +
+              `🎟 <b>Promokod:</b> <code>${promoCode}</code>\n` +
+              `💰 <b>Bonus:</b> +${bonus} EcoCoin\n\n` +
+              `Sovg'angizni Maktab Sardoriga promokodni ko'rsatib olishingiz mumkin!`
+          ).catch(() => {});
+        }
+      }
+
+      centralDb.shopOrders.unshift({
+        id: `ord_aw_sch_st_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        orderType: 'monthly_award',
+        awardTier: 'school_student',
+        rank: 1,
+        periodKey: built.periodKey,
+        userId: winnerEntry.uid,
+        userName: winnerEntry.fullName,
+        userEmail: winnerUser?.email || '',
+        schoolId: built.schoolId,
+        schoolName: built.schoolName,
+        district: built.district,
+        region: built.region,
+        itemId: 'award_school_student_top1',
+        itemTitle: `${built.periodLabel} · ${prizeTitle}`,
+        itemImageUrl: '/assets/schools/eco_courtyard.jpg',
+        priceCoins: 0,
+        voucherCode: promoCode,
+        qrToken: crypto.randomUUID(),
+        status: 'approved',
+        approvedAt: nowIso,
+        createdAt: nowIso,
+        sponsorName: `${built.schoolName} Sardori`,
+        verifiedBySchoolAdmin: true,
+      });
+
+      const award = {
+        id: `st_award_sch_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+        scope: 'school' as const,
+        periodKey: built.periodKey,
+        periodLabel: built.periodLabel,
+        region: built.region,
+        district: built.district,
+        schoolId: built.schoolId,
+        schoolName: built.schoolName,
+        winners: [
+          {
+            uid: winnerEntry.uid,
+            fullName: winnerEntry.fullName,
+            schoolName: built.schoolName,
+            grade: winnerEntry.grade || '',
+            rank: 1,
+            monthlyScore: winnerEntry.monthlyScore,
+            prizeTitle,
+            bonusCoins: bonus,
+            promoCode,
+          },
+        ],
+        awardedByUid: caller.uid,
+        awardedByName: caller.fullName,
+        awardedAt: nowIso,
+      };
+
+      ensureRatingConfigsContainer();
+      centralDb.studentMonthlyAwards.unshift(award);
+      recalculateSchoolRanks();
+      saveCentralDb();
+      broadcastRealtimeEvent('db:updated', { scope: 'student_ratings', schoolId: built.schoolId });
+      addAuditLog({
+        actorUid: caller.uid,
+        actorName: caller.fullName,
+        actorRole: caller.role,
+        action: 'award_school_top1_student',
+        targetCollection: 'studentMonthlyAwards',
+        targetId: award.id,
+        details: { schoolId: built.schoolId, winnerUid: winnerEntry.uid, promoCode, bonus },
+      });
+
+      const { rankedAll: _sa, ...refreshedSchool } = buildSchoolStudentRatingPayload({
+        schoolId: built.schoolId,
+        schoolName: built.schoolName,
+        region: built.region,
+        district: built.district,
+        viewerUid: caller.uid,
+        includeAdminPreview: true,
+      });
+      res.json({ success: true, award, school: refreshedSchool });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+// District Coordinator / Super Admin: Award Top-3 Most Active Students in the District (1-month prize cycle)
+app.post(
+  '/api/student-ratings/district/award-top3',
+  requireRoles('district_coordinator', 'regional_coordinator', 'super_admin'),
+  (req: AuthenticatedRequest, res) => {
+    try {
+      const caller = req.authUser;
+      const allowOverride = checkIsSuperAdmin(caller) || hasAnyRole(caller, ['regional_coordinator']);
+      const targetRegion =
+        checkIsSuperAdmin(caller) && req.body.region ? String(req.body.region).trim() : String(caller.region || '').trim();
+      const targetDistrict =
+        allowOverride && req.body.district ? String(req.body.district).trim() : String(caller.district || '').trim();
+
+      if (!targetDistrict) {
+        return res.status(400).json({ error: 'Taqdirlash uchun tuman aniqlanmadi.' });
+      }
+
+      const built = buildDistrictStudentRatingPayload({
+        region: targetRegion,
+        district: targetDistrict,
+        viewerUid: caller.uid,
+        includeAdminPreview: true,
+      });
+
+      if (!built.isLiveActive) {
+        return res.status(400).json({
+          error: `Avval tuman o'quvchilar reytingini yoqing (kamida ${built.minMembersThreshold} ta ishtirokchi kerak).`,
+        });
+      }
+      if (built.alreadyAwardedThisMonth) {
+        return res.status(400).json({
+          error: `${targetDistrict} uchun ${built.periodLabel} oyi TOP-3 o'quvchilar mukofoti allaqachon topshirilgan!`,
+        });
+      }
+      if (built.rankedAll.length === 0) {
+        return res.status(400).json({
+          error: `${targetDistrict} reytingida hali o'quvchilar mavjud emas.`,
+        });
+      }
+
+      const monthStatus = getTashkentMonthStatus();
+      const nowIso = new Date().toISOString();
+
+      const winners = built.rankedAll.slice(0, 3).map((st, idx) => {
+        const rank = idx + 1;
+        const prizeTier = built.prizes[idx];
+        const bonus = Number(prizeTier?.bonusCoins ?? [1500, 1000, 700][idx] ?? 500);
+        const prizeTitle = prizeTier?.title || `${rank}-o'rin Qimmatbaho Sovg'a`;
+        const promoCode = `ECO-TMO-${monthStatus.yymm}-${rank}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+
+        const u = centralDb.users[st.uid];
+        if (u) {
+          u.ecoCoins = Number(u.ecoCoins || 0) + bonus;
+          u.totalCoinsEarned = Number(u.totalCoinsEarned || 0) + bonus;
+          if (bonus > 0) {
+            recordTransaction({
+              userId: u.uid,
+              amount: bonus,
+              type: 'bonus',
+              status: 'approved',
+              reason: `${targetDistrict} · ${built.periodLabel} TOP-${rank} o'quvchi mukofoti (${promoCode})`,
+            });
+          }
+          centralDb.notifications.unshift({
+            id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+            userId: u.uid,
+            title: `🏆 ${built.periodLabel} · Tumanda ${rank}-o'rin!`,
+            message: `Tabriklaymiz! ${prizeTitle}. Promokod: ${promoCode} (+${bonus} EcoCoin). Sovg'angizni tuman koordinatoridan oling.`,
+            type: 'award',
+            read: false,
+            createdAt: nowIso,
+          });
+
+          if (u.telegramId || u.chatId) {
+            sendTelegramMessage(
+              u.telegramId || u.chatId,
+              `🏆 <b>TABRIKLAYMIZ! TUMAN OYLIK REYTING G'OLIBI</b>\n\n` +
+                `Siz <b>${built.periodLabel}</b> davomida <b>${targetDistrict}</b> bo'yicha eng faol <b>${rank}-o'rin</b> o'quvchisi bo'ldingiz!\n` +
+                `🎁 <b>Sovg'a:</b> ${prizeTitle}\n` +
+                `🎟 <b>Promokod:</b> <code>${promoCode}</code>\n` +
+                `💰 <b>Bonus:</b> +${bonus} EcoCoin\n\n` +
+                `Sovg'angizni Tuman Koordinatoriga promokodni ko'rsatib olishingiz mumkin!`
+            ).catch(() => {});
+          }
+        }
+
+        centralDb.shopOrders.unshift({
+          id: `ord_aw_dist_st_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          orderType: 'monthly_award',
+          awardTier: 'district_student',
+          rank,
+          periodKey: built.periodKey,
+          userId: st.uid,
+          userName: st.fullName,
+          userEmail: u?.email || '',
+          schoolId: st.schoolId || '',
+          schoolName: st.schoolName || '',
+          district: targetDistrict,
+          region: targetRegion,
+          itemId: `award_district_student_top_${rank}`,
+          itemTitle: `${built.periodLabel} · ${prizeTitle} (${targetDistrict})`,
+          itemImageUrl: '/assets/schools/eco_courtyard.jpg',
+          priceCoins: 0,
+          voucherCode: promoCode,
+          qrToken: crypto.randomUUID(),
+          status: 'approved',
+          approvedAt: nowIso,
+          createdAt: nowIso,
+          sponsorName: `${targetDistrict} Koordinatorligi`,
+          verifiedBySchoolAdmin: true,
+        });
+
+        return {
+          uid: st.uid,
+          fullName: st.fullName,
+          schoolName: st.schoolName || '',
+          grade: st.grade || '',
+          rank,
+          monthlyScore: st.monthlyScore,
+          prizeTitle,
+          bonusCoins: bonus,
+          promoCode,
+        };
+      });
+
+      const award = {
+        id: `st_award_dist_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+        scope: 'district' as const,
+        periodKey: built.periodKey,
+        periodLabel: built.periodLabel,
+        region: targetRegion,
+        district: targetDistrict,
+        winners,
+        awardedByUid: caller.uid,
+        awardedByName: caller.fullName,
+        awardedAt: nowIso,
+      };
+
+      ensureRatingConfigsContainer();
+      centralDb.studentMonthlyAwards.unshift(award);
+      recalculateSchoolRanks();
+      saveCentralDb();
+      broadcastRealtimeEvent('db:updated', { scope: 'student_ratings', district: targetDistrict });
+      addAuditLog({
+        actorUid: caller.uid,
+        actorName: caller.fullName,
+        actorRole: caller.role,
+        action: 'award_district_top3_students',
+        targetCollection: 'studentMonthlyAwards',
+        targetId: award.id,
+        details: { district: targetDistrict, winnersCount: winners.length },
+      });
+
+      const { rankedAll: _da, ...refreshedDistrict } = buildDistrictStudentRatingPayload({
+        region: targetRegion,
+        district: targetDistrict,
+        viewerUid: caller.uid,
+        includeAdminPreview: true,
+      });
+
+      res.json({ success: true, award, district: refreshedDistrict });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+// ==========================================
 // 2B. ROLE ROSTERS, EXCLUSIVE USER-GROWTH RACE & REAL-TIME TELEGRAM-STYLE CHAT
 // ==========================================
 
@@ -5813,6 +7721,7 @@ function broadcastChatMessage(msg: any) {
   const payload = JSON.stringify({ type: 'chat:message', message: msg });
   for (const client of wsClients) {
     if (client.ws.readyState !== WebSocket.OPEN) continue;
+    if (client.isPublicReadOnly || !client.uid) continue;
     const dbUser = centralDb.users[client.uid] || client;
     if (canUserAccessChannel(dbUser, msg.channelId)) {
       try {
@@ -5826,6 +7735,7 @@ function broadcastChatPermissionUpdate(perm: any) {
   const payload = JSON.stringify({ type: 'chat:permission_updated', permission: perm });
   for (const client of wsClients) {
     if (client.ws.readyState !== WebSocket.OPEN) continue;
+    if (client.isPublicReadOnly || !client.uid) continue;
     if (client.isSuperAdmin || client.uid === perm.requesterUid || client.uid === perm.targetUid) {
       try {
         client.ws.send(payload);
@@ -5840,26 +7750,47 @@ httpServer.on('upgrade', (request, socket, head) => {
     if (parsedUrl.pathname !== '/ws/chat') return;
 
     const token = parsedUrl.searchParams.get('token') || '';
-    const authUser = verifySessionToken(token);
-    if (!authUser) {
+    const isPublicMode = parsedUrl.searchParams.get('public') === '1';
+    const authUser = token ? verifySessionToken(token) : null;
+
+    if (!authUser && !isPublicMode) {
       socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
       socket.destroy();
       return;
     }
 
     chatWss.handleUpgrade(request, socket, head, (ws) => {
-      const client: ConnectedWsClient = {
-        ws,
-        uid: String(authUser.uid),
-        role: String(authUser.role || 'student'),
-        approvedRoles: Array.isArray(authUser.approvedRoles) ? authUser.approvedRoles : [],
-        region: String(authUser.region || ''),
-        district: String(authUser.district || ''),
-        schoolId: String(authUser.schoolId || ''),
-        isSuperAdmin: checkIsSuperAdmin(authUser),
-      };
+      const client: ConnectedWsClient = authUser
+        ? {
+            ws,
+            uid: String(authUser.uid),
+            role: String(authUser.role || 'student'),
+            approvedRoles: Array.isArray(authUser.approvedRoles) ? authUser.approvedRoles : [],
+            region: String(authUser.region || ''),
+            district: String(authUser.district || ''),
+            schoolId: String(authUser.schoolId || ''),
+            isSuperAdmin: checkIsSuperAdmin(authUser),
+            isPublicReadOnly: false,
+          }
+        : {
+            ws,
+            uid: '',
+            role: 'guest',
+            approvedRoles: [],
+            region: '',
+            district: '',
+            schoolId: '',
+            isSuperAdmin: false,
+            isPublicReadOnly: true,
+          };
       wsClients.add(client);
-      ws.send(JSON.stringify({ type: 'chat:connected', uid: client.uid }));
+      ws.send(
+        JSON.stringify(
+          client.isPublicReadOnly
+            ? { type: 'live:connected' }
+            : { type: 'chat:connected', uid: client.uid }
+        )
+      );
       ws.on('close', () => wsClients.delete(client));
       ws.on('error', () => wsClients.delete(client));
     });
@@ -6833,19 +8764,17 @@ app.post('/api/chat/settings', requireAuth, (req: AuthenticatedRequest, res) => 
   }
 });
 
-// HomePage Posts & News CMS (Managed by School Captain, Coordinators, Moderators & Super Admin)
+// HomePage Posts & News CMS (Super Admin ONLY)
 app.get('/api/home-posts', (req: AuthenticatedRequest, res) => {
   const caller = req.authUser || null;
   const manageMode = String(req.query.scope || '') === 'manage';
+  if (manageMode && (!caller || !checkIsSuperAdmin(caller))) {
+    return res.status(403).json({ error: 'Bosh sahifa postlarini boshqarish faqat Super Admin uchun ruxsat etilgan' });
+  }
   const posts = (centralDb.homePosts || [])
     .filter((p: any) => {
       if (!manageMode) return p.status === 'active';
-      if (!caller) return false;
-      if (checkIsSuperAdmin(caller) || hasAnyRole(caller, ['moderator'])) return true;
-      if (hasAnyRole(caller, ['regional_coordinator'])) return p.region === caller.region || p.authorUid === caller.uid;
-      if (hasAnyRole(caller, ['district_coordinator'])) return p.district === caller.district || p.authorUid === caller.uid;
-      if (hasAnyRole(caller, ['school_admin'])) return p.authorUid === caller.uid || (caller.schoolId && p.schoolId === caller.schoolId);
-      return false;
+      return Boolean(caller && checkIsSuperAdmin(caller));
     })
     .sort((a: any, b: any) => {
       if (Boolean(b.isPinned) !== Boolean(a.isPinned)) return b.isPinned ? 1 : -1;
@@ -6857,10 +8786,13 @@ app.get('/api/home-posts', (req: AuthenticatedRequest, res) => {
 
 app.post(
   '/api/home-posts',
-  requireRoles('school_admin', 'district_coordinator', 'regional_coordinator', 'moderator', 'super_admin'),
+  requireRoles('super_admin'),
   (req: AuthenticatedRequest, res) => {
     try {
       const caller = req.authUser;
+      if (!checkIsSuperAdmin(caller)) {
+        return res.status(403).json({ error: 'Bosh sahifaga post joylash faqat Super Admin uchun ruxsat etilgan' });
+      }
       const { title, content, category, imageUrl, ctaText, ctaUrl, isPinned } = req.body;
       if (!title || !content) {
         return res.status(400).json({ error: 'Post sarlavhasi va matni kiritilishi shart' });
@@ -6891,8 +8823,10 @@ app.post(
       };
 
       centralDb.homePosts = [post, ...(centralDb.homePosts || [])];
+      removeDeletedId(post.id);
       saveCentralDb();
       broadcastRealtimeEvent('db:updated', { scope: 'home_posts' });
+      upsertCatalogDocToFirestoreRest('home_posts', post.id, post, getFirebaseTokenFromReq(req)).catch(() => {});
       addAuditLog({
         actorUid: caller.uid,
         actorName: caller.fullName,
@@ -6912,24 +8846,15 @@ app.post(
 
 app.patch(
   '/api/home-posts/:id',
-  requireRoles('school_admin', 'district_coordinator', 'regional_coordinator', 'moderator', 'super_admin'),
+  requireRoles('super_admin'),
   (req: AuthenticatedRequest, res) => {
     try {
       const caller = req.authUser;
-      const post = (centralDb.homePosts || []).find((p: any) => p.id === req.params.id);
-      if (!post) return res.status(404).json({ error: 'Post topilmadi' });
-
-      const canEdit =
-        checkIsSuperAdmin(caller) ||
-        hasAnyRole(caller, ['moderator']) ||
-        post.authorUid === caller.uid ||
-        (hasAnyRole(caller, ['school_admin']) && caller.schoolId && post.schoolId === caller.schoolId) ||
-        (hasAnyRole(caller, ['district_coordinator']) && post.district === caller.district) ||
-        (hasAnyRole(caller, ['regional_coordinator']) && post.region === caller.region);
-
-      if (!canEdit) {
+      if (!checkIsSuperAdmin(caller)) {
         return res.status(403).json({ error: "Ushbu postni tahrirlash huquqiga ega emassiz" });
       }
+      const post = (centralDb.homePosts || []).find((p: any) => p.id === req.params.id);
+      if (!post) return res.status(404).json({ error: 'Post topilmadi' });
 
       const { title, content, category, imageUrl, ctaText, ctaUrl, isPinned, status } = req.body;
       if (title !== undefined) post.title = String(title).trim().slice(0, 180);
@@ -6944,6 +8869,7 @@ app.patch(
 
       saveCentralDb();
       broadcastRealtimeEvent('db:updated', { scope: 'home_posts' });
+      upsertCatalogDocToFirestoreRest('home_posts', post.id, post, getFirebaseTokenFromReq(req)).catch(() => {});
       res.json({ success: true, post });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -6953,29 +8879,21 @@ app.patch(
 
 app.delete(
   '/api/home-posts/:id',
-  requireRoles('school_admin', 'district_coordinator', 'regional_coordinator', 'moderator', 'super_admin'),
+  requireRoles('super_admin'),
   (req: AuthenticatedRequest, res) => {
     try {
       const caller = req.authUser;
-      const idx = (centralDb.homePosts || []).findIndex((p: any) => p.id === req.params.id);
-      if (idx === -1) return res.status(404).json({ error: 'Post topilmadi' });
-      const post = centralDb.homePosts[idx];
-
-      const canDelete =
-        checkIsSuperAdmin(caller) ||
-        hasAnyRole(caller, ['moderator']) ||
-        post.authorUid === caller.uid ||
-        (hasAnyRole(caller, ['school_admin']) && caller.schoolId && post.schoolId === caller.schoolId) ||
-        (hasAnyRole(caller, ['district_coordinator']) && post.district === caller.district) ||
-        (hasAnyRole(caller, ['regional_coordinator']) && post.region === caller.region);
-
-      if (!canDelete) {
+      if (!checkIsSuperAdmin(caller)) {
         return res.status(403).json({ error: "Ushbu postni o'chirish huquqiga ega emassiz" });
       }
+      const idx = (centralDb.homePosts || []).findIndex((p: any) => p.id === req.params.id);
+      if (idx === -1) return res.status(404).json({ error: 'Post topilmadi' });
 
       centralDb.homePosts.splice(idx, 1);
+      recordDeletedId(req.params.id);
       saveCentralDb();
       broadcastRealtimeEvent('db:updated', { scope: 'home_posts' });
+      deleteCatalogDocFromFirestoreRest('home_posts', req.params.id, caller.uid, getFirebaseTokenFromReq(req)).catch(() => {});
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -7145,6 +9063,78 @@ app.get('/api/analytics', (req: AuthenticatedRequest, res) => {
   }
 });
 
+app.get('/api/analytics/export', requireAuth, (req: AuthenticatedRequest, res) => {
+  try {
+    const caller = req.authUser;
+    let schools = [...centralDb.schools];
+    let reports = centralDb.reports.filter((r) => canViewReport(r, caller));
+    let scans = [...(centralDb.qrEcoScans || [])];
+
+    if (!hasAnyRole(caller, ['super_admin', 'moderator'])) {
+      if (hasAnyRole(caller, ['regional_coordinator'])) {
+        schools = schools.filter((s) => s.region === caller.region);
+        reports = reports.filter((r) => r.region === caller.region);
+        scans = scans.filter((sc) => sc.region === caller.region);
+      } else if (hasAnyRole(caller, ['district_coordinator'])) {
+        schools = schools.filter((s) => s.district === caller.district && s.region === caller.region);
+        reports = reports.filter((r) => r.district === caller.district && r.region === caller.region);
+        scans = scans.filter((sc) => sc.district === caller.district && sc.region === caller.region);
+      } else if (hasAnyRole(caller, ['school_admin', 'ambassador'])) {
+        schools = schools.filter((s) => s.id === caller.schoolId);
+        reports = reports.filter((r) => r.schoolId === caller.schoolId);
+        scans = scans.filter((sc) => sc.schoolId === caller.schoolId);
+      } else {
+        reports = reports.filter((r) => r.reporterUid === caller.uid);
+        scans = scans.filter((sc) => sc.studentUid === caller.uid);
+      }
+    }
+
+    const totalRecycledKg = scans.reduce((s, x) => s + (x.materialType === 'sapling' ? 0 : Number(x.weightKg || 0)), 0);
+
+    res.json({
+      success: true,
+      generatedAt: new Date().toISOString(),
+      generatedBy: caller.fullName,
+      scopeLabel: hasAnyRole(caller, ['super_admin', 'moderator'])
+        ? "O'zbekiston Respublikasi (To'liq hisobot)"
+        : `${caller.region || ''} ${caller.district || ''} ${caller.schoolName || ''}`.trim(),
+      summary: {
+        schoolsCount: schools.length,
+        studentsCount: schools.reduce((s, sc) => s + getSchoolLiveStudentCount(sc), 0),
+        treesPlanted: schools.reduce((s, sc) => s + Number(sc.treesPlanted || 0), 0),
+        reportsTotal: reports.length,
+        reportsResolved: reports.filter((r) => r.status === 'resolved' || r.status === 'RESOLVED').length,
+        recycledWasteKg: Number(totalRecycledKg.toFixed(1)),
+        totalEcoCoins: schools.reduce((s, sc) => s + Number(sc.totalCoins || 0), 0),
+      },
+      schools: schools.map((s) => ({
+        name: s.name,
+        region: s.region,
+        district: s.district,
+        studentsCount: getSchoolLiveStudentCount(s),
+        treesPlanted: s.treesPlanted || 0,
+        cleanupsCompleted: s.cleanupsCompleted || 0,
+        totalCoins: s.totalCoins || 0,
+        ratingRank: s.ratingRank || 0,
+      })),
+      reports: reports.slice(0, 250).map((r) => ({
+        id: r.id,
+        title: r.title,
+        category: r.category,
+        status: r.status,
+        region: r.region,
+        district: r.district,
+        schoolName: r.schoolName,
+        reporterName: r.reporterName,
+        rewardCoins: r.rewardCoins || 0,
+        createdAt: r.createdAt,
+      })),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ==========================================
 // 8. ECO SHOP, ORDERS, PARTNERS, ADS, REFERRALS (UNIFIED DB)
 // ==========================================
@@ -7203,6 +9193,136 @@ function sanitizeShopRedemptionGate(rawGate: any): {
   };
 }
 
+function resolveTelegramChannelHandle(rawHandle?: string, rawUrl?: string): string {
+  const cleanHandle = String(rawHandle || '').trim();
+  if (cleanHandle) {
+    if (/^-?\d+$/.test(cleanHandle)) return cleanHandle;
+    const urlMatch = cleanHandle.match(/(?:https?:\/\/)?(?:t\.me|telegram\.me)\/([A-Za-z0-9_]+)/i);
+    if (urlMatch && !urlMatch[1].startsWith('+')) {
+      return `@${urlMatch[1]}`;
+    }
+    return cleanHandle.startsWith('@') ? cleanHandle : `@${cleanHandle}`;
+  }
+  const cleanUrl = String(rawUrl || '').trim();
+  if (cleanUrl) {
+    const m = cleanUrl.match(/(?:https?:\/\/)?(?:t\.me|telegram\.me)\/([A-Za-z0-9_]+)/i);
+    if (m && m[1] && !m[1].startsWith('+') && m[1].toLowerCase() !== 'joinchat') {
+      return `@${m[1]}`;
+    }
+  }
+  return '';
+}
+
+async function verifyTelegramChannelMembership(params: {
+  channelHandle?: string;
+  channelUrl?: string;
+  userTelegramId?: string | number | null;
+  title?: string;
+}): Promise<{ ok: boolean; statusCode: number; chatHandle?: string; memberStatus?: string; error?: string }> {
+  const chatHandle = resolveTelegramChannelHandle(params.channelHandle, params.channelUrl);
+  const label = params.title ? `"${params.title}" (${chatHandle || params.channelUrl || 'Telegram kanal'})` : (chatHandle || 'Telegram kanal');
+
+  if (!chatHandle) {
+    return {
+      ok: false,
+      statusCode: 400,
+      error: `Kanal @username manzili noto'g'ri yoki ko'rsatilmagan. Admin ommaviy @kanal_nomi manzilini kiritishi kerak.`,
+    };
+  }
+
+  if (chatHandle.toLowerCase().endsWith('bot') && !/^-?\d+$/.test(chatHandle)) {
+    return {
+      ok: false,
+      statusCode: 400,
+      error: `${chatHandle} — bu kanal emas, Telegram bot manzili. Obunani tekshirish uchun haqiqiy kanal @username manzilini kiriting.`,
+    };
+  }
+
+  if (!activeBotToken) {
+    return {
+      ok: false,
+      statusCode: 503,
+      error: `Telegram bot tokeni serverda ulanmaganligi sababli ${label} obunasini tekshirib bo'lmadi.`,
+    };
+  }
+
+  const tgUserId = String(params.userTelegramId || '').trim();
+  if (!tgUserId) {
+    return {
+      ok: false,
+      statusCode: 400,
+      error: `Obunangizni haqiqiy tekshirish uchun ilovani Telegram bot orqali oching (sizning hisobingizga Telegram ID ulanmagan).`,
+    };
+  }
+
+  try {
+    const checkRes = await fetch(
+      `https://api.telegram.org/bot${activeBotToken}/getChatMember?chat_id=${encodeURIComponent(chatHandle)}&user_id=${encodeURIComponent(tgUserId)}`,
+      { signal: AbortSignal.timeout(6500) }
+    );
+    const checkJson: any = await checkRes.json().catch(() => null);
+
+    if (!checkJson?.ok || !checkJson?.result) {
+      const desc = String(checkJson?.description || '').toLowerCase();
+      if (
+        desc.includes('member list is inaccessible') ||
+        desc.includes('administrator rights') ||
+        desc.includes('not enough rights') ||
+        desc.includes('chat_admin_required')
+      ) {
+        return {
+          ok: false,
+          statusCode: 400,
+          error: `Bot ${chatHandle} kanaliga admin qilinmagan! Admin botni kanalga admin sifatida qo'shishi kerak, shundagina obuna haqiqiy tekshiriladi.`,
+        };
+      }
+      if (desc.includes('chat not found') || desc.includes('chat_id')) {
+        return {
+          ok: false,
+          statusCode: 400,
+          error: `${chatHandle} Telegram kanali topilmadi. Admin kanal manzilini to'g'ri kiritganini tekshirsin.`,
+        };
+      }
+      if (desc.includes('user not found') || desc.includes('participant_id_invalid')) {
+        return {
+          ok: false,
+          statusCode: 400,
+          error: `Siz hali ${chatHandle} kanaliga obuna bo'lmagansiz! Avval «Kanalga o'tish» tugmasini bosib kanalga qo'shiling va qayta tekshiring.`,
+        };
+      }
+      return {
+        ok: false,
+        statusCode: 400,
+        error: `${label} obunasini tasdiqlab bo'lmadi (${checkJson?.description || 'Telegram API xatosi'}). Avval kanalga obuna bo'lib, qayta urinib ko'ring.`,
+      };
+    }
+
+    const st = String(checkJson.result.status || '');
+    const isSubscribed =
+      st === 'member' ||
+      st === 'administrator' ||
+      st === 'creator' ||
+      (st === 'restricted' && checkJson.result.is_member === true);
+
+    if (!isSubscribed) {
+      return {
+        ok: false,
+        statusCode: 400,
+        error: `Siz hali ${chatHandle} kanaliga obuna bo'lmagansiz! Avval «Kanalga o'tish» tugmasini bosib kanalga a'zo bo'ling, so'ng qayta tekshiring.`,
+      };
+    }
+
+    return { ok: true, statusCode: 200, chatHandle, memberStatus: st };
+  } catch (err: any) {
+    console.warn('[Telegram getChatMember error]', chatHandle, err?.message || err);
+    return {
+      ok: false,
+      statusCode: 502,
+      error: `Telegram serveri bilan bog'lanishda xatolik yuz berdi. Birozdan so'ng qayta tekshirib ko'ring.`,
+    };
+  }
+}
+
 async function checkGiftSubscriptionTargets(params: {
   targets: Array<{
     id: string;
@@ -7224,48 +9344,20 @@ async function checkGiftSubscriptionTargets(params: {
 
   for (const target of targets) {
     if (target.platform === 'telegram_channel') {
-      let handle = String(target.handle || '').trim();
-      if (!handle && target.url) {
-        const m = target.url.match(/t\.me\/([A-Za-z0-9_]+)/i);
-        if (m) handle = `@${m[1]}`;
+      const verifyRes = await verifyTelegramChannelMembership({
+        channelHandle: target.handle,
+        channelUrl: target.url,
+        userTelegramId: caller?.telegramId,
+        title: target.title,
+      });
+      if (!verifyRes.ok) {
+        return {
+          ok: false,
+          verifiedTargetIds,
+          error: verifyRes.error,
+        };
       }
-      if (handle && !handle.startsWith('@')) handle = `@${handle}`;
-
-      let checkedByApi = false;
-      if (activeBotToken && caller?.telegramId && handle.startsWith('@') && !handle.toLowerCase().endsWith('bot')) {
-        try {
-          const checkRes = await fetch(
-            `https://api.telegram.org/bot${activeBotToken}/getChatMember?chat_id=${encodeURIComponent(handle)}&user_id=${encodeURIComponent(String(caller.telegramId))}`,
-            { signal: AbortSignal.timeout(5000) }
-          );
-          const checkJson: any = await checkRes.json().catch(() => null);
-          if (checkJson?.ok && checkJson.result) {
-            checkedByApi = true;
-            const st = checkJson.result.status;
-            if (!['member', 'administrator', 'creator'].includes(st)) {
-              return {
-                ok: false,
-                verifiedTargetIds,
-                error: `Siz hali "${target.title}" (${handle}) Telegram kanaliga obuna bo'lmagansiz. Avval obuna bo'ling va qayta tekshiring!`,
-              };
-            }
-            verifiedTargetIds.push(target.id);
-          }
-        } catch {
-          // Fallback to visited confirmation if Bot API cannot inspect private/external channel
-        }
-      }
-
-      if (!checkedByApi) {
-        if (!visitedSet.has(target.id)) {
-          return {
-            ok: false,
-            verifiedTargetIds,
-            error: `Avval "${target.title}" sahifasiga o'tib obuna bo'ling!`,
-          };
-        }
-        verifiedTargetIds.push(target.id);
-      }
+      verifiedTargetIds.push(target.id);
     } else {
       // telegram_bot, instagram, website
       if (!visitedSet.has(target.id)) {
@@ -7308,9 +9400,11 @@ app.post('/api/admin/shop/item-update', requireRoles('super_admin', 'moderator')
     if (redemptionGate !== undefined) {
       (item as any).redemptionGate = sanitizeShopRedemptionGate(redemptionGate);
     }
+    (item as any).updatedAt = new Date().toISOString();
 
     saveCentralDb();
     broadcastRealtimeEvent('db:updated', { scope: 'shop' });
+    upsertCatalogDocToFirestoreRest('shopItems', item.id, item, getFirebaseTokenFromReq(req)).catch(() => {});
     addAuditLog({
       actorUid: req.authUser.uid,
       actorName: req.authUser.fullName,
@@ -7335,6 +9429,7 @@ app.post('/api/admin/shop/item-create', requireRoles('super_admin', 'moderator')
     }
 
     const sanitizedGate = sanitizeShopRedemptionGate(redemptionGate || { mode: 'none' });
+    const nowIso = new Date().toISOString();
     const newItem = {
       id: `shop_custom_${Date.now()}`,
       title,
@@ -7346,11 +9441,14 @@ app.post('/api/admin/shop/item-create', requireRoles('super_admin', 'moderator')
       sponsorName: sponsorName || 'ECO HERO Hamkorlari',
       features: Array.isArray(features) ? features : ['Sifatli mahsulot', 'Eko-qadoq'],
       redemptionGate: sanitizedGate,
+      updatedAt: nowIso,
     };
 
     centralDb.shopItems.unshift(newItem);
+    removeDeletedId(newItem.id);
     saveCentralDb();
     broadcastRealtimeEvent('db:updated', { scope: 'shop' });
+    upsertCatalogDocToFirestoreRest('shopItems', newItem.id, newItem, getFirebaseTokenFromReq(req)).catch(() => {});
     addAuditLog({
       actorUid: req.authUser.uid,
       actorName: req.authUser.fullName,
@@ -7372,8 +9470,10 @@ app.delete('/api/admin/shop/items/:id', requireRoles('super_admin', 'moderator')
     const idx = centralDb.shopItems.findIndex((i) => i.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'Mahsulot topilmadi' });
     centralDb.shopItems.splice(idx, 1);
+    recordDeletedId(req.params.id);
     saveCentralDb();
     broadcastRealtimeEvent('db:updated', { scope: 'shop' });
+    deleteCatalogDocFromFirestoreRest('shopItems', req.params.id, req.authUser.uid, getFirebaseTokenFromReq(req)).catch(() => {});
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -7702,9 +9802,12 @@ app.post(
       });
 
       const superAdmins = Object.values(centralDb.users).filter(
-        (u: any) => u.role === 'super_admin' || String(u.telegramId || '') === '8832599080'
+        (u: any) => u.role === 'super_admin' || isSuperAdminTelegramId(u.telegramId)
       );
-      const notifyTargets = new Set<string>(['user_tg_8832599080', ...superAdmins.map((u: any) => u.uid)]);
+      const notifyTargets = new Set<string>([
+        ...getSuperAdminTelegramIdList().map((id) => `user_tg_${id}`),
+        ...superAdmins.map((u: any) => u.uid),
+      ]);
       for (const uid of notifyTargets) {
         centralDb.notifications.unshift({
           id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
@@ -7718,8 +9821,7 @@ app.post(
       }
       saveCentralDb();
 
-      sendTelegramMessage(
-        '8832599080',
+      notifySuperAdminsTelegram(
         `🎁 <b>MAKTAB ADMINIDAN SOVG'A VAUCHERI XABARI</b>\n\n🏫 <b>Maktab:</b> ${order.schoolName}\n👨‍🏫 <b>Tekshirgan admin:</b> ${req.authUser.fullName} (${req.authUser.role})\n👤 <b>G'olib o'quvchi:</b> ${order.userName}\n🎁 <b>Sovg'a:</b> ${order.itemTitle}\n🎟 <b>Promokod:</b> <code>${order.voucherCode}</code>\n📝 <b>Izoh:</b> ${order.verificationNote}\n\n✅ Baza tekshiruvi: <b>HAQIQIY YUTUQ</b>`,
         {
           reply_markup: {
@@ -7901,6 +10003,52 @@ const activeAdWatchSessions = new Map<
   { userId: string; adId: string; startedAt: number; requiredSeconds: number }
 >();
 
+const AD_REWARD_COOLDOWN_HOURS = 5;
+const AD_REWARD_COOLDOWN_MS = AD_REWARD_COOLDOWN_HOURS * 60 * 60 * 1000;
+
+function formatAdCooldownUz(remainingSeconds: number): string {
+  const sec = Math.max(1, Math.ceil(remainingSeconds));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  if (h > 0 && m > 0) return `${h} soat ${m} daqiqa`;
+  if (h > 0) return `${h} soat`;
+  if (m > 0) return `${m} daqiqa`;
+  return `${s} soniya`;
+}
+
+function buildUserAdWatchState(userId: string) {
+  const nowMs = Date.now();
+  const userClaims = (centralDb.adRewardClaims || [])
+    .filter((c) => c.userId === userId && c.claimedAt)
+    .map((c) => ({ ...c, ts: Date.parse(String(c.claimedAt)) || 0 }))
+    .filter((c) => c.ts > 0)
+    .sort((a, b) => b.ts - a.ts);
+
+  const perAdLastClaimedAt: Record<string, string> = {};
+  for (const c of userClaims) {
+    if (c.adId && !perAdLastClaimedAt[c.adId]) {
+      perAdLastClaimedAt[c.adId] = c.claimedAt;
+    }
+  }
+
+  const latest = userClaims[0] || null;
+  const elapsedMs = latest ? nowMs - latest.ts : Infinity;
+  const remainingMs = latest && elapsedMs < AD_REWARD_COOLDOWN_MS ? AD_REWARD_COOLDOWN_MS - elapsedMs : 0;
+  const remainingSeconds = remainingMs > 0 ? Math.ceil(remainingMs / 1000) : 0;
+  const nextAvailableAt =
+    remainingMs > 0 && latest ? new Date(latest.ts + AD_REWARD_COOLDOWN_MS).toISOString() : null;
+
+  return {
+    cooldownHours: AD_REWARD_COOLDOWN_HOURS,
+    lastWatchedAdId: latest?.adId || null,
+    lastClaimedAt: latest?.claimedAt || null,
+    nextAvailableAt,
+    remainingSeconds,
+    perAdLastClaimedAt,
+  };
+}
+
 app.get('/api/ads', (req, res) => {
   const placement = req.query.placement as string | undefined;
   let ads = centralDb.ecoAds.filter((a) => a.status === 'active');
@@ -7908,27 +10056,59 @@ app.get('/api/ads', (req, res) => {
   res.json({ success: true, ads });
 });
 
-app.post('/api/ads/impression/:id', (req, res) => {
+app.get('/api/ads/watch-status', requireAuth, (req: AuthenticatedRequest, res) => {
+  res.json({
+    success: true,
+    adWatchState: buildUserAdWatchState(req.authUser.uid),
+  });
+});
+
+const recentAdImpressions = new Map<string, number>();
+const recentAdClicks = new Map<string, number>();
+
+function checkAndMarkAdEvent(store: Map<string, number>, key: string, windowMs: number): boolean {
+  const now = Date.now();
+  const prev = store.get(key);
+  if (prev && now - prev < windowMs) {
+    return false;
+  }
+  store.set(key, now);
+  if (store.size > 5000) {
+    const cutoff = now - windowMs;
+    for (const [k, ts] of store.entries()) {
+      if (ts < cutoff) store.delete(k);
+    }
+  }
+  return true;
+}
+
+app.post('/api/ads/impression/:id', (req: AuthenticatedRequest, res) => {
   const ad = centralDb.ecoAds.find((a) => a.id === req.params.id);
-  if (ad) {
+  if (!ad) return res.status(404).json({ error: 'Reklama topilmadi' });
+
+  const actorKey = `${req.authUser?.uid || req.ip || 'anon'}:${ad.id}`;
+  if (checkAndMarkAdEvent(recentAdImpressions, actorKey, 5 * 60 * 1000)) {
     ad.impressionsCount = (ad.impressionsCount || 0) + 1;
     saveCentralDb();
     return res.json({ success: true, impressionsCount: ad.impressionsCount });
   }
-  res.status(404).json({ error: 'Reklama topilmadi' });
+  return res.json({ success: true, deduplicated: true, impressionsCount: ad.impressionsCount || 0 });
 });
 
-app.post('/api/ads/click/:id', (req, res) => {
+app.post('/api/ads/click/:id', (req: AuthenticatedRequest, res) => {
   const ad = centralDb.ecoAds.find((a) => a.id === req.params.id);
-  if (ad) {
+  if (!ad) return res.status(404).json({ error: 'Reklama topilmadi' });
+
+  const actorKey = `${req.authUser?.uid || req.ip || 'anon'}:${ad.id}`;
+  if (checkAndMarkAdEvent(recentAdClicks, actorKey, 60 * 1000)) {
     ad.clicksCount = (ad.clicksCount || 0) + 1;
     saveCentralDb();
     return res.json({ success: true, clicksCount: ad.clicksCount });
   }
-  res.status(404).json({ error: 'Reklama topilmadi' });
+  return res.json({ success: true, deduplicated: true, clicksCount: ad.clicksCount || 0 });
 });
 
-// Start a timed ad watch session (5s to 300s configurable per ad)
+// Start a timed ad watch session (5s to 300s configurable per ad, 5-hour cooldown enforced)
 app.post('/api/ads/watch-start', requireAuth, (req: AuthenticatedRequest, res) => {
   try {
     const { adId } = req.body || {};
@@ -7936,6 +10116,18 @@ app.post('/api/ads/watch-start', requireAuth, (req: AuthenticatedRequest, res) =
     if (!ad) {
       return res.status(404).json({ error: 'Faol reklama topilmadi' });
     }
+
+    const watchState = buildUserAdWatchState(req.authUser.uid);
+    if (watchState.remainingSeconds > 0) {
+      return res.status(429).json({
+        error: `Har 5 soatda 1 ta reklama ko'rib EcoCoin olish mumkin. Keyingi reklama ${formatAdCooldownUz(watchState.remainingSeconds)} dan so'ng ochiladi.`,
+        cooldownActive: true,
+        remainingSeconds: watchState.remainingSeconds,
+        nextAvailableAt: watchState.nextAvailableAt,
+        adWatchState: watchState,
+      });
+    }
+
     const requiredSeconds = Math.max(5, Math.min(300, Number(ad.skipAfterSeconds || 15)));
     const watchSessionId = `adws_${crypto.randomUUID()}`;
     activeAdWatchSessions.set(watchSessionId, {
@@ -7948,13 +10140,13 @@ app.post('/api/ads/watch-start', requireAuth, (req: AuthenticatedRequest, res) =
       const oldestKey = activeAdWatchSessions.keys().next().value;
       if (oldestKey) activeAdWatchSessions.delete(oldestKey);
     }
-    res.json({ success: true, watchSessionId, requiredSeconds });
+    res.json({ success: true, watchSessionId, requiredSeconds, adWatchState: watchState });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Claim EcoCoins automatically once ad watch finishes
+// Claim EcoCoins automatically once ad watch finishes (strict 5-hour anti-farming lock)
 app.post('/api/ads/watch-reward', requireAuth, (req: AuthenticatedRequest, res) => {
   try {
     const user = req.authUser;
@@ -7962,6 +10154,17 @@ app.post('/api/ads/watch-reward', requireAuth, (req: AuthenticatedRequest, res) 
     const ad = centralDb.ecoAds.find((a) => a.id === adId && a.status === 'active');
     if (!ad) {
       return res.status(404).json({ error: 'Faol reklama topilmadi' });
+    }
+
+    const watchState = buildUserAdWatchState(user.uid);
+    if (watchState.remainingSeconds > 0) {
+      return res.status(429).json({
+        error: `Har 5 soatda faqat 1 marta reklama ko'rib coin olish mumkin. Qolgan vaqt: ${formatAdCooldownUz(watchState.remainingSeconds)}.`,
+        cooldownActive: true,
+        remainingSeconds: watchState.remainingSeconds,
+        nextAvailableAt: watchState.nextAvailableAt,
+        adWatchState: watchState,
+      });
     }
 
     const session = watchSessionId ? activeAdWatchSessions.get(String(watchSessionId)) : null;
@@ -7977,7 +10180,13 @@ app.post('/api/ads/watch-reward', requireAuth, (req: AuthenticatedRequest, res) 
         error: `Iltimos, reklama tugashini kuting (yana ${Math.max(1, remaining)} soniya)`,
       });
     }
-    activeAdWatchSessions.delete(String(watchSessionId));
+
+    // Invalidate all open watch sessions for this user so concurrent tabs cannot double-claim
+    for (const [k, s] of activeAdWatchSessions.entries()) {
+      if (s.userId === user.uid) {
+        activeAdWatchSessions.delete(k);
+      }
+    }
 
     const todayStr = new Date().toISOString().split('T')[0];
     const todaysClaims = (centralDb.adRewardClaims || []).filter(
@@ -7985,7 +10194,7 @@ app.post('/api/ads/watch-reward', requireAuth, (req: AuthenticatedRequest, res) 
     );
     if (todaysClaims.length >= 10) {
       return res.status(429).json({
-        error: "Bugungi reklama orqali coin olish limiti (10 ta) tugadi. Ertaga yana urinib ko'ring!",
+        error: "Bugungi reklama orqali coin olish limiti tugadi. Ertaga yana urinib ko'ring!",
       });
     }
 
@@ -8031,12 +10240,14 @@ app.post('/api/ads/watch-reward', requireAuth, (req: AuthenticatedRequest, res) 
       details: { amount: rewardAmount, adTitle: ad.title },
     });
 
+    const nextWatchState = buildUserAdWatchState(user.uid);
     res.json({
       success: true,
       awardedCoins: rewardAmount,
       newBalance: user.ecoCoins,
       user: sanitizeSelfUser(user),
-      message: `Tabriklaymiz! +${rewardAmount} EcoCoin balansingizga avtomatik qo'shildi!`,
+      adWatchState: nextWatchState,
+      message: `Tabriklaymiz! +${rewardAmount} EcoCoin balansingizga qo'shildi! Keyingi reklama 5 soatdan so'ng ochiladi.`,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -8052,6 +10263,7 @@ app.post('/api/admin/ads', requireRoles('super_admin', 'sponsor'), (req, res) =>
     const {
       title,
       sponsorName,
+      sponsorLogo,
       type,
       placement,
       headline,
@@ -8080,12 +10292,18 @@ app.post('/api/admin/ads', requireRoles('super_admin', 'sponsor'), (req, res) =>
           : 'telegram_channel'
         : 'website';
 
+    const cleanSponsorLogo =
+      typeof sponsorLogo === 'string' && sponsorLogo.trim()
+        ? sponsorLogo.trim().slice(0, 1024)
+        : (sponsorName || 'ECO').slice(0, 5).toUpperCase();
+
+    const nowIso = new Date().toISOString();
     const newAd = {
       id: `ad_${Date.now()}`,
       title,
       sponsorId: 'part_sponsor',
       sponsorName: sponsorName || 'ECO HERO Hamkori',
-      sponsorLogo: (sponsorName || 'ECO').slice(0, 5).toUpperCase(),
+      sponsorLogo: cleanSponsorLogo,
       type: type || (videoUrl ? 'video' : 'banner'),
       placement: resolvedPlacement,
       headline,
@@ -8108,34 +10326,41 @@ app.post('/api/admin/ads', requireRoles('super_admin', 'sponsor'), (req, res) =>
       impressionsCount: 0,
       clicksCount: 0,
       complianceNote: complianceNote || "O'quvchilar xavfsizligi qoidalariga to'liq muvofiq.",
+      createdAt: nowIso,
+      updatedAt: nowIso,
     };
 
     centralDb.ecoAds.unshift(newAd);
+    removeDeletedId(newAd.id);
     saveCentralDb();
     broadcastRealtimeEvent('db:updated', { scope: 'ads' });
+    upsertCatalogDocToFirestoreRest('eco_ads', newAd.id, newAd, getFirebaseTokenFromReq(req)).catch(() => {});
     res.json({ success: true, ad: newAd });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.patch('/api/admin/ads/:id/status', requireRoles('super_admin', 'sponsor'), (req, res) => {
+app.patch('/api/admin/ads/:id/status', requireRoles('super_admin', 'sponsor'), (req: AuthenticatedRequest, res) => {
   const { status } = req.body;
   const ad = centralDb.ecoAds.find((a) => a.id === req.params.id);
   if (!ad) return res.status(404).json({ error: 'Reklama topilmadi' });
   ad.status = status;
+  (ad as any).updatedAt = new Date().toISOString();
   saveCentralDb();
   broadcastRealtimeEvent('db:updated', { scope: 'ads' });
+  upsertCatalogDocToFirestoreRest('eco_ads', ad.id, ad, getFirebaseTokenFromReq(req)).catch(() => {});
   res.json({ success: true, ad });
 });
 
-app.patch('/api/admin/ads/:id', requireRoles('super_admin', 'sponsor'), (req, res) => {
+app.patch('/api/admin/ads/:id', requireRoles('super_admin', 'sponsor'), (req: AuthenticatedRequest, res) => {
   try {
     const ad = centralDb.ecoAds.find((a) => a.id === req.params.id);
     if (!ad) return res.status(404).json({ error: 'Reklama topilmadi' });
     const {
       title,
       sponsorName,
+      sponsorLogo,
       type,
       placement,
       headline,
@@ -8154,6 +10379,7 @@ app.patch('/api/admin/ads/:id', requireRoles('super_admin', 'sponsor'), (req, re
 
     if (title !== undefined) ad.title = String(title).trim();
     if (sponsorName !== undefined) ad.sponsorName = String(sponsorName).trim();
+    if (sponsorLogo !== undefined) ad.sponsorLogo = String(sponsorLogo).trim().slice(0, 1024);
     if (type !== undefined) ad.type = type;
     if (placement !== undefined) ad.placement = placement;
     if (headline !== undefined) ad.headline = String(headline).trim();
@@ -8173,22 +10399,26 @@ app.patch('/api/admin/ads/:id', requireRoles('super_admin', 'sponsor'), (req, re
     if (skipAfterSeconds !== undefined) ad.skipAfterSeconds = Math.max(5, Math.min(300, Number(skipAfterSeconds) || 15));
     if (complianceNote !== undefined) ad.complianceNote = String(complianceNote).trim();
     if (status === 'active' || status === 'paused') ad.status = status;
+    (ad as any).updatedAt = new Date().toISOString();
 
     saveCentralDb();
     broadcastRealtimeEvent('db:updated', { scope: 'ads' });
+    upsertCatalogDocToFirestoreRest('eco_ads', ad.id, ad, getFirebaseTokenFromReq(req)).catch(() => {});
     res.json({ success: true, ad });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.delete('/api/admin/ads/:id', requireRoles('super_admin', 'sponsor'), (req, res) => {
+app.delete('/api/admin/ads/:id', requireRoles('super_admin', 'sponsor'), (req: AuthenticatedRequest, res) => {
   try {
     const idx = centralDb.ecoAds.findIndex((a) => a.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'Reklama topilmadi' });
     centralDb.ecoAds.splice(idx, 1);
+    recordDeletedId(req.params.id);
     saveCentralDb();
     broadcastRealtimeEvent('db:updated', { scope: 'ads' });
+    deleteCatalogDocFromFirestoreRest('eco_ads', req.params.id, req.authUser?.uid || '', getFirebaseTokenFromReq(req)).catch(() => {});
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -8416,6 +10646,7 @@ app.post('/api/missions', requireRoles('super_admin', 'moderator', 'school_admin
       return res.status(400).json({ error: 'Topshiriq turi va sarlavhasi kiritilishi shart' });
     }
 
+    const nowIso = new Date().toISOString();
     const newMission: any = {
       id: `mission_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       type,
@@ -8424,7 +10655,8 @@ app.post('/api/missions', requireRoles('super_admin', 'moderator', 'school_admin
       rewardCoins: Math.max(1, Number(rewardCoins) || 100),
       status: 'active',
       category: category || type,
-      createdAt: new Date().toISOString(),
+      createdAt: nowIso,
+      updatedAt: nowIso,
       createdByUid: caller.uid,
       createdByName: caller.fullName,
     };
@@ -8459,8 +10691,10 @@ app.post('/api/missions', requireRoles('super_admin', 'moderator', 'school_admin
 
     if (!Array.isArray(centralDb.ecoMissions)) centralDb.ecoMissions = [];
     centralDb.ecoMissions.unshift(newMission);
+    removeDeletedId(newMission.id);
     saveCentralDb();
     broadcastRealtimeEvent('db:updated', { scope: 'missions' });
+    upsertCatalogDocToFirestoreRest('eco_missions', newMission.id, newMission, getFirebaseTokenFromReq(req)).catch(() => {});
     res.json({ success: true, mission: newMission });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -8509,12 +10743,37 @@ app.patch('/api/missions/:id', requireRoles('super_admin', 'moderator', 'school_
       if (explanation !== undefined) mission.explanation = String(explanation).trim();
     }
 
-    if (channelUsername !== undefined) mission.channelUsername = String(channelUsername).trim();
-    if (channelUrl !== undefined) mission.channelUrl = String(channelUrl).trim();
+    if (channelUsername !== undefined) {
+      let cleanUser = String(channelUsername).trim();
+      const urlMatch = cleanUser.match(/(?:https?:\/\/)?(?:t\.me|telegram\.me)\/([A-Za-z0-9_]+)/i);
+      if (urlMatch && !urlMatch[1].startsWith('+')) {
+        cleanUser = `@${urlMatch[1]}`;
+      } else if (cleanUser && !cleanUser.startsWith('@') && !/^-?\d+$/.test(cleanUser)) {
+        cleanUser = `@${cleanUser}`;
+      }
+      mission.channelUsername = cleanUser;
+      if (channelUrl === undefined && cleanUser.startsWith('@')) {
+        mission.channelUrl = `https://t.me/${cleanUser.slice(1)}`;
+      }
+    }
+    if (channelUrl !== undefined) {
+      const trimmedUrl = String(channelUrl).trim();
+      mission.channelUrl = trimmedUrl
+        ? /^https?:\/\//i.test(trimmedUrl)
+          ? trimmedUrl
+          : trimmedUrl.startsWith('@')
+          ? `https://t.me/${trimmedUrl.slice(1)}`
+          : `https://${trimmedUrl}`
+        : mission.channelUsername?.startsWith('@')
+        ? `https://t.me/${mission.channelUsername.slice(1)}`
+        : '';
+    }
     if (requiresProof !== undefined) mission.requiresProof = Boolean(requiresProof);
+    mission.updatedAt = new Date().toISOString();
 
     saveCentralDb();
     broadcastRealtimeEvent('db:updated', { scope: 'missions' });
+    upsertCatalogDocToFirestoreRest('eco_missions', mission.id, mission, getFirebaseTokenFromReq(req)).catch(() => {});
     res.json({ success: true, mission });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -8526,9 +10785,77 @@ app.delete('/api/missions/:id', requireRoles('super_admin', 'moderator', 'school
     const idx = (centralDb.ecoMissions || []).findIndex((m: any) => m.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'Topshiriq topilmadi' });
     centralDb.ecoMissions.splice(idx, 1);
+    recordDeletedId(req.params.id);
     saveCentralDb();
     broadcastRealtimeEvent('db:updated', { scope: 'missions' });
+    deleteCatalogDocFromFirestoreRest('eco_missions', req.params.id, req.authUser.uid, getFirebaseTokenFromReq(req)).catch(() => {});
     res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/missions/weekly/join', requireAuth, (req: AuthenticatedRequest, res) => {
+  try {
+    const caller = req.authUser;
+    const { challenge, win } = ensureCurrentWeeklyChallenge();
+    if (!challenge.participants) challenge.participants = {};
+    if (!challenge.participants[caller.uid]) {
+      const progress = computeWeeklyActionsForUser(caller.uid, win.weekKey);
+      challenge.participants[caller.uid] = {
+        uid: caller.uid,
+        fullName: caller.fullName || "O'quvchi",
+        schoolId: caller.schoolId || '',
+        progress,
+        joinedAt: new Date().toISOString(),
+        claimed: false,
+      };
+      saveCentralDb();
+      broadcastRealtimeEvent('db:updated', { scope: 'missions' });
+    }
+    res.json({ success: true, weeklyChallenge: buildWeeklyChallengeSummary(caller) });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/missions/weekly/claim', requireAuth, (req: AuthenticatedRequest, res) => {
+  try {
+    const caller = req.authUser;
+    const { challenge, win } = ensureCurrentWeeklyChallenge();
+    const entry = challenge.participants?.[caller.uid];
+    if (!entry) {
+      return res.status(400).json({ error: "Avval haftalik chellenjga qo'shiling!" });
+    }
+    if (entry.claimed) {
+      return res.status(409).json({ error: 'Ushbu haftalik bonus allaqachon olingan!' });
+    }
+    const progress = Math.max(entry.progress || 0, computeWeeklyActionsForUser(caller.uid, win.weekKey));
+    const target = Number(challenge.targetActions) || 3;
+    if (progress < target) {
+      return res.status(400).json({ error: `Bonus uchun kamida ${target} ta eko-harakat bajaring (${progress}/${target}).` });
+    }
+    entry.claimed = true;
+    entry.progress = progress;
+    const reward = Math.max(10, Number(challenge.rewardCoins) || 250);
+    caller.ecoCoins = (caller.ecoCoins || 0) + reward;
+    caller.totalCoinsEarned = (caller.totalCoinsEarned || 0) + reward;
+    recordTransaction({
+      userId: caller.uid,
+      amount: reward,
+      type: 'bonus',
+      status: 'approved',
+      reason: `Haftalik Yashil Chellenj bonusi (${win.weekKey})`,
+    });
+    saveCentralDb();
+    broadcastRealtimeEvent('db:updated', { scope: 'missions' });
+    res.json({
+      success: true,
+      awardedCoins: reward,
+      newBalance: caller.ecoCoins,
+      weeklyChallenge: buildWeeklyChallengeSummary(caller),
+      message: `Tabriklaymiz! Haftalik chellenj yakunlandi: +${reward} EcoCoin qo'shildi!`,
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -8623,26 +10950,19 @@ app.post('/api/missions/:id/submit', requireAuth, async (req: AuthenticatedReque
     }
 
     if (mission.type === 'channel_subscribe') {
-      const channelHandle = String(mission.channelUsername || '').trim();
-      if (activeBotToken && caller.telegramId && channelHandle.startsWith('@') && !channelHandle.toLowerCase().endsWith('bot')) {
-        try {
-          const checkRes = await fetch(
-            `https://api.telegram.org/bot${activeBotToken}/getChatMember?chat_id=${encodeURIComponent(channelHandle)}&user_id=${encodeURIComponent(String(caller.telegramId))}`,
-            { signal: AbortSignal.timeout(5000) }
-          );
-          const checkJson: any = await checkRes.json().catch(() => null);
-          if (checkJson?.ok && checkJson.result) {
-            const st = checkJson.result.status;
-            if (!['member', 'administrator', 'creator'].includes(st)) {
-              return res.status(400).json({
-                success: false,
-                error: `Siz hali ${channelHandle} kanaliga obuna bo'lmagansiz. Avval obuna bo'ling va qayta tekshiring!`,
-              });
-            }
-          }
-        } catch {
-          // Proceed if Telegram API check isn't available for external channels
-        }
+      const verifyRes = await verifyTelegramChannelMembership({
+        channelHandle: mission.channelUsername,
+        channelUrl: mission.channelUrl,
+        userTelegramId: caller.telegramId,
+        title: mission.title,
+      });
+
+      if (!verifyRes.ok) {
+        return res.status(verifyRes.statusCode || 400).json({
+          success: false,
+          verified: false,
+          error: verifyRes.error,
+        });
       }
 
       userCompleted.push(mission.id);
@@ -8659,10 +10979,11 @@ app.post('/api/missions/:id/submit', requireAuth, async (req: AuthenticatedReque
       saveCentralDb();
       return res.json({
         success: true,
+        verified: true,
         awardedCoins: reward,
         newBalance: caller.ecoCoins,
         completedIds: userCompleted,
-        message: `Obuna tasdiqlandi! +${reward} EcoCoin balansingizga qo'shildi!`,
+        message: `Obuna haqiqiy tasdiqlandi! +${reward} EcoCoin balansingizga qo'shildi!`,
       });
     }
 
@@ -8892,20 +11213,7 @@ app.post('/api/referrals/claim', requireAuth, (req: AuthenticatedRequest, res) =
 // 9. TELEGRAM BOT & MINI APP SUITE
 // ==========================================
 
-const BOT_CONFIG_PATH = path.join(process.cwd(), 'server-bot-config.json');
-
-function getStoredBotConfig(): { botToken?: string; botUsername?: string } {
-  try {
-    if (fs.existsSync(BOT_CONFIG_PATH)) {
-      return JSON.parse(fs.readFileSync(BOT_CONFIG_PATH, 'utf-8'));
-    }
-  } catch (e) {}
-  return {};
-}
-
-const storedConfig = getStoredBotConfig();
 let activeBotToken: string =
-  storedConfig.botToken ||
   process.env.TELEGRAM_BOT_TOKEN ||
   process.env.BOT_TOKEN ||
   process.env.TELEGRAM_TOKEN ||
@@ -8913,7 +11221,9 @@ let activeBotToken: string =
   '';
 
 let activeBotUsername: string =
-  storedConfig.botUsername || process.env.TELEGRAM_BOT_USERNAME || 'Ecoheros_bot';
+  process.env.TELEGRAM_BOT_USERNAME || 'Ecoheros_bot';
+
+const TELEGRAM_WEBHOOK_SECRET = String(process.env.TELEGRAM_WEBHOOK_SECRET || '').trim();
 
 const UZBEKISTAN_REGIONS = [
   "Toshkent shahri",
@@ -9245,6 +11555,29 @@ async function sendTelegramPhoto(chatId: string | number, photoUrl: string, capt
   }
 }
 
+function getSuperAdminTelegramTargets(): string[] {
+  const targets = new Set<string>(getSuperAdminTelegramIdList());
+  for (const u of Object.values(centralDb.users) as any[]) {
+    if (u?.role === 'super_admin') {
+      const tg = String(u.telegramChatId || u.telegramId || '').trim();
+      if (tg) targets.add(tg);
+    }
+  }
+  return Array.from(targets);
+}
+
+async function notifySuperAdminsTelegram(text: string, extraOptions: any = {}, photoUrl?: string) {
+  const targets = getSuperAdminTelegramTargets();
+  if (targets.length === 0) return;
+  await Promise.all(
+    targets.map((chatId) =>
+      photoUrl
+        ? sendTelegramPhoto(chatId, photoUrl, text, extraOptions).catch(() => {})
+        : sendTelegramMessage(chatId, text, extraOptions).catch(() => {})
+    )
+  );
+}
+
 async function answerCallbackQuery(callbackQueryId: string, text?: string) {
   if (!activeBotToken) return;
   try {
@@ -9301,18 +11634,16 @@ app.post('/api/telegram/auth-webapp', (req, res) => {
 
     const chatId = String(tgUser.id);
     const registeredUser = findUserByAnyIdentifier({ telegramId: chatId, chatId });
-    const isJasur =
+    const isVerifiedSuper =
       !isDevBypass &&
       checkIsSuperAdmin({
-        telegramUsername: tgUser.username,
         telegramId: tgUser.id,
-        email: registeredUser?.email,
-        phoneNumber: registeredUser?.phoneNumber,
+        verifiedTelegram: true,
       });
 
     if (registeredUser) {
-      const userRole = isJasur ? 'super_admin' : registeredUser.role || 'student';
-      const approvedRoles = isJasur
+      const userRole = isVerifiedSuper ? 'super_admin' : registeredUser.role || 'student';
+      const approvedRoles = isVerifiedSuper
         ? ['student', 'ambassador', 'school_admin', 'district_coordinator', 'regional_coordinator', 'moderator', 'super_admin', 'sponsor']
         : registeredUser.approvedRoles || [userRole];
 
@@ -9354,27 +11685,27 @@ app.post('/api/telegram/auth-webapp', (req, res) => {
       district: '',
       grade: '',
       phoneNumber: '',
-      role: isJasur ? 'super_admin' : 'student',
-      approvedRoles: isJasur
+      role: isVerifiedSuper ? 'super_admin' : 'student',
+      approvedRoles: isVerifiedSuper
         ? ['student', 'ambassador', 'school_admin', 'district_coordinator', 'regional_coordinator', 'moderator', 'super_admin', 'sponsor']
         : ['student'],
-      ecoCoins: isJasur ? 50000 : 0,
+      ecoCoins: 0,
       reportsCount: 0,
       treesPlanted: 0,
       cleanupsCount: 0,
       streakDays: 1,
-      totalCoinsEarned: isJasur ? 50000 : 0,
+      totalCoinsEarned: 0,
       activityStats: {
         reportsCount: 0,
         cleanupsCount: 0,
         treesPlanted: 0,
         streakDays: 1,
-        totalCoinsEarned: isJasur ? 50000 : 0,
+        totalCoinsEarned: 0,
       },
       referralCode: `ECO${String(tgUser.id).slice(-4)}`,
-      isVerified: isJasur,
-      badge: isJasur ? 'Bosh Administrator' : 'Yangi Eko-Qahramon',
-      isOnboarded: isJasur ? true : false,
+      isVerified: isVerifiedSuper,
+      badge: isVerifiedSuper ? 'Bosh Administrator' : 'Yangi Eko-Qahramon',
+      isOnboarded: isVerifiedSuper ? true : false,
     });
     saveCentralDb();
     broadcastRealtimeEvent('db:updated', { scope: 'users' });
@@ -9430,33 +11761,29 @@ async function completeTelegramRegistration(
   const schoolNumber = normalizeSchoolNumber(session.schoolName);
   const existing = findUserByAnyIdentifier({ telegramId: chatKey, phoneNumber: session.phoneNumber });
 
-  const isJasur = checkIsSuperAdmin({
-    telegramUsername: username,
+  const isVerifiedSuper = checkIsSuperAdmin({
     telegramId: chatKey,
-    phoneNumber: session.phoneNumber,
+    verifiedTelegram: true,
   });
 
   const welcomeReward = getConfiguredReward('welcomeBonus');
   const isNewUser = !existing || !existing.welcomeBonusClaimed;
-  const coins = isJasur ? Math.max(existing?.ecoCoins || 0, 50000) : isNewUser ? welcomeReward : existing?.ecoCoins ?? welcomeReward;
-  const totalCoins = isJasur
-    ? Math.max(existing?.totalCoinsEarned || 0, 50000)
-    : isNewUser
-    ? welcomeReward
-    : existing?.totalCoinsEarned ?? coins;
+  const coins = isNewUser ? welcomeReward : existing?.ecoCoins ?? welcomeReward;
+  const totalCoins = isNewUser ? welcomeReward : existing?.totalCoinsEarned ?? coins;
 
   const cleanRegion = session.region || 'Toshkent shahri';
   const cleanDistrict = session.district || 'Shayxontohur tumani';
   const cleanSchoolName = session.schoolName || '1-maktab';
 
+  const isSameSchool = existing?.schoolName === cleanSchoolName && existing?.region === cleanRegion && existing?.district === cleanDistrict;
   const linkedSchool = findOrCreateSchool({
-    schoolId: existing?.schoolId,
+    schoolId: isSameSchool ? existing?.schoolId : undefined,
     schoolName: cleanSchoolName,
     schoolNumber,
     region: cleanRegion,
     district: cleanDistrict,
     coinsDelta: isNewUser ? welcomeReward : 0,
-    incrementStudents: !existing?.isOnboarded,
+    incrementStudents: !existing?.isOnboarded || !existing?.schoolId,
   });
 
   const canonicalUid = existing?.uid || `user_tg_${chatKey}`;
@@ -9482,18 +11809,18 @@ async function completeTelegramRegistration(
     treesPlanted: existing?.treesPlanted || 0,
     cleanupsCount: existing?.cleanupsCount || 0,
     streakDays: existing?.streakDays || 1,
-    role: isJasur ? 'super_admin' : existing?.role || 'student',
-    approvedRoles: isJasur
+    role: isVerifiedSuper ? 'super_admin' : existing?.role || 'student',
+    approvedRoles: isVerifiedSuper
       ? ['student', 'ambassador', 'school_admin', 'district_coordinator', 'regional_coordinator', 'moderator', 'super_admin', 'sponsor']
       : existing?.approvedRoles || ['student'],
     welcomeBonusClaimed: true,
     avatarUrl: existing?.avatarUrl || DEFAULT_AVATAR,
     profileImage: existing?.profileImage || DEFAULT_AVATAR,
     registrationDate: existing?.registrationDate || new Date().toISOString(),
-    badge: isJasur ? 'Bosh Administrator' : existing?.badge || 'Yangi Eko-Qahramon',
+    badge: isVerifiedSuper ? 'Bosh Administrator' : existing?.badge || 'Yangi Eko-Qahramon',
     referralCode: existing?.referralCode || `ECO${chatKey.slice(-4)}`,
     isOnboarded: true,
-    isVerified: isJasur || existing?.isVerified || false,
+    isVerified: isVerifiedSuper || existing?.isVerified || false,
     privacyConsentAccepted: true,
     activityStats: {
       reportsCount: existing?.reportsCount || 0,
@@ -9643,12 +11970,16 @@ async function handleTelegramUpdateSerialized(update: any) {
       const data = String(cq.data || '');
       const userFirstName = cq.from?.first_name || 'Eko-Qahramon';
       const username = cq.from?.username ? `@${cq.from.username}` : undefined;
-      const isCallerSuper = checkIsSuperAdmin({ telegramId: cq.from?.id, telegramUsername: username });
+      const cqCaller = findUserByAnyIdentifier({ telegramId: String(cq.from?.id || '') });
+      const isCallerSuper =
+        checkIsSuperAdmin({ telegramId: cq.from?.id, verifiedTelegram: true }) ||
+        Boolean(cqCaller && checkIsSuperAdmin(cqCaller));
 
       await answerCallbackQuery(cq.id);
       if (!chatId) return;
 
       const chatKey = String(chatId);
+      recordBotStarter(chatKey, username, userFirstName);
       let session = getRegistrationSession(chatKey);
 
       if (data === 'restart_reg') {
@@ -9669,30 +12000,55 @@ async function handleTelegramUpdateSerialized(update: any) {
 
       if (data.startsWith('reg_reg:')) {
         if (!session) session = { mode: 'REGISTER', step: 'REGION', updatedAt: Date.now() };
-        const idx = parseInt(data.replace('reg_reg:', ''), 10);
-        session.region = UZBEKISTAN_REGIONS[idx] || UZBEKISTAN_REGIONS[0];
+        const regIdx = Math.max(0, parseInt(data.replace('reg_reg:', ''), 10) || 0);
+        const resolvedReg = UZBEKISTAN_REGIONS[regIdx] || UZBEKISTAN_REGIONS[0];
+        session.region = resolvedReg;
         session.step = 'DISTRICT';
         session.updatedAt = Date.now();
         setRegistrationSession(chatKey, session);
 
-        const districts = UZBEKISTAN_DISTRICTS[session.region] || [];
+        const districts = UZBEKISTAN_DISTRICTS[resolvedReg] || [];
         const districtButtons = [];
         for (let i = 0; i < districts.length; i += 2) {
-          const row = [{ text: districts[i], callback_data: `reg_dist:${i}` }];
-          if (i + 1 < districts.length) row.push({ text: districts[i + 1], callback_data: `reg_dist:${i + 1}` });
+          const row = [{ text: districts[i], callback_data: `reg_dist:${regIdx}:${i}` }];
+          if (i + 1 < districts.length) row.push({ text: districts[i + 1], callback_data: `reg_dist:${regIdx}:${i + 1}` });
           districtButtons.push(row);
         }
 
-        await sendTelegramMessage(chatId, `✅ Viloyat: <b>${session.region}</b>\n\n4️⃣ <b>Tuman yoki shahringizni tanlang:</b>`, {
+        await sendTelegramMessage(chatId, `✅ Viloyat: <b>${resolvedReg}</b>\n\n4️⃣ <b>Tuman yoki shahringizni tanlang:</b>`, {
           reply_markup: { inline_keyboard: districtButtons },
         });
         return;
       }
 
       if (data.startsWith('reg_dist:')) {
-        if (!session) session = { mode: 'REGISTER', step: 'DISTRICT', updatedAt: Date.now() };
-        const distIdx = parseInt(data.replace('reg_dist:', ''), 10);
-        session.district = (UZBEKISTAN_DISTRICTS[session.region || ''] || [])[distIdx] || 'Markaziy tumani';
+        const existingTgUser = findUserByAnyIdentifier({ telegramId: chatKey, chatId: chatKey });
+        const rawDist = data.replace('reg_dist:', '');
+        const parts = rawDist.split(':');
+        const hasComposite = parts.length >= 2;
+        const regIdx = hasComposite ? parseInt(parts[0], 10) : -1;
+        const distIdx = hasComposite ? parseInt(parts[1], 10) : parseInt(parts[0], 10);
+
+        const resolvedRegion =
+          (regIdx >= 0 && UZBEKISTAN_REGIONS[regIdx]) ||
+          session?.region ||
+          existingTgUser?.region ||
+          UZBEKISTAN_REGIONS[0];
+        const distList = UZBEKISTAN_DISTRICTS[resolvedRegion] || [];
+        const resolvedDistrict =
+          (!Number.isNaN(distIdx) && distList[distIdx]) || distList[0] || 'Markaziy tumani';
+
+        if (!session) {
+          session = {
+            mode: 'REGISTER',
+            step: 'SCHOOL',
+            phoneNumber: existingTgUser?.phoneNumber || '',
+            fullName: existingTgUser?.fullName || userFirstName,
+            updatedAt: Date.now(),
+          };
+        }
+        session.region = resolvedRegion;
+        session.district = resolvedDistrict;
         session.step = session.mode === 'APPLY' ? 'APPLY_SCHOOL_NUM' : 'SCHOOL';
         session.updatedAt = Date.now();
         setRegistrationSession(chatKey, session);
@@ -9700,18 +12056,30 @@ async function handleTelegramUpdateSerialized(update: any) {
         await sendTelegramMessage(
           chatId,
           session.mode === 'APPLY'
-            ? `✅ Hudud: <b>${session.region}, ${session.district}</b>\n\n🏫 <b>Maktab raqamini yozing</b> (Masalan: <code>17</code>):`
-            : `✅ Hudud: <b>${session.region}, ${session.district}</b>\n\n5️⃣ <b>Maktabingiz raqami yoki nomini yozib yuboring</b> (Masalan: <code>17-maktab</code>):`,
+            ? `✅ Hudud: <b>${resolvedRegion}, ${resolvedDistrict}</b>\n\n🏫 <b>Maktab raqamini yozing</b> (Masalan: <code>17</code>):`
+            : `✅ Hudud: <b>${resolvedRegion}, ${resolvedDistrict}</b>\n\n5️⃣ <b>Maktabingiz raqami yoki nomini yozib yuboring</b> (Masalan: <code>17-maktab</code>):`,
           { reply_markup: { remove_keyboard: true } }
         );
         return;
       }
 
       if (data.startsWith('reg_grade:')) {
-        if (session) {
-          session.grade = data.replace('reg_grade:', '');
-          await completeTelegramRegistration(chatId, session, username, userFirstName);
+        const chosenGrade = data.replace('reg_grade:', '');
+        if (!session) {
+          const existingTgUser = findUserByAnyIdentifier({ telegramId: chatKey, chatId: chatKey });
+          session = {
+            mode: 'REGISTER',
+            step: 'GRADE',
+            phoneNumber: existingTgUser?.phoneNumber || '',
+            fullName: existingTgUser?.fullName || userFirstName,
+            region: existingTgUser?.region || UZBEKISTAN_REGIONS[0],
+            district: existingTgUser?.district || 'Markaziy tumani',
+            schoolName: existingTgUser?.schoolName || '1-maktab',
+            updatedAt: Date.now(),
+          };
         }
+        session.grade = chosenGrade;
+        await completeTelegramRegistration(chatId, session, username, userFirstName);
         return;
       }
 
@@ -9786,7 +12154,7 @@ async function handleTelegramUpdateSerialized(update: any) {
         data.startsWith('deliver_ord:')
       ) {
         if (!isCallerSuper) {
-          await sendTelegramMessage(chatId, '⛔️ Ushbu moderatsiya amali faqat Super Admin (@jasurdost) uchun ruxsat etilgan.');
+          await sendTelegramMessage(chatId, '⛔️ Ushbu moderatsiya amali faqat Super Admin uchun ruxsat etilgan.');
           return;
         }
         const approverName = username || 'Super Admin';
@@ -9938,15 +12306,19 @@ async function handleTelegramUpdateSerialized(update: any) {
     const text = (msg.text || msg.caption || '').trim();
     const userFirstName = msg.from?.first_name || 'Eko-Qahramon';
     const username = msg.from?.username ? `@${msg.from.username}` : undefined;
+    recordBotStarter(chatKey, username, userFirstName);
     let session = getRegistrationSession(chatKey);
     const regUser = findUserByAnyIdentifier({ telegramId: chatKey, chatId: chatKey });
     const isRegistered = Boolean(regUser && regUser.isOnboarded);
 
-    // Admin Token Switch Command
+    // Admin Token Switch Command (in-memory only; use TELEGRAM_BOT_TOKEN env for persistence)
     if (text.startsWith('/token ') || text.startsWith('/settoken ')) {
       const newToken = text.split(/\s+/)[1]?.trim();
-      if (!checkIsSuperAdmin({ telegramId: chatId, telegramUsername: username })) {
-        await sendTelegramMessage(chatId, '⛔️ Ushbu buyruq faqat Super Admin (@jasurdost) uchun.');
+      const isTokenAdmin =
+        checkIsSuperAdmin({ telegramId: chatId, verifiedTelegram: true }) ||
+        Boolean(regUser && checkIsSuperAdmin(regUser));
+      if (!isTokenAdmin) {
+        await sendTelegramMessage(chatId, '⛔️ Ushbu buyruq faqat Super Admin uchun.');
         return;
       }
       if (!newToken || !newToken.includes(':')) {
@@ -9961,12 +12333,11 @@ async function handleTelegramUpdateSerialized(update: any) {
       }
       activeBotToken = newToken;
       activeBotUsername = testData.result.username;
-      fs.writeFileSync(
-        BOT_CONFIG_PATH,
-        JSON.stringify({ botToken: newToken, botUsername: activeBotUsername, updatedAt: new Date().toISOString() }, null, 2)
-      );
       startTelegramPolling(newToken);
-      await sendTelegramMessage(chatId, `✅ Yangi bot ulandi: @${activeBotUsername}`);
+      await sendTelegramMessage(
+        chatId,
+        `✅ Yangi bot ulandi (joriy jarayon uchun): @${activeBotUsername}\nℹ️ Doimiy saqlash uchun TELEGRAM_BOT_TOKEN env o'zgaruvchisini yangilang.`
+      );
       return;
     }
 
@@ -9975,16 +12346,16 @@ async function handleTelegramUpdateSerialized(update: any) {
       let rawPhone = String(msg.contact.phone_number || '').trim();
       if (!rawPhone.startsWith('+')) rawPhone = `+${rawPhone}`;
       const contactFullName = [msg.contact.first_name, msg.contact.last_name].filter(Boolean).join(' ') || userFirstName;
-      const isJasur = checkIsSuperAdmin({ telegramUsername: username, telegramId: chatKey, phoneNumber: rawPhone });
+      const isVerifiedSuper = checkIsSuperAdmin({ telegramId: chatKey, verifiedTelegram: true });
 
-      if (isJasur) {
+      if (isVerifiedSuper) {
         const superProfile = upsertUser({
           uid: `user_tg_${chatKey}`,
           chatId: chatKey,
           telegramId: Number(chatKey) || chatKey,
           telegramChatId: chatKey,
-          telegramUsername: username || '@jasurdost',
-          fullName: "Jasurbek O'rmonov (@jasurdost)",
+          telegramUsername: username || '',
+          fullName: contactFullName,
           phoneNumber: rawPhone,
           region: 'Toshkent shahri',
           district: 'Shayxontohur tumani',
@@ -9992,8 +12363,6 @@ async function handleTelegramUpdateSerialized(update: any) {
           schoolName: 'ECO HERO Markaziy Boshqarmasi',
           schoolNumber: '1',
           grade: 'Super Admin',
-          ecoCoins: 50000,
-          totalCoinsEarned: 50000,
           role: 'super_admin',
           approvedRoles: ['student', 'ambassador', 'school_admin', 'district_coordinator', 'regional_coordinator', 'moderator', 'super_admin', 'sponsor'],
           welcomeBonusClaimed: true,
@@ -10003,10 +12372,12 @@ async function handleTelegramUpdateSerialized(update: any) {
           isVerified: true,
         });
         deleteRegistrationSession(chatKey);
+        saveCentralDb();
+        broadcastRealtimeEvent('db:updated', { scope: 'metrics' });
 
         await sendTelegramMessage(
           chatId,
-          `👑 <b>XUSH KELIBSIZ, BOSH ADMINISTRATOR (@jasurdost)!</b>\n\n🛡 <b>Vakolat:</b> Super Admin\n💰 <b>Balans:</b> ${superProfile.ecoCoins} EcoCoin`,
+          `👑 <b>XUSH KELIBSIZ, BOSH ADMINISTRATOR!</b>\n\n🛡 <b>Vakolat:</b> Super Admin\n💰 <b>Balans:</b> ${superProfile.ecoCoins || 0} EcoCoin`,
           {
             reply_markup: {
               inline_keyboard: [[{ text: '🌍 ECO HERO Boshqaruv Panelini ochish', web_app: { url: APP_URL } }]],
@@ -10026,6 +12397,7 @@ async function handleTelegramUpdateSerialized(update: any) {
         if (!matchedExisting.phoneNumber) matchedExisting.phoneNumber = rawPhone;
         deleteRegistrationSession(chatKey);
         saveCentralDb();
+        broadcastRealtimeEvent('db:updated', { scope: 'metrics' });
 
         await sendTelegramMessage(
           chatId,
@@ -10180,10 +12552,10 @@ async function handleTelegramUpdateSerialized(update: any) {
     if (text.startsWith('/start')) {
       const startParam = text.split(/\s+/)[1]?.trim();
       deleteRegistrationSession(chatKey);
-      if (checkIsSuperAdmin({ telegramUsername: username, telegramId: chatKey })) {
+      if (checkIsSuperAdmin({ telegramId: chatKey, verifiedTelegram: true }) || Boolean(regUser && checkIsSuperAdmin(regUser))) {
         await sendTelegramMessage(
           chatId,
-          `👑 <b>Assalomu alaykum, Bosh Administrator (@jasurdost)!</b>\n\nBot va yagona baza faol ishlamoqda.\nBuyruqlar: /admin · /profile · /apply · /activity · /report · /tasks · /rank · /coins · /invite`,
+          `👑 <b>Assalomu alaykum, Bosh Administrator!</b>\n\nBot va yagona baza faol ishlamoqda.\nBuyruqlar: /admin · /profile · /apply · /activity · /report · /tasks · /rank · /coins · /invite`,
           {
             reply_markup: {
               inline_keyboard: [
@@ -10311,8 +12683,8 @@ async function handleTelegramUpdateSerialized(update: any) {
     }
 
     if (text === '/admin') {
-      if (!checkIsSuperAdmin({ telegramId: chatId, telegramUsername: username })) {
-        await sendTelegramMessage(chatId, '⛔️ Ushbu buyruq faqat Super Admin (@jasurdost) uchun.');
+      if (!checkIsSuperAdmin({ telegramId: chatId, verifiedTelegram: true }) && !(regUser && checkIsSuperAdmin(regUser))) {
+        await sendTelegramMessage(chatId, '⛔️ Ushbu buyruq faqat Super Admin uchun.');
         return;
       }
       const pendingRep = centralDb.reports.filter((r) => r.status === 'pending' || r.status === 'PENDING_REVIEW').length;
@@ -10459,7 +12831,7 @@ async function handleTelegramUpdateSerialized(update: any) {
 
     if (text.startsWith('/check') || text.startsWith('/tekshir')) {
       const isAuthorizedChecker =
-        checkIsSuperAdmin({ telegramUsername: username, telegramId: chatKey }) ||
+        checkIsSuperAdmin({ telegramId: chatKey, verifiedTelegram: true }) ||
         Boolean(regUser && hasAnyRole(regUser, ['school_admin', 'district_coordinator', 'regional_coordinator', 'moderator', 'super_admin']));
       if (!isAuthorizedChecker) {
         await sendTelegramMessage(chatId, "⛔️ Promokod tekshirish faqat Maktab adminlari va Super Adminlar uchun ruxsat etilgan.");
@@ -10627,9 +12999,9 @@ async function handleTelegramUpdateSerialized(update: any) {
         };
         centralDb.registrationApplications.unshift(newApp);
         saveCentralDb();
+        broadcastRealtimeEvent('db:updated', { scope: 'applications' });
 
-        sendTelegramMessage(
-          '8832599080',
+        notifySuperAdminsTelegram(
           `📋 <b>YANGI BOT ORQALI ARIZA</b>\n\n👤 ${newApp.fullName} (TG: ${chatKey})\n📍 ${newApp.region}, ${newApp.district}\n🏫 #${newApp.schoolNumber} ${newApp.officialSchoolName}\n🎯 Lavozim: <b>${newApp.requestedRole}</b>\n📞 ${newApp.contactInfo}\n📝 ${newApp.verificationDetails}`,
           {
             reply_markup: {
@@ -10644,7 +13016,7 @@ async function handleTelegramUpdateSerialized(update: any) {
           }
         ).catch(() => {});
 
-        await sendTelegramMessage(chatId, "✅ <b>Arizangiz Super Admin (@jasurdost) ga yuborildi!</b> Tasdiqlangach Telegram orqali xabar olasiz.");
+        await sendTelegramMessage(chatId, "✅ <b>Arizangiz Super Admin ga yuborildi!</b> Tasdiqlangach Telegram orqali xabar olasiz.");
         return;
       }
 
@@ -10677,8 +13049,7 @@ async function handleTelegramUpdateSerialized(update: any) {
         deleteRegistrationSession(chatKey);
         saveCentralDb();
 
-        sendTelegramMessage(
-          '8832599080',
+        notifySuperAdminsTelegram(
           `🎬 <b>BOTDAN YANGI EKO-MEDIA (MODERATSIYA)</b>\n👤 ${sub.userName} (${sub.schoolName})\n🏷 ${sub.activityCategory}\n📝 ${sub.description}`,
           {
             reply_markup: {
@@ -10785,8 +13156,7 @@ async function handleTelegramUpdateSerialized(update: any) {
         deleteRegistrationSession(chatKey);
         saveCentralDb();
 
-        sendTelegramMessage(
-          '8832599080',
+        notifySuperAdminsTelegram(
           `📸 <b>BOTDAN YANGI MUAMMO HISOBOTI (AI TASDIQLADI)</b>\n👤 ${report.reporterName} (${report.schoolName})\n🏷 ${cat}${hazard.isHazardous ? '\n🚨 <b>XAVFLI HOLAT — O‘QUVCHILAR TEGMASIN!</b>' : ''}\n📝 ${desc}`,
           {
             reply_markup: {
@@ -10808,6 +13178,42 @@ async function handleTelegramUpdateSerialized(update: any) {
       }
 
       if (session.step === 'REGION' || session.step === 'DISTRICT') {
+        if (session.step === 'DISTRICT' && session.region) {
+          const distCandidates = UZBEKISTAN_DISTRICTS[session.region] || [];
+          const matchedDist = distCandidates.find((d) =>
+            d.toLowerCase().includes(text.toLowerCase()) || text.toLowerCase().includes(d.toLowerCase())
+          );
+          if (matchedDist) {
+            session.district = matchedDist;
+            session.step = session.mode === 'APPLY' ? 'APPLY_SCHOOL_NUM' : 'SCHOOL';
+            session.updatedAt = Date.now();
+            setRegistrationSession(chatKey, session);
+            await sendTelegramMessage(
+              chatId,
+              session.mode === 'APPLY'
+                ? `✅ Hudud: <b>${session.region}, ${matchedDist}</b>\n\n🏫 <b>Maktab raqamini yozing</b> (Masalan: <code>17</code>):`
+                : `✅ Hudud: <b>${session.region}, ${matchedDist}</b>\n\n5️⃣ <b>Maktabingiz raqami yoki nomini yozib yuboring</b> (Masalan: <code>17-maktab</code>):`,
+              { reply_markup: { remove_keyboard: true } }
+            );
+            return;
+          }
+          // If district was already stored on session (e.g. from earlier tap) and user typed a school name
+          if (session.district && /\d|maktab|litsey|kollej/i.test(text)) {
+            session.schoolName = text;
+            session.step = 'GRADE';
+            setRegistrationSession(chatKey, session);
+            const gradeButtons = [
+              [{ text: '5-sinf', callback_data: 'reg_grade:5-sinf' }, { text: '6-sinf', callback_data: 'reg_grade:6-sinf' }],
+              [{ text: '7-sinf', callback_data: 'reg_grade:7-sinf' }, { text: '8-sinf', callback_data: 'reg_grade:8-sinf' }],
+              [{ text: '9-sinf', callback_data: 'reg_grade:9-sinf' }, { text: '10-sinf', callback_data: 'reg_grade:10-sinf' }],
+              [{ text: '11-sinf', callback_data: 'reg_grade:11-sinf' }, { text: 'Talaba / Yoshlar', callback_data: 'reg_grade:Talaba' }],
+            ];
+            await sendTelegramMessage(chatId, `✅ Maktab: <b>${text}</b>\n\n6️⃣ <b>Sinfingizni tanlang:</b>`, {
+              reply_markup: { inline_keyboard: gradeButtons },
+            });
+            return;
+          }
+        }
         await sendTelegramMessage(
           chatId,
           "👆 Iltimos, yuqoridagi tugmalardan <b>viloyat / tuman</b>ni tanlang yoki qaytadan boshlash uchun /cancel yuboring."
@@ -11063,6 +13469,20 @@ async function startTelegramPolling(token: string) {
 }
 
 app.post('/api/telegram/webhook', async (req, res) => {
+  if (!TELEGRAM_WEBHOOK_SECRET) {
+    return res.sendStatus(403);
+  }
+  const providedSecret = String(req.headers['x-telegram-bot-api-secret-token'] || '');
+  const expectedBuf = Buffer.from(TELEGRAM_WEBHOOK_SECRET);
+  const providedBuf = Buffer.from(providedSecret);
+  if (
+    expectedBuf.length === 0 ||
+    providedBuf.length !== expectedBuf.length ||
+    !crypto.timingSafeEqual(expectedBuf, providedBuf)
+  ) {
+    return res.sendStatus(403);
+  }
+
   res.sendStatus(200);
   try {
     await processTelegramUpdate(req.body);
@@ -11086,15 +13506,11 @@ app.post('/api/telegram/configure-token', requireRoles('super_admin'), async (re
     const botInfo = testData.result;
     activeBotToken = cleanToken;
     activeBotUsername = botInfo.username;
-    fs.writeFileSync(
-      BOT_CONFIG_PATH,
-      JSON.stringify({ botToken: cleanToken, botUsername: activeBotUsername, updatedAt: new Date().toISOString() }, null, 2)
-    );
     startTelegramPolling(cleanToken);
     res.json({
       success: true,
       bot: { id: botInfo.id, username: botInfo.username, firstName: botInfo.first_name },
-      message: `@${botInfo.username} botingiz muvaffaqiyatli ulandi!`,
+      message: `@${botInfo.username} botingiz ulandi (xotirada). Doimiy saqlash uchun server muhitida TELEGRAM_BOT_TOKEN ni sozlang.`,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -11232,10 +13648,23 @@ app.post('/api/telegram/set-webhook', requireRoles('super_admin'), async (_req, 
         error: "Webhook uchun umumiy ochiq 24/7 HTTPS server manzili (masalan Render yoki Cloud Run) kerak.",
       });
     }
+    if (!TELEGRAM_WEBHOOK_SECRET) {
+      return res.status(400).json({
+        error: "TELEGRAM_WEBHOOK_SECRET muhit o'zgaruvchisi sozlanmagan. Webhook xavfsizligi uchun uni kiriting.",
+      });
+    }
     stopTelegramPolling();
     isWebhookMode = true;
     const webhookUrl = `${APP_URL}/api/telegram/webhook`;
-    const resp = await fetch(`https://api.telegram.org/bot${activeBotToken}/setWebhook?url=${encodeURIComponent(webhookUrl)}&drop_pending_updates=true`);
+    const resp = await fetch(`https://api.telegram.org/bot${activeBotToken}/setWebhook`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: webhookUrl,
+        drop_pending_updates: true,
+        secret_token: TELEGRAM_WEBHOOK_SECRET,
+      }),
+    });
     const data = await resp.json();
     res.json({ success: true, telegramResponse: data, webhookUrl });
   } catch (err: any) {
@@ -11257,14 +13686,710 @@ app.get('/api/telegram/info', (_req, res) => {
 });
 
 // ==========================================
+// 9.5 QR ECO-PUNKT, SCHOOL DUELS, CERTIFICATES, SPONSOR PORTAL & AI ANTI-CHEAT
+// ==========================================
+
+const ECOPUNKT_RATES: Record<string, { label: string; coinsPerUnit: number; unit: string }> = {
+  plastic: { label: 'Plastik (PET)', coinsPerUnit: 35, unit: 'kg' },
+  paper: { label: "Qog'oz / Makulatura", coinsPerUnit: 25, unit: 'kg' },
+  glass: { label: 'Shisha', coinsPerUnit: 30, unit: 'kg' },
+  metal: { label: 'Metall / Alyuminiy', coinsPerUnit: 45, unit: 'kg' },
+  sapling: { label: "Daraxt ko'chati", coinsPerUnit: 150, unit: 'dona' },
+};
+
+function parseStudentUidFromQrPayload(raw: string): string {
+  const txt = String(raw || '').trim();
+  if (!txt) return '';
+  if (txt.startsWith('ECO-QR:')) {
+    return txt.slice('ECO-QR:'.length).trim();
+  }
+  if (txt.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(txt);
+      return String(parsed.uid || parsed.studentUid || '').trim();
+    } catch {
+      return '';
+    }
+  }
+  return txt;
+}
+
+app.get('/api/ecopunkt/scans', requireAuth, (req: AuthenticatedRequest, res) => {
+  try {
+    const caller = req.authUser;
+    const isAdmin = hasAnyRole(caller, ['super_admin', 'moderator', 'sponsor']);
+    const isRegCoord = hasAnyRole(caller, ['regional_coordinator']);
+    const isDistCoord = hasAnyRole(caller, ['district_coordinator']);
+    const isSchoolStaff = hasAnyRole(caller, ['school_admin', 'ambassador']);
+
+    let scans = [...(centralDb.qrEcoScans || [])];
+    if (!isAdmin) {
+      if (isRegCoord) {
+        scans = scans.filter((s) => s.region === caller.region || s.studentUid === caller.uid);
+      } else if (isDistCoord) {
+        scans = scans.filter((s) => (s.district === caller.district && s.region === caller.region) || s.studentUid === caller.uid);
+      } else if (isSchoolStaff) {
+        scans = scans.filter((s) => s.schoolId === caller.schoolId || s.studentUid === caller.uid || s.scannedByUid === caller.uid);
+      } else {
+        scans = scans.filter((s) => s.studentUid === caller.uid);
+      }
+    }
+
+    const usersList = Object.values(centralDb.users || {}) as any[];
+    const canScan = hasAnyRole(caller, [
+      'school_admin',
+      'ambassador',
+      'moderator',
+      'district_coordinator',
+      'regional_coordinator',
+      'sponsor',
+      'super_admin',
+    ]);
+    const studentCandidates = canScan
+      ? usersList
+          .filter((u) => {
+            if (!u?.uid) return false;
+            if (isAdmin) return true;
+            if (isRegCoord) return u.region === caller.region;
+            if (isDistCoord) return u.district === caller.district;
+            return u.schoolId === caller.schoolId || u.schoolName === caller.schoolName;
+          })
+          .slice(0, 80)
+          .map((u) => ({
+            uid: u.uid,
+            fullName: u.fullName || "O'quvchi",
+            grade: u.grade || '',
+            schoolName: u.schoolName || '',
+            ecoCoins: Number(u.ecoCoins || 0),
+          }))
+      : [];
+
+    const totalKg = scans.reduce((acc, s) => acc + (s.materialType === 'sapling' ? 0 : Number(s.weightKg || 0)), 0);
+    const totalCoins = scans.reduce((acc, s) => acc + Number(s.coinsAwarded || 0), 0);
+
+    res.json({
+      success: true,
+      scans: scans.slice(0, 60),
+      rates: ECOPUNKT_RATES,
+      canScan,
+      studentCandidates,
+      summary: {
+        totalScans: scans.length,
+        totalKg: Number(totalKg.toFixed(1)),
+        totalCoins,
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post(
+  '/api/ecopunkt/scan',
+  requireRoles(
+    'school_admin',
+    'ambassador',
+    'moderator',
+    'district_coordinator',
+    'regional_coordinator',
+    'sponsor',
+    'super_admin'
+  ),
+  (req: AuthenticatedRequest, res) => {
+    try {
+      const caller = req.authUser;
+      const { qrPayload, studentUid, materialType, weightKg, note } = req.body || {};
+
+      const resolvedUid = parseStudentUidFromQrPayload(qrPayload) || String(studentUid || '').trim();
+      if (!resolvedUid) {
+        return res.status(400).json({ error: "O'quvchi QR-ID yoki hisob ID si kiritilishi shart" });
+      }
+      const targetUser = centralDb.users[resolvedUid];
+      if (!targetUser) {
+        return res.status(404).json({ error: "Bu QR kodga mos ro'yxatdan o'tgan o'quvchi topilmadi" });
+      }
+
+      const matKey = String(materialType || '').toLowerCase();
+      const rateInfo = ECOPUNKT_RATES[matKey];
+      if (!rateInfo) {
+        return res.status(400).json({ error: "Noto'g'ri chiqindi yoki ko'chat turi tanlandi" });
+      }
+
+      const qty = Number(weightKg);
+      if (!Number.isFinite(qty) || qty <= 0 || qty > 500) {
+        return res.status(400).json({ error: "Miqdor 0.1 dan 500 gacha bo'lishi kerak" });
+      }
+
+      if (
+        !hasAnyRole(caller, ['super_admin', 'moderator', 'sponsor', 'regional_coordinator', 'district_coordinator']) &&
+        caller.schoolId &&
+        targetUser.schoolId &&
+        caller.schoolId !== targetUser.schoolId
+      ) {
+        return res.status(403).json({
+          error: "Faqat o'zingizning maktabingiz o'quvchilarining Eco-Punkt topshiruvlarini skanerlay olasiz",
+        });
+      }
+
+      const oneHourAgo = Date.now() - 3600 * 1000;
+      const recentForStudent = (centralDb.qrEcoScans || []).filter(
+        (s) => s.studentUid === resolvedUid && new Date(s.createdAt).getTime() >= oneHourAgo
+      );
+      if (recentForStudent.length >= 6) {
+        return res.status(429).json({
+          error: "Ushbu o'quvchi uchun soatlik skaner limiti (6 ta) to'ldi. Keyinroq urinib ko'ring.",
+        });
+      }
+
+      const coinsAwarded = Math.max(5, Math.min(2500, Math.round(qty * rateInfo.coinsPerUnit)));
+      const xpAwarded = coinsAwarded * 2;
+      const nowIso = new Date().toISOString();
+
+      targetUser.ecoCoins = Number(targetUser.ecoCoins || 0) + coinsAwarded;
+      targetUser.totalCoinsEarned = Number(targetUser.totalCoinsEarned || targetUser.ecoCoins || 0) + coinsAwarded;
+      targetUser.ecoXP = Number(targetUser.ecoXP || 0) + xpAwarded;
+      if (!targetUser.activityStats) {
+        targetUser.activityStats = {
+          reportsCount: targetUser.reportsCount || 0,
+          cleanupsCount: targetUser.cleanupsCount || 0,
+          treesPlanted: targetUser.treesPlanted || 0,
+          streakDays: targetUser.streakDays || 0,
+          totalCoinsEarned: targetUser.totalCoinsEarned,
+        };
+      }
+      if (matKey === 'sapling') {
+        const treesCount = Math.max(1, Math.round(qty));
+        targetUser.treesPlanted = Number(targetUser.treesPlanted || 0) + treesCount;
+        targetUser.activityStats.treesPlanted = targetUser.treesPlanted;
+      } else {
+        targetUser.cleanupsCount = Number(targetUser.cleanupsCount || 0) + 1;
+        targetUser.activityStats.cleanupsCount = targetUser.cleanupsCount;
+      }
+      targetUser.activityStats.totalCoinsEarned = targetUser.totalCoinsEarned;
+      upsertUser(targetUser);
+
+      if (targetUser.schoolName || targetUser.schoolId) {
+        findOrCreateSchool({
+          schoolId: targetUser.schoolId,
+          schoolName: targetUser.schoolName || 'Maktab',
+          region: targetUser.region || 'Toshkent shahri',
+          district: targetUser.district || 'Markaziy tumani',
+          coinsDelta: coinsAwarded,
+          treesDelta: matKey === 'sapling' ? Math.max(1, Math.round(qty)) : 0,
+          cleanupsDelta: matKey === 'sapling' ? 0 : 1,
+        });
+      }
+
+      recordTransaction({
+        userId: targetUser.uid,
+        userName: targetUser.fullName,
+        amount: coinsAwarded,
+        type: 'earn',
+        reason: `Eco-Punkt QR: ${qty} ${rateInfo.unit} ${rateInfo.label}`,
+        referenceId: `qr_${Date.now()}`,
+      });
+
+      const scanRecord = {
+        id: `qrscan_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        studentUid: targetUser.uid,
+        studentName: targetUser.fullName || "O'quvchi",
+        studentGrade: targetUser.grade || '',
+        schoolId: targetUser.schoolId || '',
+        schoolName: targetUser.schoolName || 'Maktab',
+        region: targetUser.region || '',
+        district: targetUser.district || '',
+        materialType: matKey,
+        materialLabel: rateInfo.label,
+        weightKg: Number(qty.toFixed(2)),
+        unit: rateInfo.unit,
+        coinsAwarded,
+        xpAwarded,
+        scannedByUid: caller.uid,
+        scannedByName: caller.fullName || 'Nazoratchi',
+        scannedByRole: caller.role,
+        note: String(note || '').trim().slice(0, 200),
+        createdAt: nowIso,
+      };
+
+      centralDb.qrEcoScans = [scanRecord, ...(centralDb.qrEcoScans || [])];
+      centralDb.notifications.unshift({
+        id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+        userId: targetUser.uid,
+        title: `Eco-Punkt: +${coinsAwarded} EcoCoin!`,
+        message: `${qty} ${rateInfo.unit} ${rateInfo.label} topshirildi (${caller.fullName} tasdiqladi).`,
+        type: 'reward',
+        read: false,
+        createdAt: nowIso,
+      });
+      saveCentralDb();
+      broadcastLiveSync('ecopunkt_scan', { studentUid: targetUser.uid, schoolId: targetUser.schoolId });
+
+      const tgChat = targetUser.telegramId || targetUser.chatId;
+      if (tgChat) {
+        sendTelegramMessage(
+          tgChat,
+          `♻️ <b>ECO-PUNKT QR TASDIQLANDI!</b>\n\n` +
+            `📦 <b>Topshirildi:</b> ${qty} ${rateInfo.unit} ${rateInfo.label}\n` +
+            `🪙 <b>Mukofot:</b> +${coinsAwarded} EcoCoin (+${xpAwarded} XP)\n` +
+            `👤 <b>Tasdiqladi:</b> ${caller.fullName}\n` +
+            `💰 <b>Joriy balansingiz:</b> ${targetUser.ecoCoins.toLocaleString()} EcoCoin`
+        ).catch(() => {});
+      }
+
+      res.json({
+        success: true,
+        scan: scanRecord,
+        studentNewBalance: targetUser.ecoCoins,
+        message: `${targetUser.fullName} hisobiga +${coinsAwarded} EcoCoin tushirildi!`,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+function getSchoolDuelMetricValue(schoolId: string, category: string, sinceIso?: string): number {
+  const school = (centralDb.schools || []).find((s) => s.id === schoolId);
+  const sinceMs = sinceIso ? new Date(sinceIso).getTime() : 0;
+  if (category === 'waste_kg') {
+    const scanSum = (centralDb.qrEcoScans || [])
+      .filter((sc) => sc.schoolId === schoolId && sc.materialType !== 'sapling' && new Date(sc.createdAt).getTime() >= sinceMs)
+      .reduce((acc, sc) => acc + Number(sc.weightKg || 0), 0);
+    const cleanupFallback = Number(school?.cleanupsCompleted || 0) * 2;
+    return Number((scanSum + cleanupFallback * 0.25).toFixed(1));
+  }
+  if (category === 'trees') {
+    return Number(school?.treesPlanted || 0);
+  }
+  return Number(school?.totalCoins || 0);
+}
+
+app.get('/api/duels', (req: AuthenticatedRequest, res) => {
+  try {
+    const nowMs = Date.now();
+    let changed = false;
+    const enriched = (centralDb.schoolDuels || []).map((d: any) => {
+      const aTotal = getSchoolDuelMetricValue(d.challengerSchoolId, d.category, d.startedAt);
+      const bTotal = getSchoolDuelMetricValue(d.opponentSchoolId, d.category, d.startedAt);
+      const scoreA = Math.max(0, Number((aTotal - Number(d.baselineA || 0)).toFixed(1)));
+      const scoreB = Math.max(0, Number((bTotal - Number(d.baselineB || 0)).toFixed(1)));
+
+      let status = d.status;
+      let winnerSchoolId = d.winnerSchoolId;
+      if (status === 'active' && d.endsAt && new Date(d.endsAt).getTime() <= nowMs) {
+        status = 'completed';
+        winnerSchoolId = scoreA >= scoreB ? d.challengerSchoolId : d.opponentSchoolId;
+        d.status = status;
+        d.winnerSchoolId = winnerSchoolId;
+        changed = true;
+      }
+
+      const schoolA = (centralDb.schools || []).find((s) => s.id === d.challengerSchoolId);
+      const schoolB = (centralDb.schools || []).find((s) => s.id === d.opponentSchoolId);
+      return {
+        ...d,
+        status,
+        winnerSchoolId,
+        challengerName: schoolA?.name || d.challengerName,
+        challengerRegion: schoolA?.region || d.challengerRegion,
+        challengerDistrict: schoolA?.district || d.challengerDistrict,
+        opponentName: schoolB?.name || d.opponentName,
+        opponentRegion: schoolB?.region || d.opponentRegion,
+        opponentDistrict: schoolB?.district || d.opponentDistrict,
+        scoreA,
+        scoreB,
+        totalA: aTotal,
+        totalB: bTotal,
+      };
+    });
+    if (changed) saveCentralDb();
+    res.json({ success: true, duels: enriched });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post(
+  '/api/duels/challenge',
+  requireRoles('school_admin', 'ambassador', 'district_coordinator', 'regional_coordinator', 'super_admin'),
+  (req: AuthenticatedRequest, res) => {
+    try {
+      const caller = req.authUser;
+      const { targetSchoolId, sourceSchoolId, category, rewardCoins } = req.body || {};
+      const challengerId = hasAnyRole(caller, ['super_admin', 'regional_coordinator', 'district_coordinator']) && sourceSchoolId
+        ? String(sourceSchoolId)
+        : String(caller.schoolId || '');
+      const opponentId = String(targetSchoolId || '').trim();
+
+      if (!challengerId || !opponentId) {
+        return res.status(400).json({ error: 'Ikkala maktab ham tanlanishi shart' });
+      }
+      if (challengerId === opponentId) {
+        return res.status(400).json({ error: "Maktab o'ziga o'zi duel e'lon qila olmaydi" });
+      }
+      const schoolA = (centralDb.schools || []).find((s) => s.id === challengerId);
+      const schoolB = (centralDb.schools || []).find((s) => s.id === opponentId);
+      if (!schoolA || !schoolB) {
+        return res.status(404).json({ error: 'Tanlangan maktab topilmadi' });
+      }
+
+      const validCategories = ['trees', 'waste_kg', 'coins'];
+      const duelCat = validCategories.includes(String(category)) ? String(category) : 'coins';
+      const duplicate = (centralDb.schoolDuels || []).find(
+        (d: any) =>
+          (d.status === 'active' || d.status === 'pending') &&
+          ((d.challengerSchoolId === challengerId && d.opponentSchoolId === opponentId) ||
+            (d.challengerSchoolId === opponentId && d.opponentSchoolId === challengerId))
+      );
+      if (duplicate) {
+        return res.status(409).json({ error: "Bu ikki maktab o'rtasida faol yoki kutilayotgan duel allaqachon mavjud" });
+      }
+
+      const now = new Date();
+      const endsAt = new Date(now.getTime() + 7 * 86400 * 1000).toISOString();
+      const isSuperAutoStart = hasAnyRole(caller, ['super_admin']);
+      const newDuel = {
+        id: `duel_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        challengerSchoolId: schoolA.id,
+        challengerName: schoolA.name,
+        challengerRegion: schoolA.region,
+        challengerDistrict: schoolA.district,
+        opponentSchoolId: schoolB.id,
+        opponentName: schoolB.name,
+        opponentRegion: schoolB.region,
+        opponentDistrict: schoolB.district,
+        category: duelCat,
+        rewardCoins: Math.min(2000, Math.max(150, Number(rewardCoins) || 500)),
+        status: isSuperAutoStart ? 'active' : 'pending',
+        baselineA: getSchoolDuelMetricValue(schoolA.id, duelCat),
+        baselineB: getSchoolDuelMetricValue(schoolB.id, duelCat),
+        startedAt: now.toISOString(),
+        endsAt,
+        createdByUid: caller.uid,
+        createdByName: caller.fullName,
+        createdAt: now.toISOString(),
+      };
+
+      centralDb.schoolDuels = [newDuel, ...(centralDb.schoolDuels || [])];
+      saveCentralDb();
+      broadcastLiveSync('school_duel', { duelId: newDuel.id });
+
+      const targetCaptains = (Object.values(centralDb.users || {}) as any[]).filter(
+        (u) => u && u.schoolId === schoolB.id && (u.role === 'school_admin' || u.role === 'ambassador')
+      );
+      for (const tc of targetCaptains) {
+        centralDb.notifications.unshift({
+          id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+          userId: tc.uid,
+          title: `⚔️ Yangi 7 kunlik Eko-Duel taklifi!`,
+          message: `${schoolA.name} sizning maktabingizni bellashuvga chorladi (${duelCat}).`,
+          type: 'system',
+          read: false,
+          createdAt: now.toISOString(),
+        });
+        const chatId = tc.telegramId || tc.chatId;
+        if (chatId) {
+          sendTelegramMessage(
+            chatId,
+            `⚔️ <b>MAKTABLARARO EKO-DUEL TAKLIFI!</b>\n\n` +
+              `🏫 <b>Chaqiruvchi:</b> ${schoolA.name}\n` +
+              `🆚 <b>Sizning maktab:</b> ${schoolB.name}\n` +
+              `🏆 <b>Mukofot fondi:</b> +${newDuel.rewardCoins} EcoCoin\n\n` +
+              `Chempionat bo'limiga kirib duelni qabul qiling!`
+          ).catch(() => {});
+        }
+      }
+      saveCentralDb();
+
+      res.json({ success: true, duel: newDuel });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+app.post('/api/duels/:id/respond', requireAuth, (req: AuthenticatedRequest, res) => {
+  try {
+    const caller = req.authUser;
+    const duel = (centralDb.schoolDuels || []).find((d: any) => d.id === req.params.id);
+    if (!duel) return res.status(404).json({ error: 'Duel topilmadi' });
+
+    const canRespond =
+      hasAnyRole(caller, ['super_admin', 'district_coordinator', 'regional_coordinator']) ||
+      (hasAnyRole(caller, ['school_admin', 'ambassador']) && caller.schoolId === duel.opponentSchoolId);
+    if (!canRespond) {
+      return res.status(403).json({ error: 'Faqat raqib maktab sardori yoki koordinator javob bera oladi' });
+    }
+
+    const action = req.body?.action === 'decline' ? 'decline' : 'accept';
+    const now = new Date();
+    if (action === 'decline') {
+      duel.status = 'declined';
+    } else {
+      duel.status = 'active';
+      duel.startedAt = now.toISOString();
+      duel.endsAt = new Date(now.getTime() + 7 * 86400 * 1000).toISOString();
+      duel.baselineA = getSchoolDuelMetricValue(duel.challengerSchoolId, duel.category);
+      duel.baselineB = getSchoolDuelMetricValue(duel.opponentSchoolId, duel.category);
+    }
+    saveCentralDb();
+    broadcastLiveSync('school_duel', { duelId: duel.id });
+    res.json({ success: true, duel });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/certificates', requireAuth, (req: AuthenticatedRequest, res) => {
+  try {
+    const caller = req.authUser;
+    const allCerts = centralDb.certificates || [];
+    const certs = hasAnyRole(caller, ['super_admin', 'moderator'])
+      ? allCerts
+      : allCerts.filter((c: any) => c.uid === caller.uid);
+
+    const eligibleTiers = [
+      {
+        tier: 'eco_starter',
+        title: "Eko-Harakat Boshlang'ich Sertifikati",
+        requirement: "Kamida 100 EcoCoin yoki 1 ta hisobot",
+        unlocked: Number(caller.totalCoinsEarned || caller.ecoCoins || 0) >= 100 || Number(caller.reportsCount || 0) >= 1,
+      },
+      {
+        tier: 'green_guardian',
+        title: "Yashil Hudud Qo'riqchisi Sertifikati",
+        requirement: "Kamida 300 EcoCoin va 3+ ko'chat/hisobot",
+        unlocked:
+          Number(caller.totalCoinsEarned || caller.ecoCoins || 0) >= 300 ||
+          Number(caller.treesPlanted || 0) + Number(caller.reportsCount || 0) >= 3,
+      },
+      {
+        tier: 'eco_champion',
+        title: "EcoHero Milliy Chempionat Faxriy Yorlig'i",
+        requirement: "Kamida 1000 EcoCoin yoki faol yetakchi",
+        unlocked:
+          Number(caller.totalCoinsEarned || caller.ecoCoins || 0) >= 1000 ||
+          hasAnyRole(caller, ['ambassador', 'school_admin', 'super_admin']),
+      },
+    ];
+
+    res.json({ success: true, certificates: certs, eligibleTiers });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/certificates/verify/:id', (req, res) => {
+  const key = String(req.params.id || '').trim().toUpperCase();
+  const cert = (centralDb.certificates || []).find(
+    (c: any) => String(c.id).toUpperCase() === key || String(c.verificationCode).toUpperCase() === key
+  );
+  if (!cert) {
+    return res.status(404).json({ valid: false, error: 'Sertifikat topilmadi' });
+  }
+  res.json({ valid: true, certificate: cert });
+});
+
+app.post('/api/certificates/issue', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const caller = req.authUser;
+    const { tier = 'eco_starter', targetUid, customTitle } = req.body || {};
+    const isAdmin = hasAnyRole(caller, ['super_admin', 'school_admin', 'moderator']);
+    const recipient = targetUid && isAdmin && centralDb.users[String(targetUid)] ? centralDb.users[String(targetUid)] : caller;
+
+    const tierTitleMap: Record<string, string> = {
+      eco_starter: "Eko-Harakat Boshlang'ich Sertifikati",
+      green_guardian: "Yashil Hudud Qo'riqchisi Sertifikati",
+      eco_champion: "EcoHero Milliy Chempionat Faxriy Yorlig'i",
+      ambassador_gold: "Tasdiqlangan Maktab Eko-Elchisi Sertifikati",
+    };
+
+    const existing = (centralDb.certificates || []).find(
+      (c: any) => c.uid === recipient.uid && c.tier === tier
+    );
+    if (existing) {
+      return res.json({ success: true, certificate: existing, alreadyIssued: true });
+    }
+
+    const totalEarned = Number(recipient.totalCoinsEarned || recipient.ecoCoins || 0);
+    if (!isAdmin && tier === 'green_guardian' && totalEarned < 300 && (recipient.treesPlanted || 0) + (recipient.reportsCount || 0) < 3) {
+      return res.status(400).json({ error: "Bu sertifikat uchun kamida 300 EcoCoin yoki 3 ta tasdiqlangan harakat kerak" });
+    }
+    if (!isAdmin && tier === 'eco_champion' && totalEarned < 1000 && !hasAnyRole(recipient, ['ambassador', 'school_admin'])) {
+      return res.status(400).json({ error: "Chempionat sertifikati uchun kamida 1000 EcoCoin to'plang" });
+    }
+
+    const certId = `cert_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const verificationCode = `ECO-${String(recipient.uid).slice(-4).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+    const verifyUrl = `${APP_URL}/?cert=${encodeURIComponent(verificationCode)}`;
+    const qrCodeUrl = await QRCode.toDataURL(verifyUrl, { width: 220, margin: 1 });
+
+    const certRecord = {
+      id: certId,
+      uid: recipient.uid,
+      entityName: recipient.fullName || "EcoHero A'zosi",
+      schoolName: recipient.schoolName || "O'zbekiston Maktabi",
+      region: recipient.region || "O'zbekiston",
+      district: recipient.district || '',
+      type: 'student',
+      tier,
+      category: customTitle ? String(customTitle).trim() : tierTitleMap[tier] || tierTitleMap.eco_starter,
+      level: recipient.level || Math.max(1, Math.floor(Number(recipient.ecoXP || totalEarned * 4) / 500) + 1),
+      ecoCoinsSnapshot: Number(recipient.ecoCoins || 0),
+      treesPlantedSnapshot: Number(recipient.treesPlanted || 0),
+      periodName: new Date().toLocaleDateString('uz-UZ', { month: 'long', year: 'numeric' }),
+      issuedAt: new Date().toISOString(),
+      verificationCode,
+      verifyUrl,
+      qrCodeUrl,
+    };
+
+    centralDb.certificates = [certRecord, ...(centralDb.certificates || [])];
+    saveCentralDb();
+
+    const tgChat = recipient.telegramId || recipient.chatId;
+    if (tgChat) {
+      sendTelegramMessage(
+        tgChat,
+        `🎓 <b>RASMIY EKO-SERTIFIKAT BERILDI!</b>\n\n` +
+          `🏅 <b>Nominatsiya:</b> ${certRecord.category}\n` +
+          `🏫 <b>Maktab:</b> ${certRecord.schoolName}\n` +
+          `🔐 <b>Tekshiruv kodi:</b> <code>${verificationCode}</code>\n\n` +
+          `EcoPassport sahifangizdan yuqori sifatli PNG/PDF shaklida yuklab olishingiz mumkin!`
+      ).catch(() => {});
+    }
+
+    res.json({ success: true, certificate: certRecord });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/sponsor/analytics', requireRoles('sponsor', 'super_admin', 'moderator'), (req: AuthenticatedRequest, res) => {
+  try {
+    const ads = centralDb.ecoAds || [];
+    const totalImpressions = ads.reduce((s, a: any) => s + Number(a.impressionsCount || 0), 0);
+    const totalClicks = ads.reduce((s, a: any) => s + Number(a.clicksCount || 0), 0);
+    const ctrPercent = totalImpressions > 0 ? Number(((totalClicks / totalImpressions) * 100).toFixed(2)) : 0;
+    const rewardClaims = centralDb.adRewardClaims || [];
+    const orders = centralDb.shopOrders || [];
+    const deliveredVouchers = orders.filter((o: any) => o.status === 'delivered').length;
+    const activeItems = (centralDb.shopItems || []).filter((i: any) => i.status !== 'paused');
+
+    res.json({
+      success: true,
+      summary: {
+        activeAdsCount: ads.filter((a: any) => a.status === 'active').length,
+        totalImpressions,
+        totalClicks,
+        ctrPercent,
+        totalAdRewardClaims: rewardClaims.length,
+        totalCoinsSponsoredAds: rewardClaims.reduce((s, c: any) => s + Number(c.amount || 0), 0),
+        totalVouchersClaimed: orders.length,
+        deliveredVouchers,
+        activeShopItemsCount: activeItems.length,
+        totalPartnersCount: (centralDb.partners || []).length,
+      },
+      adsBreakdown: ads.map((a: any) => {
+        const imp = Number(a.impressionsCount || 0);
+        const clk = Number(a.clicksCount || 0);
+        return {
+          id: a.id,
+          title: a.title,
+          sponsorName: a.sponsorName,
+          sponsorLogo: a.sponsorLogo,
+          placement: a.placement,
+          status: a.status,
+          impressionsCount: imp,
+          clicksCount: clk,
+          ctrPercent: imp > 0 ? Number(((clk / imp) * 100).toFixed(2)) : 0,
+        };
+      }),
+      recentOrders: orders.slice(0, 12).map((o: any) => ({
+        id: o.id,
+        itemTitle: o.itemTitle,
+        sponsorName: o.sponsorName,
+        schoolName: o.schoolName,
+        status: o.status,
+        voucherCode: o.voucherCode,
+        createdAt: o.createdAt,
+      })),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/ai/verify-eco-photo', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const { imageBase64, mimeType = 'image/jpeg', category = 'waste_sorting', description = '' } = req.body || {};
+    if (!imageBase64) {
+      return res.status(400).json({ success: false, error: 'Tekshirish uchun rasm yuborilishi shart' });
+    }
+    if (!(process.env.GEMINI_API_KEY || '').trim()) {
+      return res.status(503).json({
+        success: false,
+        error: "GEMINI_API_KEY serverda sozlanmagan. Settings > Secrets bo'limidan kalitni ulang.",
+      });
+    }
+
+    const base64Clean = String(imageBase64).replace(/^data:image\/[a-zA-Z0-9+.-]+;base64,/, '');
+    const aiResponse: any = await generateContentWithModelFallback(
+      {
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { inlineData: { data: base64Clean, mimeType } },
+              {
+                text: `Toifa: ${category}\nTavsif: ${description}\nBu rasm haqiqiy jonli ekologik harakat/muammomi? Monitor/telefon ekranidan olingan rasm, AI generatsiya qilingan rasm yoki aloqasiz selfie emasmi?`,
+              },
+            ],
+          },
+        ],
+        config: {
+          systemInstruction:
+            `Siz ECO HERO platformasining AI Anti-Cheat rasm tekshiruvchisisiz. Ekran rasmi (moiré chiziqlari, kompyuter ramkasi), AI-art yoki mavzuga aloqasiz rasmni qat'iy aniqlang. O'zbek tilida tushunarli verdictUz yozing.`,
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: 'OBJECT',
+            properties: {
+              isAuthenticRealWorldPhoto: { type: 'BOOLEAN' },
+              isScreenOrMonitorFake: { type: 'BOOLEAN' },
+              isAiGenerated: { type: 'BOOLEAN' },
+              matchesEcoCategory: { type: 'BOOLEAN' },
+              confidence: { type: 'NUMBER' },
+              verdictUz: { type: 'STRING' },
+            },
+            required: [
+              'isAuthenticRealWorldPhoto',
+              'isScreenOrMonitorFake',
+              'isAiGenerated',
+              'matchesEcoCategory',
+              'confidence',
+              'verdictUz',
+            ],
+          },
+        },
+      },
+      20000
+    );
+    const parsed = parseModelJsonResponse(aiResponse?.text);
+    res.json({ success: true, verification: parsed });
+  } catch (err: any) {
+    const formatted = formatGeminiError(err);
+    res.status(formatted.statusCode || 500).json({ success: false, error: formatted.message });
+  }
+});
+
+// ==========================================
 // 10. PUBLIC TUNNEL & EXPRESS/VITE SERVER
 // ==========================================
 
 let activeTunnelProc: ChildProcess | null = null;
 
 async function startPublicTunnel(targetPort: number | string): Promise<string | null> {
-  const binDir = path.join(process.cwd(), 'bin');
-  const binDirCloudflared = path.join(binDir, 'cloudflared');
+  const tmpCloudflared = '/tmp/cloudflared';
   let binaryPath: string | null = null;
 
   const isExecutableValid = (p: string) => {
@@ -11275,8 +14400,7 @@ async function startPublicTunnel(targetPort: number | string): Promise<string | 
     }
   };
 
-  if (isExecutableValid(binDirCloudflared)) binaryPath = binDirCloudflared;
-  else if (isExecutableValid('/tmp/cloudflared')) binaryPath = '/tmp/cloudflared';
+  if (isExecutableValid(tmpCloudflared)) binaryPath = tmpCloudflared;
 
   if (binaryPath) {
     try {
@@ -11286,29 +14410,18 @@ async function startPublicTunnel(targetPort: number | string): Promise<string | 
     const cfArch = process.arch === 'arm64' ? 'arm64' : 'amd64';
     const downloadUrl = `https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${cfArch}`;
     try {
-      fs.mkdirSync(binDir, { recursive: true });
       console.log(`[Cloudflared] Yuklab olinmoqda (${cfArch})...`);
       const res = await fetch(downloadUrl, { redirect: 'follow', signal: AbortSignal.timeout(45000) });
       if (res.ok) {
         const buf = Buffer.from(await res.arrayBuffer());
         if (buf.length > 5 * 1024 * 1024) {
-          fs.writeFileSync(binDirCloudflared, buf);
-          fs.chmodSync(binDirCloudflared, 0o755);
-          binaryPath = binDirCloudflared;
+          await fs.promises.writeFile(tmpCloudflared, buf);
+          await fs.promises.chmod(tmpCloudflared, 0o755);
+          binaryPath = tmpCloudflared;
         }
       }
     } catch (fetchErr: any) {
-      console.warn('[Cloudflared] Fetch orqali yuklab bo\'lmadi, curl sinab ko\'rilmoqda:', fetchErr?.message || fetchErr);
-    }
-
-    if (!binaryPath) {
-      try {
-        const { execSync } = await import('child_process');
-        execSync(`mkdir -p bin && curl -sL "${downloadUrl}" -o bin/cloudflared && chmod +x bin/cloudflared`);
-        if (isExecutableValid(binDirCloudflared)) binaryPath = binDirCloudflared;
-      } catch (curlErr: any) {
-        console.warn('[Cloudflared] Yuklab olish muvaffaqiyatsiz:', curlErr?.message || curlErr);
-      }
+      console.warn('[Cloudflared] Fetch orqali yuklab olish muvaffaqiyatsiz:', fetchErr?.message || fetchErr);
     }
   }
 
@@ -11346,7 +14459,7 @@ async function startPublicTunnel(targetPort: number | string): Promise<string | 
           APP_URL = tunnelUrl;
           console.log(`[Cloudflared] Mini App HTTPS tunnel ochildi: ${tunnelUrl}`);
           try {
-            fs.writeFileSync(path.join(process.cwd(), 'public-tunnel-url.txt'), tunnelUrl, 'utf-8');
+            fs.writeFileSync('/tmp/ecohero-public-tunnel-url.txt', tunnelUrl, 'utf-8');
           } catch {}
           resolve(tunnelUrl);
         }
@@ -11504,7 +14617,7 @@ async function startServer() {
             .status(200)
             .set({
               'Content-Type': 'text/html; charset=utf-8',
-              'Cache-Control': 'public, max-age=60, stale-while-revalidate=300',
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
             })
             .end(injectRuntimeSeoHtml(html, req))
         )
@@ -11556,6 +14669,11 @@ async function startServer() {
       }
     });
   }
+
+  await Promise.race([
+    hydrateCatalogFromFirestoreOnBoot(),
+    new Promise<void>((resolve) => setTimeout(resolve, 2500)),
+  ]);
 
   httpServer.listen(port, '0.0.0.0', async () => {
     console.log(`ECO HERO platform HTTP + WebSocket server running on port ${port}`);
@@ -11615,11 +14733,18 @@ async function startServer() {
           }
         }
 
-        if (canUseWebhook) {
+        if (canUseWebhook && TELEGRAM_WEBHOOK_SECRET) {
           try {
             isWebhookMode = true;
             const webhookUrl = `${webhookBaseUrl}/api/telegram/webhook`;
-            await fetch(`https://api.telegram.org/bot${activeBotToken}/setWebhook?url=${encodeURIComponent(webhookUrl)}`);
+            await fetch(`https://api.telegram.org/bot${activeBotToken}/setWebhook`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                url: webhookUrl,
+                secret_token: TELEGRAM_WEBHOOK_SECRET,
+              }),
+            });
             await syncTelegramBotProfile(activeBotToken, APP_URL);
             console.log(`[Telegram Bot] 24/7 Production Webhook faollashtirildi: ${webhookUrl} (Mini App: ${APP_URL})`);
           } catch {

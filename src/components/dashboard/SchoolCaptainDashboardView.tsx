@@ -21,8 +21,8 @@ import {
 } from 'lucide-react';
 import { useEco } from '../../context/EcoContext';
 import { VoucherVerifierPanel } from '../shop/VoucherVerifierPanel';
-import { HomePostsManagerPanel } from './HomePostsManagerPanel';
 import { EcoTelegramChatPanel } from '../chat/EcoTelegramChatPanel';
+import { StudentRatingManagerCard } from './StudentRatingManagerCard';
 import { resolveMediaUrl } from '../../utils/api';
 import {
   DistrictLeaderboardDetailsResponse,
@@ -503,6 +503,15 @@ export const SchoolCaptainDashboardView: React.FC = () => {
         )}
       </div>
 
+      {/* School Student Rating Activation & Top-1 Monthly Award */}
+      <StudentRatingManagerCard
+        mode="school"
+        schoolId={effectiveSchoolId}
+        schoolName={mySchool?.name || user.schoolName}
+        region={mySchool?.region || user.region}
+        district={mySchool?.district || user.district}
+      />
+
       {/* Add Eco-Ambassador Directly + Review Incoming Applications for This School */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-5 p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
@@ -662,9 +671,6 @@ export const SchoolCaptainDashboardView: React.FC = () => {
           )}
         </div>
       </div>
-
-      {/* HomePage Posts CMS Managed by School Captain */}
-      <HomePostsManagerPanel />
 
       {/* Voucher & Promo Code Verifier for School Admin */}
       <VoucherVerifierPanel />

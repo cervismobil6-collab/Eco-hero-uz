@@ -46,11 +46,24 @@ const syncClientSeoTags = () => {
 };
 syncClientSeoTags();
 
-// Register Service Worker for PWA offline support
-if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
-  });
+// Register Service Worker only in production; in dev, clean up stale SW caches that can cause duplicate Vite React bundles
+if ('serviceWorker' in navigator) {
+  if (import.meta.env.PROD && window.location.protocol === 'https:') {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    });
+  } else if (import.meta.env.DEV) {
+    navigator.serviceWorker
+      .getRegistrations()
+      .then((regs) => Promise.all(regs.map((r) => r.unregister())))
+      .catch(() => {});
+    if ('caches' in window) {
+      caches
+        .keys()
+        .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+        .catch(() => {});
+    }
+  }
 }
 
 createRoot(document.getElementById('root')!).render(<App />);

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ShoppingBag,
   Coins,
@@ -32,6 +32,7 @@ import {
   Bot,
   Send,
   Instagram,
+  Lock,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import QRCode from 'qrcode';
@@ -40,7 +41,20 @@ import { EcoAd, ShopItem, ShopRedemptionGate } from '../types/eco';
 import { EcoAdBanner } from '../components/EcoAdBanner';
 import { AdPlayerModal } from '../components/AdPlayerModal';
 import { GiftGateConfigEditor } from '../components/shop/GiftGateConfigEditor';
-import { resolveMediaUrl, openAdTargetUrl } from '../utils/api';
+import { isInsideTelegramWebApp, normalizeAdTargetUrl, resolveMediaUrl, openAdTargetUrl } from '../utils/api';
+
+function isAdLogoImage(val?: string): boolean {
+  if (!val) return false;
+  return /^(https?:\/\/|\/uploads\/|\/assets\/|data:image\/)/i.test(val.trim());
+}
+
+function formatCooldownHms(totalSec: number): string {
+  const s = Math.max(0, Math.floor(totalSec));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const rem = s % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(rem).padStart(2, '0')}`;
+}
 
 export const EcoShopPage: React.FC = () => {
   const {
@@ -53,6 +67,7 @@ export const EcoShopPage: React.FC = () => {
     createShopItem,
     deleteShopItem,
     ecoAds,
+    adWatchState,
     createEcoAd,
     updateEcoAd,
     updateEcoAdStatus,
@@ -113,6 +128,7 @@ export const EcoShopPage: React.FC = () => {
   const [adPlacementChoice, setAdPlacementChoice] = useState<'earn_coins' | 'post_purchase' | 'shop_top' | 'home_top'>('earn_coins');
   const [adTitleInput, setAdTitleInput] = useState('');
   const [adSponsorInput, setAdSponsorInput] = useState('');
+  const [adSponsorLogoInput, setAdSponsorLogoInput] = useState('');
   const [adHeadlineInput, setAdHeadlineInput] = useState('');
   const [adSubheadlineInput, setAdSubheadlineInput] = useState('');
   const [adImageInput, setAdImageInput] = useState(
@@ -127,11 +143,38 @@ export const EcoShopPage: React.FC = () => {
   const [adRewardInput, setAdRewardInput] = useState('100');
   const [uploadingGiftImg, setUploadingGiftImg] = useState(false);
   const [uploadingAdImg, setUploadingAdImg] = useState(false);
+  const [uploadingAdLogo, setUploadingAdLogo] = useState(false);
   const [uploadingAdVideo, setUploadingAdVideo] = useState(false);
+  const [cooldownTickMs, setCooldownTickMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    const nextIso = adWatchState?.nextAvailableAt;
+    if (!nextIso) return;
+    const targetMs = new Date(nextIso).getTime();
+    if (!Number.isFinite(targetMs) || targetMs <= Date.now()) return;
+    setCooldownTickMs(Date.now());
+    const id = window.setInterval(() => {
+      const now = Date.now();
+      setCooldownTickMs(now);
+      if (now >= targetMs) {
+        window.clearInterval(id);
+      }
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [adWatchState?.nextAvailableAt]);
+
+  const cooldownRemainingSec = useMemo(() => {
+    if (!adWatchState?.nextAvailableAt) {
+      return Math.max(0, Number(adWatchState?.remainingSeconds || 0));
+    }
+    const targetMs = new Date(adWatchState.nextAvailableAt).getTime();
+    if (!Number.isFinite(targetMs)) return 0;
+    return Math.max(0, Math.ceil((targetMs - cooldownTickMs) / 1000));
+  }, [adWatchState?.nextAvailableAt, adWatchState?.remainingSeconds, cooldownTickMs]);
 
   const handleShopMediaUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
-    target: 'gift_img' | 'ad_img' | 'ad_video'
+    target: 'gift_img' | 'ad_img' | 'ad_logo' | 'ad_video'
   ) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -142,12 +185,14 @@ export const EcoShopPage: React.FC = () => {
     }
     if (target === 'gift_img') setUploadingGiftImg(true);
     if (target === 'ad_img') setUploadingAdImg(true);
+    if (target === 'ad_logo') setUploadingAdLogo(true);
     if (target === 'ad_video') setUploadingAdVideo(true);
     try {
       const up = await uploadMediaFile(file, file.name);
       if (up.success && up.url) {
         if (target === 'gift_img') setGiftImageUrl(up.url);
         if (target === 'ad_img') setAdImageInput(up.url);
+        if (target === 'ad_logo') setAdSponsorLogoInput(up.url);
         if (target === 'ad_video') setAdVideoInput(up.url);
         showNotification(target === 'ad_video' ? 'Video yuklandi!' : 'Rasm yuklandi!', 'success');
       } else {
@@ -156,15 +201,30 @@ export const EcoShopPage: React.FC = () => {
     } finally {
       setUploadingGiftImg(false);
       setUploadingAdImg(false);
+      setUploadingAdLogo(false);
       setUploadingAdVideo(false);
       e.target.value = '';
     }
   };
 
   const myOrders = shopOrders.filter(o => o.userId === user.uid);
-  const earnCoinAds = ecoAds.filter(
-    a => a.placement === 'earn_coins' && (a.status === 'active' || user.role === 'super_admin')
-  );
+  const lastWatchedAdId = adWatchState?.lastWatchedAdId || null;
+  const perAdLastClaimedAt = adWatchState?.perAdLastClaimedAt || {};
+  const earnCoinAds = useMemo(() => {
+    const list = ecoAds.filter(
+      a => a.placement === 'earn_coins' && (a.status === 'active' || user.role === 'super_admin')
+    );
+    return [...list].sort((a, b) => {
+      if (a.status === 'active' && b.status !== 'active') return -1;
+      if (a.status !== 'active' && b.status === 'active') return 1;
+      const aIsLast = lastWatchedAdId && a.id === lastWatchedAdId ? 1 : 0;
+      const bIsLast = lastWatchedAdId && b.id === lastWatchedAdId ? 1 : 0;
+      if (aIsLast !== bIsLast) return aIsLast - bIsLast;
+      const aTime = perAdLastClaimedAt[a.id] ? new Date(perAdLastClaimedAt[a.id]).getTime() : 0;
+      const bTime = perAdLastClaimedAt[b.id] ? new Date(perAdLastClaimedAt[b.id]).getTime() : 0;
+      return aTime - bTime;
+    });
+  }, [ecoAds, user.role, lastWatchedAdId, perAdLastClaimedAt]);
   const activePostPurchaseAds = ecoAds.filter(a => a.placement === 'post_purchase' && a.status === 'active');
 
   const categories = [
@@ -278,7 +338,8 @@ export const EcoShopPage: React.FC = () => {
         const ok = await updateShopItem(editingItem.id, payload);
         if (!ok) return;
       } else {
-        await createShopItem(payload);
+        const ok = await createShopItem(payload);
+        if (!ok) return;
       }
       setShowCreateModal(false);
       setEditingItem(null);
@@ -292,6 +353,7 @@ export const EcoShopPage: React.FC = () => {
     setAdPlacementChoice(placement);
     setAdTitleInput('');
     setAdSponsorInput('');
+    setAdSponsorLogoInput('');
     setAdHeadlineInput('');
     setAdSubheadlineInput('');
     setAdImageInput('https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=1000&q=80');
@@ -310,6 +372,7 @@ export const EcoShopPage: React.FC = () => {
     setAdPlacementChoice((['earn_coins', 'post_purchase', 'shop_top', 'home_top'].includes(ad.placement) ? ad.placement : 'earn_coins') as any);
     setAdTitleInput(ad.title || '');
     setAdSponsorInput(ad.sponsorName || '');
+    setAdSponsorLogoInput(ad.sponsorLogo || '');
     setAdHeadlineInput(ad.headline || '');
     setAdSubheadlineInput(ad.subheadline || '');
     setAdImageInput(ad.imageUrl || '');
@@ -335,10 +398,12 @@ export const EcoShopPage: React.FC = () => {
     if (!adTitleInput.trim()) return;
     const cleanSkip = Math.max(5, Math.min(300, Number(adSkipSecondsInput) || 15));
     const cleanReward = Math.max(10, Number(adRewardInput) || 100);
+    const cleanLogo = adSponsorLogoInput.trim() || '🌿';
     if (editingAd) {
       const res = await updateEcoAd(editingAd.id, {
         title: adTitleInput.trim(),
         sponsorName: adSponsorInput.trim() || 'Eco Sponsor',
+        sponsorLogo: cleanLogo,
         type: adVideoInput.trim() ? 'video' : 'banner',
         placement: adPlacementChoice,
         headline: adHeadlineInput.trim() || adTitleInput.trim(),
@@ -361,11 +426,11 @@ export const EcoShopPage: React.FC = () => {
       return;
     }
 
-    await createEcoAd({
+    const createdOk = await createEcoAd({
       title: adTitleInput.trim(),
       sponsorId: `sp_${Date.now()}`,
       sponsorName: adSponsorInput.trim() || 'Eco Sponsor',
-      sponsorLogo: '🌿',
+      sponsorLogo: cleanLogo,
       type: adVideoInput.trim() ? 'video' : 'banner',
       placement: adPlacementChoice,
       headline: adHeadlineInput.trim() || adTitleInput.trim(),
@@ -393,12 +458,13 @@ export const EcoShopPage: React.FC = () => {
       rewardCoins: adPlacementChoice === 'earn_coins' ? cleanReward : 0,
       skipAfterSeconds: cleanSkip,
     });
+    if (!createdOk) return;
     setShowShopAdModal(false);
     setAdTitleInput('');
+    setAdSponsorLogoInput('');
     setAdHeadlineInput('');
     setAdSubheadlineInput('');
     setAdVideoInput('');
-    showNotification('Reklama muvaffaqiyatli qo‘shildi!', 'success');
   };
 
   const executeRedeemWithGate = async (item: ShopItem, confirmedSubscriptionIds: string[]) => {
@@ -422,11 +488,13 @@ export const EcoShopPage: React.FC = () => {
           gate?.adId && gate.adId !== 'auto'
             ? ecoAds.find(a => a.id === gate.adId) || null
             : null;
-        const adToPlay =
-          specificAd ||
+        const rotatedPostAd =
+          activePostPurchaseAds.find(a => a.id !== lastWatchedAdId) ||
           activePostPurchaseAds[0] ||
+          ecoAds.find(a => a.status === 'active' && a.id !== lastWatchedAdId) ||
           ecoAds.find(a => a.status === 'active') ||
           null;
+        const adToPlay = specificAd || rotatedPostAd;
 
         if (adToPlay) {
           setPendingVoucher(wonVoucher);
@@ -618,14 +686,27 @@ export const EcoShopPage: React.FC = () => {
                   <PlayCircle className="w-7 h-7" />
                 </div>
                 <div>
-                  <div className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-amber-500">
-                    <Sparkles className="w-3.5 h-3.5" /> Reklama Xizmati
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-amber-500">
+                      <Sparkles className="w-3.5 h-3.5" /> Reklama Xizmati
+                    </span>
+                    {cooldownRemainingSec > 0 ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-400 text-[10px] font-mono font-bold tabular-nums">
+                        <Lock className="w-3 h-3" />
+                        <span>5 soatlik tanaffus: {formatCooldownHms(cooldownRemainingSec)}</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold">
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>Har {adWatchState?.cooldownHours || 5} soatda 1 ta reklama · Tayyor</span>
+                      </span>
+                    )}
                   </div>
                   <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tight">
                     Reklama ko&lsquo;rib EcoCoin ishlab oling
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Har bir tasdiqlangan reklamani belgilangan vaqt davomida tomosha qiling — yakunida hisobingizga avtomatik EcoCoin tushadi.
+                    Har {adWatchState?.cooldownHours || 5} soatda 1 ta reklamani to&lsquo;liq tomosha qiling — yakunida avtomatik EcoCoin tushadi va keyingi safar boshqa reklama chiqadi.
                   </p>
                 </div>
               </div>
@@ -649,6 +730,8 @@ export const EcoShopPage: React.FC = () => {
                 {earnCoinAds.map(ad => {
                   const adSec = ad.skipAfterSeconds || 15;
                   const adDurationLabel = adSec >= 60 && adSec % 60 === 0 ? `${adSec / 60} min` : `${adSec}s`;
+                  const isLastWatched = Boolean(lastWatchedAdId && ad.id === lastWatchedAdId);
+                  const isCooldownLocked = cooldownRemainingSec > 0;
                   const ctaKind =
                     ad.ctaType ||
                     (/t\.me\/|telegram\.me\//i.test(String(ad.ctaUrl || ''))
@@ -662,40 +745,79 @@ export const EcoShopPage: React.FC = () => {
                       key={ad.id}
                       className="rounded-3xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-white/10 overflow-hidden shadow-md flex flex-col"
                     >
-                      <div className="relative h-40 bg-slate-900 overflow-hidden">
-                        {ad.videoUrl ? (
-                          <video
-                            src={resolveMediaUrl(ad.videoUrl)}
-                            poster={resolveMediaUrl(ad.imageUrl)}
-                            muted
-                            playsInline
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <img src={resolveMediaUrl(ad.imageUrl)} alt={ad.title} className="w-full h-full object-cover" />
-                        )}
+                      <div className="relative h-44 bg-slate-900 overflow-hidden">
+                        <img
+                          src={resolveMediaUrl(ad.imageUrl)}
+                          alt={ad.title}
+                          loading="lazy"
+                          className="w-full h-full object-cover"
+                        />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
-                        <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black uppercase flex items-center gap-1 shadow">
-                          <Coins className="w-3 h-3" />
-                          <span>+{ad.rewardCoins || 100} EcoCoin</span>
+                        {ad.videoUrl && (
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div className="w-12 h-12 rounded-full bg-black/55 border border-white/25 text-white flex items-center justify-center shadow-lg">
+                              <PlayCircle className="w-7 h-7" />
+                            </div>
+                          </div>
+                        )}
+                        <div className="absolute top-3 left-3 flex flex-wrap items-center gap-1.5">
+                          <div className="px-2.5 py-1 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black uppercase flex items-center gap-1 shadow">
+                            <Coins className="w-3 h-3" />
+                            <span>+{ad.rewardCoins || 100} EcoCoin</span>
+                          </div>
+                          {isLastWatched && (
+                            <span className="px-2 py-1 rounded-full bg-slate-950/80 border border-white/15 text-slate-200 text-[10px] font-bold">
+                              Oxirgi ko&lsquo;rilgan
+                            </span>
+                          )}
                         </div>
                         <div className="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-black/75 text-white text-[10px] font-mono font-bold">
                           {ad.videoUrl ? 'VIDEO · ' : ''}{adDurationLabel}
                         </div>
-                        <div className="absolute bottom-3 left-3 right-3 text-white">
-                          <div className="text-[10px] font-bold uppercase text-emerald-300">{ad.sponsorName}</div>
-                          <div className="text-sm font-black line-clamp-1">{ad.headline}</div>
+                        <div className="absolute bottom-3 left-3 right-3 flex items-center gap-2.5 text-white">
+                          <div className="w-9 h-9 rounded-full overflow-hidden bg-emerald-500/20 border border-white/25 flex items-center justify-center shrink-0">
+                            {isAdLogoImage(ad.sponsorLogo) ? (
+                              <img
+                                src={resolveMediaUrl(ad.sponsorLogo || '')}
+                                alt={ad.sponsorName}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <span className="text-xs font-black text-emerald-300">
+                                {ad.sponsorLogo && ad.sponsorLogo.trim().length <= 3
+                                  ? ad.sponsorLogo
+                                  : (ad.sponsorName || 'E').slice(0, 1).toUpperCase()}
+                              </span>
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[10px] font-bold uppercase text-emerald-300 truncate">{ad.sponsorName}</div>
+                            <div className="text-sm font-black line-clamp-1">{ad.headline}</div>
+                          </div>
                         </div>
                       </div>
                       <div className="p-4 flex items-center justify-between gap-2 mt-auto">
                         <button
                           type="button"
-                          disabled={ad.status !== 'active'}
+                          disabled={ad.status !== 'active' || isCooldownLocked}
                           onClick={() => setWatchEarnAd(ad)}
-                          className="flex-1 py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-emerald-500 hover:brightness-110 disabled:opacity-40 text-slate-950 font-black text-[11px] uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer"
+                          className={`flex-1 py-2.5 px-3 rounded-xl font-black text-[11px] uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                            isCooldownLocked
+                              ? 'bg-slate-200 dark:bg-white/10 text-slate-500 dark:text-slate-400 cursor-not-allowed'
+                              : 'bg-gradient-to-r from-amber-500 to-emerald-500 hover:brightness-110 disabled:opacity-40 text-slate-950'
+                          }`}
                         >
-                          <PlayCircle className="w-4 h-4 shrink-0" />
-                          <span>{adDurationLabel} (+{ad.rewardCoins || 100})</span>
+                          {isCooldownLocked ? (
+                            <>
+                              <Lock className="w-3.5 h-3.5 shrink-0" />
+                              <span className="font-mono tabular-nums">{formatCooldownHms(cooldownRemainingSec)}</span>
+                            </>
+                          ) : (
+                            <>
+                              <PlayCircle className="w-4 h-4 shrink-0" />
+                              <span>{adDurationLabel} (+{ad.rewardCoins || 100})</span>
+                            </>
+                          )}
                         </button>
                         {ad.ctaUrl && (
                           <button
@@ -766,15 +888,15 @@ export const EcoShopPage: React.FC = () => {
               className="space-y-12"
             >
               {/* Category Filter */}
-              <div className="flex items-center gap-2 overflow-x-auto pb-4 scrollbar-hide">
+              <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
                 {categories.map(cat => (
                   <button
                     key={cat.id}
                     onClick={() => setSelectedCategory(cat.id)}
-                    className={`px-5 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all border-2 ${
+                    className={`min-h-[40px] px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap shrink-0 transition-all border ${
                       selectedCategory === cat.id
-                        ? 'bg-emerald-600 border-emerald-600 text-white shadow-lg shadow-emerald-600/20'
-                        : 'bg-white dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:border-emerald-500/50 hover:text-emerald-500'
+                        ? 'bg-emerald-500 border-emerald-500 text-slate-950 shadow-sm shadow-emerald-500/20'
+                        : 'bg-white dark:bg-[#061812] border-slate-200 dark:border-emerald-500/20 text-slate-600 dark:text-slate-300 hover:border-emerald-500/50 hover:text-emerald-400'
                     }`}
                   >
                     {cat.label}
@@ -782,112 +904,162 @@ export const EcoShopPage: React.FC = () => {
                 ))}
               </div>
 
-              {/* Featured Section */}
-              {selectedCategory === 'all' && !searchQuery && (
-                <div className="space-y-6">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-2xl font-black uppercase tracking-tighter">Mashhur Sovg'alar</h2>
-                    <div className="flex items-center gap-2 text-emerald-500 text-[10px] font-black uppercase tracking-widest">
-                      <Zap className="w-3 h-3 fill-emerald-500" /> Tez sotilmoqda
-                    </div>
+              {/* Featured Section — Compact 2-Column Mobile Grid */}
+              {selectedCategory === 'all' && !searchQuery && featuredItems.length > 0 && (
+                <div className="space-y-3.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <h2 className="text-lg sm:text-xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+                      Mashhur sovg'alar
+                    </h2>
+                    <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 text-xs font-semibold">
+                      <Zap className="w-3.5 h-3.5 fill-current" />
+                      Top tanlov
+                    </span>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    {featuredItems.map(item => (
-                      <div key={item.id} className="group relative aspect-[4/5] rounded-[40px] overflow-hidden border border-slate-200 dark:border-white/10 shadow-2xl">
-                        <img src={resolveMediaUrl(item.imageUrl)} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={item.title} />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
-                        {user.role === 'super_admin' && (
-                          <div className="absolute top-5 right-5 z-20 flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => openEditGiftModal(item)}
-                              className="p-2 rounded-xl bg-slate-900/80 text-white hover:bg-amber-500 hover:text-slate-950 transition-colors cursor-pointer"
-                              title="Tahrirlash"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => deleteShopItem(item.id)}
-                              className="p-2 rounded-xl bg-slate-900/80 text-rose-400 hover:bg-rose-500 hover:text-white transition-colors cursor-pointer"
-                              title="O'chirish"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        )}
-                        <div className="absolute inset-0 p-8 flex flex-col justify-end space-y-4">
-                          <div className="inline-flex self-start px-3 py-1 rounded-full bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest shadow-lg">
-                            Featured
-                          </div>
-                          <div className="space-y-1">
-                            <h3 className="text-2xl font-black text-white uppercase leading-none">{item.title}</h3>
-                            <p className="text-white/60 text-[10px] font-bold uppercase tracking-widest">{item.sponsorName}</p>
-                          </div>
-                          <div className="flex items-center justify-between pt-4 border-t border-white/10">
-                            <div className="flex items-center gap-2 text-amber-400 font-black font-mono">
-                              <Coins className="w-5 h-5 fill-amber-400" />
-                              <span className="text-xl">{item.priceCoins.toLocaleString()}</span>
+                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-4">
+                    {featuredItems.map(item => {
+                      const isOutOfStock = (item.stock || 0) <= 0;
+                      const canAfford = user.ecoCoins >= item.priceCoins;
+                      return (
+                        <div
+                          key={item.id}
+                          className="group flex flex-col h-full rounded-2xl overflow-hidden bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/25 shadow-sm hover:border-emerald-400/60 transition-all"
+                        >
+                          <div className="relative h-28 sm:h-36 w-full overflow-hidden bg-slate-100 dark:bg-[#040D0A] shrink-0">
+                            <img
+                              src={resolveMediaUrl(item.imageUrl)}
+                              referrerPolicy="no-referrer"
+                              className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 ${isOutOfStock ? 'grayscale opacity-50' : ''}`}
+                              alt={item.title}
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-transparent to-transparent" />
+                            <div className="absolute bottom-2 left-2.5 right-2.5 flex items-center justify-between gap-1 text-[10px] font-semibold text-white/95">
+                              <span className="truncate">Top · {item.sponsorName}</span>
+                              <span className="font-mono tabular-nums shrink-0">{item.stock} ta</span>
                             </div>
-                            <button 
-                              onClick={() => setActiveModalItem(item)}
-                              disabled={(item.stock || 0) <= 0 || user.ecoCoins < item.priceCoins}
-                              className="px-6 py-3 bg-white text-slate-950 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all disabled:opacity-50"
-                            >
-                              {(item.stock || 0) <= 0 ? 'Tugagan' : 'Almashtirish'}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Full Grid */}
-              <div className="space-y-8">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-2xl font-black uppercase tracking-tighter">Barcha Mahsulotlar</h2>
-                  <span className="text-slate-400 text-[10px] font-black uppercase tracking-widest">{filteredItems.length} ta sovg'a</span>
-                </div>
-                
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                  {filteredItems.map(item => {
-                    const isOutOfStock = (item.stock || 0) <= 0;
-                    const canAfford = user.ecoCoins >= item.priceCoins;
-
-                    return (
-                      <motion.div 
-                        layout
-                        key={item.id}
-                        className="group bg-white dark:bg-[#0f172a] rounded-[32px] border border-slate-200 dark:border-white/5 overflow-hidden shadow-xl hover:shadow-2xl hover:-translate-y-2 transition-all duration-300"
-                      >
-                        <div className="relative aspect-square overflow-hidden bg-slate-100 dark:bg-slate-800">
-                          <img 
-                            src={resolveMediaUrl(item.imageUrl)} 
-                            className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 ${isOutOfStock ? 'grayscale opacity-50' : ''}`}
-                            alt={item.title} 
-                          />
-                          <div className="absolute top-4 left-4 flex flex-col gap-2">
-                             <div className="px-2 py-1 rounded-lg bg-black/50 backdrop-blur-md text-[8px] font-black text-white uppercase tracking-widest">
-                               {item.sponsorName}
-                             </div>
-                             {isOutOfStock && (
-                               <div className="px-2 py-1 rounded-lg bg-rose-600 text-white text-[8px] font-black uppercase tracking-widest">
-                                 Tugagan
-                               </div>
-                             )}
-                          </div>
-                          <div className="absolute top-4 right-4 flex items-center gap-1.5">
                             {user.role === 'super_admin' && (
-                              <>
+                              <div className="absolute top-2 right-2 z-20 flex items-center gap-1">
                                 <button
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     openEditGiftModal(item);
                                   }}
-                                  className="p-1.5 rounded-lg bg-slate-900/80 text-white hover:bg-amber-500 hover:text-slate-950 transition-colors cursor-pointer"
+                                  className="w-8 h-8 rounded-lg bg-slate-900/80 text-white hover:bg-amber-500 hover:text-slate-950 flex items-center justify-center transition-colors cursor-pointer"
+                                  title="Tahrirlash"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    deleteShopItem(item.id);
+                                  }}
+                                  className="w-8 h-8 rounded-lg bg-slate-900/80 text-rose-400 hover:bg-rose-500 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                                  title="O'chirish"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="p-2.5 sm:p-3.5 flex flex-col justify-between flex-1 gap-2">
+                            <div className="space-y-1">
+                              <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white line-clamp-2 leading-snug">
+                                {item.title}
+                              </h3>
+                              {item.redemptionGate?.mode && item.redemptionGate.mode !== 'none' && (
+                                <p className="text-[10px] font-medium text-amber-600 dark:text-amber-400 truncate">
+                                  {item.redemptionGate.mode === 'ad'
+                                    ? 'Reklama sharti'
+                                    : item.redemptionGate.mode === 'subscription'
+                                    ? `Obuna (${item.redemptionGate.requiredSubscriptions?.length || 0})`
+                                    : 'Reklama + obuna'}
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="pt-2 border-t border-slate-100 dark:border-emerald-500/15 space-y-2">
+                              <div className="flex items-center justify-between gap-1">
+                                <div className="flex items-center gap-1 text-amber-500 dark:text-amber-400 font-bold font-mono tabular-nums text-xs sm:text-sm">
+                                  <Coins className="w-3.5 h-3.5 fill-current shrink-0" />
+                                  <span>{item.priceCoins.toLocaleString()}</span>
+                                </div>
+                                <span className="text-[10px] text-slate-400 truncate">EcoCoin</span>
+                              </div>
+                              <button
+                                onClick={() => setActiveModalItem(item)}
+                                disabled={isOutOfStock || !canAfford}
+                                className={`w-full min-h-[40px] sm:min-h-[44px] px-2.5 py-2 rounded-xl text-[11px] font-bold transition-all cursor-pointer ${
+                                  isOutOfStock || !canAfford
+                                    ? 'bg-slate-100 dark:bg-white/5 text-slate-400 cursor-not-allowed'
+                                    : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 active:scale-[0.98]'
+                                }`}
+                              >
+                                {isOutOfStock ? 'Tugagan' : !canAfford ? 'Yetarli emas' : 'Almashtirish'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Full Grid — Compact 2-Column Mobile / 3-4 Column Desktop */}
+              <div className="space-y-3.5">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-lg sm:text-xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+                    Barcha sovg'alar
+                  </h2>
+                  <span className="text-slate-500 dark:text-slate-400 text-xs font-semibold tabular-nums">
+                    {filteredItems.length} ta mahsulot
+                  </span>
+                </div>
+
+                {filteredItems.length === 0 ? (
+                  <div className="p-10 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 text-center space-y-2">
+                    <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Mos sovg'a topilmadi</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Boshqa kategoriya yoki qidiruv so'zini tanlang.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5 sm:gap-4">
+                    {filteredItems.map(item => {
+                      const isOutOfStock = (item.stock || 0) <= 0;
+                      const canAfford = user.ecoCoins >= item.priceCoins;
+
+                      return (
+                        <motion.div
+                          layout
+                          key={item.id}
+                          className="group flex flex-col h-full bg-white dark:bg-[#061812] rounded-2xl border border-slate-200 dark:border-emerald-500/20 overflow-hidden shadow-sm hover:border-emerald-400/50 transition-all duration-200"
+                        >
+                          <div className="relative h-28 sm:h-36 w-full overflow-hidden bg-slate-100 dark:bg-[#040D0A] shrink-0">
+                            <img
+                              src={resolveMediaUrl(item.imageUrl)}
+                              referrerPolicy="no-referrer"
+                              className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 ${isOutOfStock ? 'grayscale opacity-50' : ''}`}
+                              alt={item.title}
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                            <div className="absolute bottom-2 left-2.5 right-2.5 flex items-center justify-between gap-1 text-[10px] font-semibold text-white/95">
+                              <span className="truncate">{item.sponsorName}</span>
+                              <span className="font-mono tabular-nums shrink-0">
+                                {isOutOfStock ? 'Tugagan' : `${item.stock} ta`}
+                              </span>
+                            </div>
+                            {user.role === 'super_admin' && (
+                              <div className="absolute top-2 right-2 z-20 flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openEditGiftModal(item);
+                                  }}
+                                  className="w-8 h-8 rounded-lg bg-slate-900/80 text-white hover:bg-amber-500 hover:text-slate-950 flex items-center justify-center transition-colors cursor-pointer"
                                   title="Sovg'ani tahrirlash"
                                 >
                                   <Edit2 className="w-3.5 h-3.5" />
@@ -898,61 +1070,62 @@ export const EcoShopPage: React.FC = () => {
                                     e.stopPropagation();
                                     deleteShopItem(item.id);
                                   }}
-                                  className="p-1.5 rounded-lg bg-slate-900/80 text-rose-400 hover:bg-rose-500 hover:text-white transition-colors cursor-pointer"
+                                  className="w-8 h-8 rounded-lg bg-slate-900/80 text-rose-400 hover:bg-rose-500 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
                                   title="Sovg'ani o'chirish"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
-                              </>
-                            )}
-                            <div className="px-2 py-1 rounded-lg bg-emerald-600 text-white text-[10px] font-black font-mono shadow-lg">
-                              {item.stock} ta
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="p-6 space-y-4">
-                          <div className="space-y-1">
-                            <h4 className="text-base font-black uppercase tracking-tight line-clamp-1 dark:text-white">{item.title}</h4>
-                            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium line-clamp-2 leading-relaxed">
-                              {item.description}
-                            </p>
-                            {item.redemptionGate?.mode && item.redemptionGate.mode !== 'none' && (
-                              <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 truncate">
-                                {item.redemptionGate.mode === 'ad'
-                                  ? 'Shart · Reklama bilan'
-                                  : item.redemptionGate.mode === 'subscription'
-                                  ? `Shart · Majburiy obuna (${item.redemptionGate.requiredSubscriptions?.length || 0})`
-                                  : `Shart · Reklama va obuna (${item.redemptionGate.requiredSubscriptions?.length || 0})`}
-                              </p>
-                            )}
-                          </div>
-
-                          <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-white/5">
-                            <div className="flex flex-col">
-                              <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Narxi</span>
-                              <div className="flex items-center gap-1.5 text-amber-500 font-black font-mono">
-                                <Coins className="w-4 h-4 fill-amber-500" />
-                                <span className="text-lg">{item.priceCoins.toLocaleString()}</span>
                               </div>
-                            </div>
-                            <button
-                              disabled={isOutOfStock || !canAfford}
-                              onClick={() => setActiveModalItem(item)}
-                              className={`p-3 rounded-2xl transition-all ${
-                                isOutOfStock || !canAfford
-                                  ? 'bg-slate-100 dark:bg-white/5 text-slate-400 cursor-not-allowed'
-                                  : 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20 hover:scale-110 active:scale-95'
-                              }`}
-                            >
-                              <ArrowRight className="w-5 h-5" />
-                            </button>
+                            )}
                           </div>
-                        </div>
-                      </motion.div>
-                    );
-                  })}
-                </div>
+
+                          <div className="p-2.5 sm:p-3.5 flex flex-col justify-between flex-1 gap-2">
+                            <div className="space-y-1">
+                              <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white line-clamp-2 leading-snug">
+                                {item.title}
+                              </h4>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1">
+                                {item.description}
+                              </p>
+                              {item.redemptionGate?.mode && item.redemptionGate.mode !== 'none' && (
+                                <p className="text-[10px] font-medium text-amber-600 dark:text-amber-400 truncate">
+                                  {item.redemptionGate.mode === 'ad'
+                                    ? 'Reklama sharti'
+                                    : item.redemptionGate.mode === 'subscription'
+                                    ? `Obuna (${item.redemptionGate.requiredSubscriptions?.length || 0})`
+                                    : `Reklama + obuna (${item.redemptionGate.requiredSubscriptions?.length || 0})`}
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="pt-2 border-t border-slate-100 dark:border-emerald-500/15 space-y-2">
+                              <div className="flex items-center justify-between gap-1">
+                                <div className="flex items-center gap-1 text-amber-500 dark:text-amber-400 font-bold font-mono tabular-nums text-xs sm:text-sm">
+                                  <Coins className="w-3.5 h-3.5 fill-current shrink-0" />
+                                  <span>{item.priceCoins.toLocaleString()}</span>
+                                </div>
+                                <span className="text-[10px] text-slate-400 capitalize truncate">
+                                  {item.category}
+                                </span>
+                              </div>
+                              <button
+                                disabled={isOutOfStock || !canAfford}
+                                onClick={() => setActiveModalItem(item)}
+                                className={`w-full min-h-[40px] sm:min-h-[44px] px-2.5 py-2 rounded-xl text-[11px] font-bold transition-all cursor-pointer ${
+                                  isOutOfStock || !canAfford
+                                    ? 'bg-slate-100 dark:bg-white/5 text-slate-400 cursor-not-allowed'
+                                    : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 active:scale-[0.98]'
+                                }`}
+                              >
+                                {isOutOfStock ? 'Tugagan' : !canAfford ? 'Yetarli emas' : 'Almashtirish'}
+                              </button>
+                            </div>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </motion.div>
           ) : (
@@ -1350,13 +1523,18 @@ export const EcoShopPage: React.FC = () => {
                           </div>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          openAdTargetUrl(target.url);
+                      <a
+                        href={normalizeAdTargetUrl(target.url)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={e => {
                           setVisitedTargetIds(prev => (prev.includes(target.id) ? prev : [...prev, target.id]));
+                          if (isInsideTelegramWebApp()) {
+                            e.preventDefault();
+                            openAdTargetUrl(target.url);
+                          }
                         }}
-                        className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shrink-0 transition-colors ${
+                        className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shrink-0 transition-colors no-underline ${
                           visited
                             ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
                             : 'bg-sky-600 text-white hover:bg-sky-500'
@@ -1364,7 +1542,7 @@ export const EcoShopPage: React.FC = () => {
                       >
                         <ExternalLink className="w-3.5 h-3.5" />
                         <span>{visited ? "O'tildi" : "Obuna bo'lish"}</span>
-                      </button>
+                      </a>
                     </div>
                   );
                 })}
@@ -1570,6 +1748,55 @@ export const EcoShopPage: React.FC = () => {
                 onChange={e => setAdSubheadlineInput(e.target.value)}
                 className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
               />
+              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2.5">
+                <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                  Reklama profil rasmi (Avatar / Logotip)
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-full overflow-hidden bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                    {isAdLogoImage(adSponsorLogoInput) ? (
+                      <img
+                        src={resolveMediaUrl(adSponsorLogoInput)}
+                        alt="Avatar"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-base font-black text-emerald-500">
+                        {adSponsorLogoInput && adSponsorLogoInput.trim().length <= 3
+                          ? adSponsorLogoInput
+                          : (adSponsorInput || adTitleInput || 'E').slice(0, 1).toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                  <label className="flex-1 px-3 py-2.5 rounded-xl bg-emerald-500/10 border border-dashed border-emerald-500/40 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer">
+                    <ImageIcon className="w-4 h-4 shrink-0" />
+                    <span>{uploadingAdLogo ? 'Yuklanmoqda...' : 'Profil rasmi yuklash'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={e => handleShopMediaUpload(e, 'ad_logo')}
+                      className="hidden"
+                    />
+                  </label>
+                  {isAdLogoImage(adSponsorLogoInput) && (
+                    <button
+                      type="button"
+                      onClick={() => setAdSponsorLogoInput('')}
+                      className="px-2.5 py-2 rounded-xl bg-rose-500/10 text-rose-500 text-[10px] font-bold cursor-pointer"
+                    >
+                      O&lsquo;chirish
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  placeholder="Yoki profil rasmi URL manzili (ixtiyoriy)"
+                  value={adSponsorLogoInput}
+                  onChange={e => setAdSponsorLogoInput(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-[11px] font-bold outline-none"
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <label className="px-3 py-3 rounded-2xl bg-sky-500/10 border border-dashed border-sky-500/40 text-sky-600 dark:text-sky-400 text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer">
                   <ImageIcon className="w-4 h-4 shrink-0" />
@@ -1748,7 +1975,7 @@ export const EcoShopPage: React.FC = () => {
               )}
               <button
                 type="submit"
-                disabled={uploadingAdImg || uploadingAdVideo}
+                disabled={uploadingAdImg || uploadingAdLogo || uploadingAdVideo}
                 className="w-full py-3.5 bg-amber-500 text-slate-950 rounded-2xl text-xs font-black uppercase tracking-widest cursor-pointer disabled:opacity-50"
               >
                 {editingAd ? 'Saqlash' : 'Reklamani Joylash'}

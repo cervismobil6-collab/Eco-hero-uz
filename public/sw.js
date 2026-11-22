@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ecohero-cache-v2';
+const CACHE_NAME = 'ecohero-cache-v3';
 const STATIC_ASSETS = [
   '/manifest.json',
   '/icon.svg',
@@ -32,17 +32,20 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(event.request.url);
 
-  // Never intercept cross-origin requests, API endpoints, WebSocket, or heavy Cesium workers/assets
+  // Never intercept cross-origin requests, API/WS endpoints, Cesium workers, or Vite dev modules/deps
   if (
     url.origin !== self.location.origin ||
     url.pathname.startsWith('/api/') ||
     url.pathname.startsWith('/ws/') ||
-    url.pathname.startsWith('/cesium/')
+    url.pathname.startsWith('/cesium/') ||
+    url.pathname.startsWith('/@') ||
+    url.pathname.startsWith('/src/') ||
+    url.pathname.startsWith('/node_modules/')
   ) {
     return;
   }
 
-  // Network-first for HTML navigations so fresh Eskiz/hosting deployments never serve stale index.html
+  // Network-first for HTML navigations so fresh deployments never serve stale index.html
   const isHtmlRequest =
     event.request.mode === 'navigate' ||
     (event.request.headers.get('accept') || '').includes('text/html');
@@ -59,6 +62,14 @@ self.addEventListener('fetch', (event) => {
         })
         .catch(() => caches.match('/index.html'))
     );
+    return;
+  }
+
+  // Only cache built static assets / icons / manifests
+  const isStaticAsset =
+    url.pathname.startsWith('/assets/') ||
+    STATIC_ASSETS.includes(url.pathname);
+  if (!isStaticAsset) {
     return;
   }
 

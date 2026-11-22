@@ -882,23 +882,23 @@ export const EcoMapPage: React.FC = () => {
   );
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4.5rem)] md:h-[calc(100vh-2rem)] w-full max-w-7xl mx-auto px-2 sm:px-4 pt-2 pb-2 gap-2.5">
-      {/* Compact Top Header Bar */}
-      <header className="shrink-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 rounded-2xl px-3 sm:px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 shadow-sm">
+    <div className="flex flex-col h-[calc(100vh-4.5rem)] md:h-[calc(100vh-2rem)] w-full max-w-7xl mx-auto px-2 sm:px-4 pt-2 pb-2 gap-2">
+      {/* Futuristic Environmental Intelligence Header Bar */}
+      <header className="shrink-0 eco-glass rounded-2xl px-3 sm:px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 shadow-lg">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 text-slate-950 flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/25">
             <Globe className="w-5 h-5" />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate">
-                EcoHero Gibrid Xarita
+              <h1 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate font-display">
+                EcoHero Geo-Razvedka Xaritasi
               </h1>
-              <span className="text-[11px] font-mono tabular-nums text-emerald-700 dark:text-emerald-400 font-semibold">
+              <span className="text-[11px] font-mono tabular-nums text-emerald-700 dark:text-emerald-300 font-semibold">
                 {schoolsWithCoords.length} maktab · {layerFilteredReports.length} ariza
               </span>
             </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+            <p className="text-[11px] text-slate-500 dark:text-emerald-100/65 truncate">
               {mapMode === '2d'
                 ? useGoogleMap
                   ? 'Google Maps HD 2D'
@@ -918,27 +918,27 @@ export const EcoMapPage: React.FC = () => {
         {/* Search & Mode Switcher */}
         <div className="flex items-center gap-2 flex-1 sm:flex-initial justify-end">
           <div className="relative flex-1 sm:w-56 md:w-64">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Search className="w-4 h-4 text-emerald-500/70 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="search"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Maktab, hudud, ariza..."
-              className="w-full min-h-[40px] pl-9 pr-3 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-emerald-500"
+              className="w-full min-h-[40px] pl-9 pr-3 rounded-xl text-xs bg-slate-50 dark:bg-[#040D0A]/85 border border-slate-200 dark:border-emerald-500/20 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-emerald-400"
             />
           </div>
 
-          <div className="flex items-center rounded-xl bg-slate-100 dark:bg-slate-800 p-1 shrink-0">
+          <div className="flex items-center rounded-xl bg-slate-100 dark:bg-[#040D0A]/90 border border-slate-200/70 dark:border-emerald-500/20 p-1 shrink-0">
             <button
               type="button"
               onClick={() => {
                 triggerHaptic('light');
                 setMapMode('2d');
               }}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
                 mapMode === '2d'
-                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                  ? 'bg-emerald-500 text-slate-950 shadow-sm font-bold'
+                  : 'text-slate-600 dark:text-emerald-100/70 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               2D
@@ -946,10 +946,10 @@ export const EcoMapPage: React.FC = () => {
             <button
               type="button"
               onClick={handleEnter3DMode}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors ${
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer ${
                 mapMode === '3d'
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400'
+                  ? 'bg-indigo-500 text-white shadow-sm font-bold'
+                  : 'text-slate-600 dark:text-emerald-100/70 hover:text-indigo-500 dark:hover:text-indigo-300'
               }`}
               title="3D Globus (CesiumJS)"
             >
@@ -959,6 +959,45 @@ export const EcoMapPage: React.FC = () => {
           </div>
         </div>
       </header>
+
+      {/* Instant Category Intelligence Filter Strip */}
+      <div className="shrink-0 flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar">
+        <button
+          type="button"
+          onClick={() => {
+            triggerHaptic('light');
+            setSelectedCategory('all');
+          }}
+          className={`shrink-0 px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer border ${
+            selectedCategory === 'all'
+              ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-sm shadow-emerald-500/20'
+              : 'eco-glass text-slate-600 dark:text-emerald-100/75 hover:border-emerald-500/40'
+          }`}
+        >
+          Barchasi ({filteredReports.length})
+        </button>
+        {(Object.keys(CATEGORY_LABELS) as ProblemCategory[]).map((cat) => {
+          const catCount = filteredReports.filter((r) => r.category === cat).length;
+          const active = selectedCategory === cat;
+          return (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => {
+                triggerHaptic('light');
+                setSelectedCategory(active ? 'all' : cat);
+              }}
+              className={`shrink-0 px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer border tabular-nums ${
+                active
+                  ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-sm shadow-emerald-500/20'
+                  : 'eco-glass text-slate-600 dark:text-emerald-100/75 hover:border-emerald-500/40'
+              }`}
+            >
+              {CATEGORY_LABELS[cat]} ({catCount})
+            </button>
+          );
+        })}
+      </div>
 
       {/* Honest Satellite & Tile / Data Notices */}
       {((!useGoogleMap && (baseStyle === 'satellite' || !googleMapsApiKey) && !satelliteNoticeDismissed) || tileNotice || dataError) && (
@@ -1004,7 +1043,7 @@ export const EcoMapPage: React.FC = () => {
       )}
 
       {/* Main Map Viewport & Desktop Control Rail */}
-      <div className="relative flex-1 min-h-0 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950 shadow-sm">
+      <div className="relative flex-1 min-h-0 rounded-2xl overflow-hidden border border-slate-200 dark:border-emerald-500/20 bg-slate-100 dark:bg-[#040D0A] shadow-xl">
         {mapMode === '2d' ? (
           useGoogleMap ? (
             <EcoGoogleMap
@@ -1126,8 +1165,8 @@ export const EcoMapPage: React.FC = () => {
 
         {/* Desktop Left Collapsible Control Panel */}
         <aside className="hidden lg:flex flex-col absolute top-3 left-3 bottom-3 z-20 w-80 pointer-events-none">
-          <div className="pointer-events-auto bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl flex flex-col max-h-full overflow-hidden">
-            <div className="px-3.5 py-2.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <div className="pointer-events-auto eco-glass rounded-2xl shadow-2xl flex flex-col max-h-full overflow-hidden">
+            <div className="px-3.5 py-2.5 border-b border-slate-100 dark:border-emerald-500/15 flex items-center justify-between">
               <div className="flex items-center gap-1">
                 {(
                   [
@@ -1143,10 +1182,10 @@ export const EcoMapPage: React.FC = () => {
                       setMobileSheetTab(t.id);
                       setDesktopSidebarOpen(true);
                     }}
-                    className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
                       desktopSidebarOpen && mobileSheetTab === t.id
-                        ? 'bg-emerald-600 text-white'
-                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                        ? 'bg-emerald-500 text-slate-950 font-bold shadow-sm'
+                        : 'text-slate-600 dark:text-emerald-100/75 hover:bg-slate-100 dark:hover:bg-emerald-500/10'
                     }`}
                   >
                     <t.icon className="w-3.5 h-3.5" />
@@ -1157,7 +1196,7 @@ export const EcoMapPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setDesktopSidebarOpen((v) => !v)}
-                className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold"
+                className="p-1.5 rounded-lg text-slate-500 dark:text-emerald-200/70 hover:bg-slate-100 dark:hover:bg-emerald-500/10 text-xs font-semibold cursor-pointer"
                 title={desktopSidebarOpen ? 'Yig‘ish' : 'Ochish'}
               >
                 {desktopSidebarOpen ? '—' : '+'}
@@ -1172,7 +1211,7 @@ export const EcoMapPage: React.FC = () => {
         </aside>
 
         {/* Top-Right Basemap Switcher */}
-        <div className="absolute top-3 right-3 z-20 flex items-center gap-1 p-1 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 shadow-lg">
+        <div className="absolute top-3 right-3 z-20 flex items-center gap-1 p-1 rounded-2xl eco-glass shadow-xl">
           {(useGoogleMap
             ? ([
                 { id: 'hybrid', label: 'Gibrid HD', icon: Satellite },
@@ -1196,10 +1235,10 @@ export const EcoMapPage: React.FC = () => {
                   setTileNotice(null);
                   setBaseStyle(styleBtn.id);
                 }}
-                className={`min-h-[38px] px-2.5 sm:px-3 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+                className={`min-h-[38px] px-2.5 sm:px-3 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
                   active
-                    ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    ? 'bg-emerald-500 text-slate-950 font-bold shadow-sm'
+                    : 'text-slate-700 dark:text-emerald-100/80 hover:bg-slate-100 dark:hover:bg-emerald-500/10'
                 }`}
               >
                 <styleBtn.icon className="w-3.5 h-3.5" />
@@ -1215,7 +1254,7 @@ export const EcoMapPage: React.FC = () => {
             type="button"
             onClick={() => setZoomAction({ type: 'in', ts: Date.now() })}
             aria-label="Yaqinlashtirish"
-            className="w-11 h-11 rounded-xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 shadow-lg flex items-center justify-center text-slate-700 dark:text-slate-200 hover:text-emerald-600"
+            className="w-11 h-11 rounded-xl eco-glass shadow-lg flex items-center justify-center text-slate-700 dark:text-emerald-100 hover:text-emerald-500 cursor-pointer"
           >
             <Plus className="w-5 h-5" />
           </button>
@@ -1223,7 +1262,7 @@ export const EcoMapPage: React.FC = () => {
             type="button"
             onClick={() => setZoomAction({ type: 'out', ts: Date.now() })}
             aria-label="Uzoqlashtirish"
-            className="w-11 h-11 rounded-xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 shadow-lg flex items-center justify-center text-slate-700 dark:text-slate-200 hover:text-emerald-600"
+            className="w-11 h-11 rounded-xl eco-glass shadow-lg flex items-center justify-center text-slate-700 dark:text-emerald-100 hover:text-emerald-500 cursor-pointer"
           >
             <Minus className="w-5 h-5" />
           </button>
@@ -1232,7 +1271,7 @@ export const EcoMapPage: React.FC = () => {
             onClick={() => setZoomAction({ type: 'reset', ts: Date.now() })}
             aria-label="O‘zbekiston ko‘rinishiga qaytish"
             title="O‘zbekiston ko‘rinishi"
-            className="w-11 h-11 rounded-xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 shadow-lg flex items-center justify-center text-slate-700 dark:text-slate-200 hover:text-emerald-600"
+            className="w-11 h-11 rounded-xl eco-glass shadow-lg flex items-center justify-center text-slate-700 dark:text-emerald-100 hover:text-emerald-500 cursor-pointer"
           >
             <RotateCcw className="w-4 h-4" />
           </button>
@@ -1241,7 +1280,7 @@ export const EcoMapPage: React.FC = () => {
             onClick={handleLocateUser}
             aria-label="Mening joylashuvim"
             title="Mening joylashuvim"
-            className="w-11 h-11 rounded-xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 shadow-lg flex items-center justify-center text-sky-600 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-950/50"
+            className="w-11 h-11 rounded-xl eco-glass shadow-lg flex items-center justify-center text-sky-600 dark:text-emerald-400 hover:bg-sky-50 dark:hover:bg-emerald-500/15 cursor-pointer"
           >
             <Navigation className="w-4 h-4" />
           </button>
@@ -1254,10 +1293,10 @@ export const EcoMapPage: React.FC = () => {
               }}
               aria-label="2.5D shahar binolari burchagi"
               title="2.5D shahar binolari burchagi"
-              className={`w-11 h-11 rounded-xl backdrop-blur-md border shadow-lg flex items-center justify-center text-[11px] font-bold transition-colors ${
+              className={`w-11 h-11 rounded-xl border shadow-lg flex items-center justify-center text-[11px] font-bold transition-colors cursor-pointer ${
                 isTilted25D
-                  ? 'bg-indigo-600 border-indigo-500 text-white'
-                  : 'bg-white/95 dark:bg-slate-900/95 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:text-indigo-600'
+                  ? 'bg-emerald-500 border-emerald-400 text-slate-950'
+                  : 'eco-glass text-slate-700 dark:text-emerald-100 hover:text-emerald-400'
               }`}
             >
               2.5D
@@ -1267,25 +1306,25 @@ export const EcoMapPage: React.FC = () => {
 
         {/* Map Legend Pill (Compact Bottom-Left Desktop in 2D) */}
         {mapMode === '2d' && (
-          <div className="hidden lg:flex absolute bottom-3 left-[21.5rem] z-10 items-center gap-3 px-3 py-1.5 rounded-xl bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border border-slate-200 dark:border-slate-800 text-[11px] font-medium text-slate-700 dark:text-slate-300 shadow-sm">
+          <div className="hidden lg:flex absolute bottom-3 left-[21.5rem] z-10 items-center gap-3 px-3.5 py-1.5 rounded-xl eco-glass text-[11px] font-medium text-slate-700 dark:text-emerald-100 shadow-lg">
             <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 inline-block" /> Maktab
+              <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 inline-block" /> Maktab
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-rose-600 inline-block" /> Chiqindi
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block" /> Chiqindi
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-sky-600 inline-block" /> Suv
+              <span className="w-2.5 h-2.5 rounded-full bg-sky-500 inline-block" /> Suv
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block" /> Daraxt / Yashil zona
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block" /> Daraxt / Yashil zona
             </span>
           </div>
         )}
 
         {/* Clicked Target Coordinate Action Bar */}
         {clickedCoords && !selectedSchool && !activeReportMatch && (
-          <div className="absolute bottom-20 lg:bottom-4 left-1/2 -translate-x-1/2 z-20 w-[92%] max-w-md bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-emerald-500/50 rounded-2xl p-3 shadow-2xl flex items-center justify-between gap-3">
+          <div className="absolute bottom-20 lg:bottom-4 left-1/2 -translate-x-1/2 z-20 w-[92%] max-w-md eco-glass border-emerald-400/50 rounded-2xl p-3 shadow-2xl flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
                 Tanlangan nuqta
@@ -1298,7 +1337,7 @@ export const EcoMapPage: React.FC = () => {
               <button
                 type="button"
                 onClick={handleSubmitFromClickedCoords}
-                className="min-h-[40px] px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors"
+                className="min-h-[40px] px-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-colors cursor-pointer"
               >
                 Shu nuqtadan ariza
               </button>
@@ -1306,7 +1345,7 @@ export const EcoMapPage: React.FC = () => {
                 type="button"
                 onClick={() => setClickedCoords(null)}
                 aria-label="Nuqtani olib tashlash"
-                className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1322,9 +1361,9 @@ export const EcoMapPage: React.FC = () => {
               setMobileSheetTab('layers');
               setMobileSheetOpen(true);
             }}
-            className="flex-1 min-h-[46px] px-3 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 shadow-xl text-xs font-semibold text-slate-900 dark:text-white flex items-center justify-center gap-2"
+            className="flex-1 min-h-[46px] px-3 rounded-2xl eco-glass shadow-xl text-xs font-semibold text-slate-900 dark:text-white flex items-center justify-center gap-2 cursor-pointer"
           >
-            <Layers className="w-4 h-4 text-emerald-600" />
+            <Layers className="w-4 h-4 text-emerald-400" />
             Qatlamlar
           </button>
           <button
@@ -1333,9 +1372,9 @@ export const EcoMapPage: React.FC = () => {
               setMobileSheetTab('filters');
               setMobileSheetOpen(true);
             }}
-            className="flex-1 min-h-[46px] px-3 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 shadow-xl text-xs font-semibold text-slate-900 dark:text-white flex items-center justify-center gap-2"
+            className="flex-1 min-h-[46px] px-3 rounded-2xl eco-glass shadow-xl text-xs font-semibold text-slate-900 dark:text-white flex items-center justify-center gap-2 cursor-pointer"
           >
-            <SlidersHorizontal className="w-4 h-4 text-indigo-600" />
+            <SlidersHorizontal className="w-4 h-4 text-sky-400" />
             Filtrlar
           </button>
           <button
@@ -1344,9 +1383,9 @@ export const EcoMapPage: React.FC = () => {
               setMobileSheetTab('results');
               setMobileSheetOpen(true);
             }}
-            className="flex-1 min-h-[46px] px-3 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 shadow-xl text-xs font-semibold text-slate-900 dark:text-white flex items-center justify-center gap-2"
+            className="flex-1 min-h-[46px] px-3 rounded-2xl eco-glass shadow-xl text-xs font-semibold text-slate-900 dark:text-white flex items-center justify-center gap-2 cursor-pointer"
           >
-            <MapPin className="w-4 h-4 text-rose-600" />
+            <MapPin className="w-4 h-4 text-rose-400" />
             Ro‘yxat
           </button>
         </div>
@@ -1355,11 +1394,11 @@ export const EcoMapPage: React.FC = () => {
       {/* Mobile Bottom Sheet Drawer */}
       {mobileSheetOpen && (
         <div
-          className="lg:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-sm flex items-end"
+          className="lg:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-end"
           onClick={() => setMobileSheetOpen(false)}
         >
           <div
-            className="w-full max-h-[82vh] bg-white dark:bg-slate-900 rounded-t-3xl border-t border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden"
+            className="w-full max-h-[82vh] bg-white dark:bg-[#071812] rounded-t-3xl border-t border-slate-200 dark:border-emerald-500/25 flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="pt-2.5 pb-1 flex justify-center">
@@ -1422,7 +1461,7 @@ export const EcoMapPage: React.FC = () => {
       {/* Eco-Report Detail Drawer */}
       {activeReportMatch && (
         <div
-          className="fixed inset-x-0 bottom-0 md:inset-y-4 md:right-4 md:left-auto z-40 w-full md:w-[420px] max-h-[85vh] md:max-h-[calc(100vh-2rem)] bg-white dark:bg-slate-900 border-t md:border border-slate-200 dark:border-slate-800 rounded-t-3xl md:rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+          className="fixed inset-x-0 bottom-0 md:inset-y-4 md:right-4 md:left-auto z-40 w-full md:w-[420px] max-h-[85vh] md:max-h-[calc(100vh-2rem)] bg-white dark:bg-[#071812] border-t md:border border-slate-200 dark:border-emerald-500/25 rounded-t-3xl md:rounded-2xl shadow-2xl flex flex-col overflow-hidden"
           role="dialog"
           aria-label={activeReportMatch.title}
         >

@@ -10,7 +10,6 @@ import {
   Clock,
 } from 'lucide-react';
 import { useEco } from '../../context/EcoContext';
-import { HomePostsManagerPanel } from './HomePostsManagerPanel';
 
 interface ModeratorDashboardViewProps {
   onNavigateTab: (tab: string) => void;
@@ -162,9 +161,6 @@ export const ModeratorDashboardView: React.FC<ModeratorDashboardViewProps> = ({ 
           <p className="text-xs text-slate-500">Jamoa va foydalanuvchilar bilan real vaqtda muloqot qiling.</p>
         </button>
       </div>
-
-      {/* Home Posts CMS */}
-      <HomePostsManagerPanel />
     </div>
   );
 };

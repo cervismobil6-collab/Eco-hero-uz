@@ -27,8 +27,8 @@ import {
   DistrictUserGrowthResponse,
   RosterCaptainEntry,
 } from '../../types/eco';
-import { HomePostsManagerPanel } from './HomePostsManagerPanel';
 import { EcoTelegramChatPanel } from '../chat/EcoTelegramChatPanel';
+import { StudentRatingManagerCard } from './StudentRatingManagerCard';
 
 function slugifyChatKey(val?: string): string {
   return String(val || '')
@@ -508,6 +508,13 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* District Student Monthly Rating (500+ threshold & TOP-3 Student Prizes) */}
+      <StudentRatingManagerCard
+        mode="district"
+        region={user.region}
+        district={user.district}
+      />
 
       {/* District School Captains Directory + Quick Command/Chat Buttons */}
       <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
@@ -1192,9 +1199,6 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
           title="Tuman Maktab Sardorlari & Viloyat Chati (Oddiy xabar, Buyruq & Rasm)"
         />
       </div>
-
-      {/* HomePage Posts Manager */}
-      <HomePostsManagerPanel />
     </div>
   );
 };

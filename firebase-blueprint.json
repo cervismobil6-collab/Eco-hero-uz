@@ -28,6 +28,11 @@
         "isVerified": { "type": "boolean", "description": "Tasdiqlangan foydalanuvchi" },
         "badge": { "type": "string", "maxLength": 100, "description": "Eko-daraja nishoni" },
         "telegramUsername": { "type": "string", "maxLength": 80, "description": "Telegram foydalanuvchi nomi" },
+        "grade": { "type": "string", "maxLength": 24, "description": "Sinf (masalan 7-A)" },
+        "ecoXP": { "type": "number", "description": "Tajriba ballari" },
+        "level": { "type": "number", "description": "Foydalanuvchi darajasi" },
+        "streakDays": { "type": "number", "description": "Ketma-ket faol kunlar" },
+        "lastStreakClaimDate": { "type": "string", "maxLength": 32, "description": "Oxirgi streak sanasi" },
         "allowStudentMessages": { "type": "boolean", "description": "O'quvchilararo chat ruxsati sozlamasi" },
         "createdAt": { "type": "string", "format": "date-time", "description": "Yaratilgan vaqt" },
         "updatedAt": { "type": "string", "format": "date-time", "description": "Yangilangan vaqt" },
@@ -310,9 +315,15 @@
       "properties": {
         "id": { "type": "string", "minLength": 1, "maxLength": 128 },
         "title": { "type": "string", "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 2000 },
         "priceCoins": { "type": "number" },
+        "category": { "type": "string", "maxLength": 80 },
         "stock": { "type": "number" },
-        "sponsorName": { "type": "string", "maxLength": 150 }
+        "imageUrl": { "type": "string", "maxLength": 1024 },
+        "sponsorName": { "type": "string", "maxLength": 150 },
+        "features": { "type": "array" },
+        "redemptionGate": { "type": "object" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "title", "priceCoins", "stock"]
     },
@@ -348,6 +359,7 @@
         "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
         "title": { "type": "string", "minLength": 2, "maxLength": 200 },
         "sponsorName": { "type": "string", "maxLength": 150 },
+        "sponsorLogo": { "type": "string", "maxLength": 1024 },
         "type": { "type": "string", "enum": ["banner", "video", "card"] },
         "placement": { "type": "string", "enum": ["home_top", "home_middle", "shop_top", "map_banner", "media_sidebar", "post_purchase", "earn_coins"] },
         "headline": { "type": "string", "maxLength": 300 },
@@ -356,12 +368,15 @@
         "videoUrl": { "type": "string", "maxLength": 1024 },
         "ctaText": { "type": "string", "maxLength": 80 },
         "ctaUrl": { "type": "string", "maxLength": 1024 },
+        "ctaType": { "type": "string", "enum": ["website", "telegram_bot", "telegram_channel"] },
+        "clickOpensLink": { "type": "boolean" },
         "rewardCoins": { "type": "number" },
         "skipAfterSeconds": { "type": "number" },
         "status": { "type": "string", "enum": ["active", "paused", "pending", "expired"] },
         "impressionsCount": { "type": "number" },
         "clicksCount": { "type": "number" },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "title", "placement", "headline", "status"]
     },
@@ -526,6 +541,129 @@
         "respondedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "requesterUid", "targetUid", "status", "createdAt"]
+    },
+    "EcoMission": {
+      "title": "EcoMission",
+      "description": "Missiyalar bo'limi topshiriqlari (quiz, Telegram kanal obunasi va amaliy topshiriqlar)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "type": { "type": "string", "enum": ["quiz", "channel_subscribe", "custom_task"] },
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "rewardCoins": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "paused"] },
+        "category": { "type": "string", "maxLength": 64 },
+        "questions": { "type": "array" },
+        "passingPercent": { "type": "number" },
+        "question": { "type": "string", "maxLength": 500 },
+        "options": { "type": "array" },
+        "correctIndex": { "type": "number" },
+        "explanation": { "type": "string", "maxLength": 1000 },
+        "channelUsername": { "type": "string", "maxLength": 120 },
+        "channelUrl": { "type": "string", "maxLength": 1024 },
+        "requiresProof": { "type": "boolean" },
+        "proofType": { "type": "string", "maxLength": 32 },
+        "createdByUid": { "type": "string", "maxLength": 128 },
+        "createdByName": { "type": "string", "maxLength": 150 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "type", "title", "rewardCoins", "status"]
+    },
+    "CatalogTombstone": {
+      "title": "CatalogTombstone",
+      "description": "Super Admin tomonidan o'chirilgan boshlang'ich/katalog yozuvlari ro'yxati",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "collectionName": { "type": "string", "enum": ["eco_missions", "shopItems", "eco_ads", "home_posts"] },
+        "targetId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "deletedByUid": { "type": "string", "maxLength": 128 },
+        "deletedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "collectionName", "targetId", "deletedAt"]
+    },
+    "LiveMetrics": {
+      "title": "LiveMetrics",
+      "description": "Platformaning jonli umumiy ko'rsatkichlari (maktablar, o'quvchilar, bot foydalanuvchilari, daraxtlar)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "totalSchools": { "type": "number" },
+        "totalUsers": { "type": "number" },
+        "botUsersCount": { "type": "number" },
+        "totalDistricts": { "type": "number" },
+        "totalRegions": { "type": "number" },
+        "schoolCaptainsCount": { "type": "number" },
+        "pendingApplicationsCount": { "type": "number" },
+        "shopOrdersCount": { "type": "number" },
+        "resolvedReports": { "type": "number" },
+        "totalReports": { "type": "number" },
+        "treesPlanted": { "type": "number" },
+        "activeAmbassadors": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "totalSchools", "totalUsers", "botUsersCount", "updatedAt"]
+    },
+    "QrEcoScan": {
+      "title": "QrEcoScan",
+      "description": "O'quvchi QR-ID orqali Eko-Punktda topshirilgan qayta ishlash va ko'chat skanerlari",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "studentUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "studentName": { "type": "string", "maxLength": 150 },
+        "studentGrade": { "type": "string", "maxLength": 24 },
+        "schoolId": { "type": "string", "maxLength": 128 },
+        "schoolName": { "type": "string", "maxLength": 200 },
+        "region": { "type": "string", "maxLength": 100 },
+        "district": { "type": "string", "maxLength": 100 },
+        "materialType": { "type": "string", "enum": ["plastic", "paper", "glass", "metal", "sapling"] },
+        "weightKg": { "type": "number" },
+        "coinsAwarded": { "type": "number" },
+        "scannedByUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "scannedByName": { "type": "string", "maxLength": 150 },
+        "note": { "type": "string", "maxLength": 200 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "studentUid", "schoolId", "materialType", "weightKg", "coinsAwarded", "scannedByUid", "createdAt"]
+    },
+    "SchoolDuel": {
+      "title": "SchoolDuel",
+      "description": "7 kunlik maktablararo ekologik duel bellashuvlari",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "challengerSchoolId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "challengerName": { "type": "string", "maxLength": 200 },
+        "opponentSchoolId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "opponentName": { "type": "string", "maxLength": 200 },
+        "category": { "type": "string", "enum": ["trees", "waste_kg", "coins"] },
+        "rewardCoins": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "active", "completed", "declined"] },
+        "startedAt": { "type": "string", "format": "date-time" },
+        "endsAt": { "type": "string", "format": "date-time" },
+        "createdByUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "challengerSchoolId", "opponentSchoolId", "category", "rewardCoins", "status", "createdByUid", "createdAt"]
+    },
+    "EcoCertificate": {
+      "title": "EcoCertificate",
+      "description": "QR-kod bilan himoyalangan rasmiy Eko-Sertifikatlar",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "entityName": { "type": "string", "minLength": 2, "maxLength": 150 },
+        "schoolName": { "type": "string", "maxLength": 200 },
+        "tier": { "type": "string", "maxLength": 64 },
+        "category": { "type": "string", "maxLength": 200 },
+        "verificationCode": { "type": "string", "minLength": 4, "maxLength": 64 },
+        "issuedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "uid", "entityName", "tier", "verificationCode", "issuedAt"]
     }
   },
   "firestore": {
@@ -617,6 +755,14 @@
       "schema": "HomePost",
       "description": "Maktab sardorlari va koordinatorlar boshqaradigan bosh sahifa yangilik va reklama postlari"
     },
+    "/eco_missions/{missionId}": {
+      "schema": "EcoMission",
+      "description": "Missiyalar bo'limidagi quiz, kanal obunasi va amaliy topshiriqlar"
+    },
+    "/catalog_tombstones/{tombstoneId}": {
+      "schema": "CatalogTombstone",
+      "description": "O'chirilgan seed va katalog yozuvlari tarixi"
+    },
     "/monthly_awards/{awardId}": {
       "schema": "MonthlyAward",
       "description": "Tuman bo'yicha oy yakuni TOP-3 maktab va Eko-Elchi taqdirlash yozuvlari"
@@ -628,6 +774,22 @@
     "/chat_permissions/{permissionId}": {
       "schema": "ChatPermission",
       "description": "O'quvchilararo yozishish ruxsatlari"
+    },
+    "/live_metrics/{metricId}": {
+      "schema": "LiveMetrics",
+      "description": "Real-vaqt umumiy statistika ko'rsatkichlari"
+    },
+    "/qr_eco_scans/{scanId}": {
+      "schema": "QrEcoScan",
+      "description": "QR Eko-Punkt skanerlash yozuvlari"
+    },
+    "/school_duels/{duelId}": {
+      "schema": "SchoolDuel",
+      "description": "Maktablararo 7 kunlik ekologik duellar"
+    },
+    "/certificates/{certId}": {
+      "schema": "EcoCertificate",
+      "description": "QR-kodli rasmiy eko-sertifikatlar"
     }
   }
 }

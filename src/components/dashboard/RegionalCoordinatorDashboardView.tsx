@@ -16,7 +16,6 @@ import {
 import { useEco } from '../../context/EcoContext';
 import { AnalyticsResponse, RosterCoordinatorEntry } from '../../types/eco';
 import { UZBEKISTAN_DISTRICTS, UZBEKISTAN_REGIONS } from '../../data/mockData';
-import { HomePostsManagerPanel } from './HomePostsManagerPanel';
 import { EcoTelegramChatPanel } from '../chat/EcoTelegramChatPanel';
 
 function slugifyChatKey(val?: string): string {
@@ -592,9 +591,6 @@ export const RegionalCoordinatorDashboardView: React.FC = () => {
           title="Viloyat va Tuman Koordinatorlari Chati (Topshiriq, G‘oya & Rasm)"
         />
       </div>
-
-      {/* HomePage Posts Manager */}
-      <HomePostsManagerPanel />
     </div>
   );
 };

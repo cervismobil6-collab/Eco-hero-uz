@@ -108,13 +108,26 @@ export function normalizeAdTargetUrl(rawUrl?: string): string {
   return `https://${trimmed}`;
 }
 
+export function isInsideTelegramWebApp(): boolean {
+  if (typeof window === 'undefined') return false;
+  const tg = (window as any).Telegram?.WebApp;
+  if (!tg) return false;
+  const hasInitData = Boolean(
+    String(tg.initData || '').trim() || tg.initDataUnsafe?.user?.id
+  );
+  const hasRealPlatform = Boolean(tg.platform && tg.platform !== 'unknown');
+  return hasInitData || hasRealPlatform;
+}
+
 export function openAdTargetUrl(rawUrl?: string): void {
   const url = normalizeAdTargetUrl(rawUrl);
   if (!url || typeof window === 'undefined') return;
   try {
     const tg = (window as any).Telegram?.WebApp;
-    const isTelegramLink = /^https?:\/\/(t\.me|telegram\.me)\//i.test(url) || /^tg:\/\//i.test(url);
-    if (tg) {
+    const isTelegramLink =
+      /^https?:\/\/(t\.me|telegram\.me)\//i.test(url) || /^tg:\/\//i.test(url);
+
+    if (isInsideTelegramWebApp() && tg) {
       if (isTelegramLink && typeof tg.openTelegramLink === 'function') {
         tg.openTelegramLink(url);
         return;
@@ -124,6 +137,10 @@ export function openAdTargetUrl(rawUrl?: string): void {
         return;
       }
     }
+
+    const opened = window.open(url, '_blank', 'noopener,noreferrer');
+    if (opened) return;
+
     const anchor = document.createElement('a');
     anchor.href = url;
     anchor.target = '_blank';

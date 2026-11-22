@@ -46,36 +46,45 @@ function getVoucherCodeFromLocation(): string | null {
   return null;
 }
 
-// Ultra-Smooth Native Telegram Shimmer Skeleton
+// Ultra-Smooth Forest-Obsidian Shimmer Skeleton
 const PageSkeletonLoader: React.FC = () => {
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8 space-y-6 animate-pulse">
-      {/* Header Skeleton */}
-      <div className="h-32 rounded-3xl bg-slate-900/40 border border-slate-800/60 p-6 flex items-center justify-between">
+    <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
+      <div className="h-36 rounded-3xl eco-surface p-6 flex items-center justify-between">
         <div className="space-y-3 w-2/3">
-          <div className="h-4 w-32 bg-emerald-500/20 rounded-full" />
-          <div className="h-8 w-64 bg-slate-800 rounded-2xl" />
-          <div className="h-3 w-48 bg-slate-800/60 rounded-full" />
+          <div className="h-3.5 w-36 eco-skeleton rounded-full" />
+          <div className="h-8 w-64 eco-skeleton rounded-2xl" />
+          <div className="h-3 w-48 eco-skeleton rounded-full" />
         </div>
-        <div className="w-12 h-12 rounded-2xl bg-slate-800/80 flex items-center justify-center">
+        <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
           <Loader2 className="w-6 h-6 text-emerald-400 animate-spin" />
         </div>
       </div>
 
-      {/* Grid Skeleton */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="h-48 rounded-3xl bg-slate-900/30 border border-slate-800/40 p-6 space-y-4" />
-        <div className="h-48 rounded-3xl bg-slate-900/30 border border-slate-800/40 p-6 space-y-4" />
-        <div className="h-48 rounded-3xl bg-slate-900/30 border border-slate-800/40 p-6 space-y-4" />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div className="h-44 rounded-3xl eco-surface p-5 space-y-3">
+          <div className="h-5 w-1/3 eco-skeleton rounded-xl" />
+          <div className="h-10 w-1/2 eco-skeleton rounded-2xl" />
+          <div className="h-3 w-3/4 eco-skeleton rounded-full" />
+        </div>
+        <div className="h-44 rounded-3xl eco-surface p-5 space-y-3">
+          <div className="h-5 w-1/3 eco-skeleton rounded-xl" />
+          <div className="h-10 w-1/2 eco-skeleton rounded-2xl" />
+          <div className="h-3 w-3/4 eco-skeleton rounded-full" />
+        </div>
+        <div className="h-44 rounded-3xl eco-surface p-5 space-y-3">
+          <div className="h-5 w-1/3 eco-skeleton rounded-xl" />
+          <div className="h-10 w-1/2 eco-skeleton rounded-2xl" />
+          <div className="h-3 w-3/4 eco-skeleton rounded-full" />
+        </div>
       </div>
 
-      {/* Content Skeleton */}
-      <div className="h-96 rounded-3xl bg-slate-900/20 border border-slate-800/30 p-8 flex flex-col items-center justify-center text-center space-y-3">
-        <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400">
-          <Sparkles className="w-6 h-6 animate-bounce" />
+      <div className="h-72 rounded-3xl eco-surface p-8 flex flex-col items-center justify-center text-center space-y-3">
+        <div className="w-12 h-12 rounded-2xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-emerald-400">
+          <Sparkles className="w-6 h-6" />
         </div>
-        <div className="h-4 w-40 bg-slate-800 rounded-full" />
-        <div className="h-3 w-24 bg-slate-800/60 rounded-full" />
+        <div className="h-4 w-44 eco-skeleton rounded-full" />
+        <div className="h-3 w-28 eco-skeleton rounded-full" />
       </div>
     </div>
   );
@@ -300,7 +309,7 @@ const AppContent: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen w-full max-w-full overflow-x-clip bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col transition-colors selection:bg-emerald-500/20 selection:text-emerald-300">
+    <div className="min-h-screen w-full max-w-full overflow-x-clip bg-[#F4F8F5] dark:bg-[#040D0A] text-slate-900 dark:text-slate-100 flex flex-col transition-colors selection:bg-emerald-500/25 selection:text-emerald-300">
       {gmpQuotaExceeded && (
         <div className="bg-amber-50 border-b border-amber-200 text-amber-900 px-4 py-2.5 text-xs md:text-sm text-center sticky top-0 z-50 shadow-sm">
           <span>
