@@ -7,16 +7,21 @@ import { centralDb, findUserByAnyIdentifier } from './server-db';
 
 dotenv.config({ override: true });
 
-// Read Firebase web API key for server-side ID token verification if supplied
-let FIREBASE_WEB_API_KEY = process.env.FIREBASE_API_KEY || '';
+// Read Firebase web API key for server-side ID token verification
+let FIREBASE_WEB_API_KEY = String(process.env.FIREBASE_API_KEY || '').trim();
 try {
   const cfgPath = path.join(process.cwd(), 'firebase-applet-config.json');
   if (!FIREBASE_WEB_API_KEY && fs.existsSync(cfgPath)) {
     const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
-    FIREBASE_WEB_API_KEY = cfg.apiKey || '';
+    FIREBASE_WEB_API_KEY = String(cfg.apiKey || '').trim();
   }
-} catch {
-  // Ignore
+} catch (err: any) {
+  console.error('[Security ENV ERROR] Could not parse firebase-applet-config.json:', err?.message || err);
+}
+if (!FIREBASE_WEB_API_KEY) {
+  console.error(
+    '[Security ENV WARNING] FIREBASE_API_KEY is missing (and not found in firebase-applet-config.json). Firebase ID token verification will fail until FIREBASE_API_KEY is set.'
+  );
 }
 
 function getSuperAdminEmails(): Set<string> {
@@ -57,12 +62,15 @@ function resolveSessionSecret(): string {
     return envSecret;
   }
   if (process.env.NODE_ENV === 'production') {
-    throw new Error(
-      '[Security] SESSION_SECRET environment variable must be set and at least 32 characters long in production.'
-    );
+    const message =
+      '[Security ENV ERROR] Missing or invalid SESSION_SECRET! In production (NODE_ENV=production), SESSION_SECRET must be set and at least 32 characters long (e.g., `openssl rand -hex 32`). Set SESSION_SECRET in Railway Variables and redeploy.';
+    console.error('\n====================================================================');
+    console.error(message);
+    console.error('====================================================================\n');
+    throw new Error(message);
   }
   console.warn(
-    '[Security] SESSION_SECRET env topilmadi yoki 32 belgidan qisqa — development uchun vaqtinchalik xotira kaliti yaratildi.'
+    '[Security ENV WARNING] SESSION_SECRET is not set or shorter than 32 chars — generated an ephemeral development secret (sessions will reset on restart).'
   );
   return crypto.randomBytes(32).toString('hex');
 }

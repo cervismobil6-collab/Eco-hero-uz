@@ -8,23 +8,49 @@ interface FirebaseAppletConfig {
 }
 
 let cachedConfig: FirebaseAppletConfig | null = null;
+let loggedMissingConfig = false;
 
 function getFirebaseConfig(): FirebaseAppletConfig | null {
   if (cachedConfig) return cachedConfig;
-  try {
-    const cfgPath = path.join(process.cwd(), 'firebase-applet-config.json');
-    if (!fs.existsSync(cfgPath)) return null;
-    const raw = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
-    if (!raw?.projectId || !raw?.apiKey) return null;
+  const envProjectId = String(process.env.FIREBASE_PROJECT_ID || '').trim();
+  const envApiKey = String(process.env.FIREBASE_API_KEY || '').trim();
+  const envDatabaseId = String(process.env.FIREBASE_DATABASE_ID || '').trim();
+
+  if (envProjectId && envApiKey) {
     cachedConfig = {
-      projectId: String(raw.projectId),
-      apiKey: String(raw.apiKey),
-      firestoreDatabaseId: raw.firestoreDatabaseId ? String(raw.firestoreDatabaseId) : '(default)',
+      projectId: envProjectId,
+      apiKey: envApiKey,
+      firestoreDatabaseId: envDatabaseId || '(default)',
     };
     return cachedConfig;
-  } catch {
-    return null;
   }
+
+  try {
+    const cfgPath = path.join(process.cwd(), 'firebase-applet-config.json');
+    if (fs.existsSync(cfgPath)) {
+      const raw = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+      const projectId = envProjectId || String(raw?.projectId || '').trim();
+      const apiKey = envApiKey || String(raw?.apiKey || '').trim();
+      const firestoreDatabaseId = envDatabaseId || String(raw?.firestoreDatabaseId || '').trim() || '(default)';
+      if (projectId && apiKey) {
+        cachedConfig = { projectId, apiKey, firestoreDatabaseId };
+        return cachedConfig;
+      }
+    }
+  } catch (err: any) {
+    if (!loggedMissingConfig) {
+      loggedMissingConfig = true;
+      console.error('[Firestore ENV ERROR] Failed to read firebase-applet-config.json:', err?.message || err);
+    }
+  }
+
+  if (!loggedMissingConfig) {
+    loggedMissingConfig = true;
+    console.error(
+      '[Firestore ENV ERROR] Firebase config missing: neither FIREBASE_PROJECT_ID + FIREBASE_API_KEY env vars nor valid firebase-applet-config.json was found. Cloud catalog sync is disabled.'
+    );
+  }
+  return null;
 }
 
 function getFirestoreBaseUrl(): string | null {

@@ -116,7 +116,7 @@ export let APP_URL = PERMANENT_PRODUCTION_URL || 'http://localhost:3000';
 const app = express();
 app.set('trust proxy', 1);
 const httpServer = http.createServer(app);
-const port = Number(process.env.SERVER_PORT || process.env.PORT) || 3000;
+const port = Number(process.env.PORT || process.env.SERVER_PORT) || 3000;
 
 interface ConnectedWsClient {
   ws: WebSocket;
@@ -13882,11 +13882,10 @@ app.post(
 
       recordTransaction({
         userId: targetUser.uid,
-        userName: targetUser.fullName,
         amount: coinsAwarded,
         type: 'earn',
+        status: 'approved',
         reason: `Eco-Punkt QR: ${qty} ${rateInfo.unit} ${rateInfo.label}`,
-        referenceId: `qr_${Date.now()}`,
       });
 
       const scanRecord = {
@@ -13922,7 +13921,7 @@ app.post(
         createdAt: nowIso,
       });
       saveCentralDb();
-      broadcastLiveSync('ecopunkt_scan', { studentUid: targetUser.uid, schoolId: targetUser.schoolId });
+      broadcastRealtimeEvent('db:updated', { scope: 'ecopunkt_scan', studentUid: targetUser.uid, schoolId: targetUser.schoolId });
 
       const tgChat = targetUser.telegramId || targetUser.chatId;
       if (tgChat) {
@@ -14072,7 +14071,7 @@ app.post(
 
       centralDb.schoolDuels = [newDuel, ...(centralDb.schoolDuels || [])];
       saveCentralDb();
-      broadcastLiveSync('school_duel', { duelId: newDuel.id });
+      broadcastRealtimeEvent('db:updated', { scope: 'school_duel', duelId: newDuel.id });
 
       const targetCaptains = (Object.values(centralDb.users || {}) as any[]).filter(
         (u) => u && u.schoolId === schoolB.id && (u.role === 'school_admin' || u.role === 'ambassador')
@@ -14133,7 +14132,7 @@ app.post('/api/duels/:id/respond', requireAuth, (req: AuthenticatedRequest, res)
       duel.baselineB = getSchoolDuelMetricValue(duel.opponentSchoolId, duel.category);
     }
     saveCentralDb();
-    broadcastLiveSync('school_duel', { duelId: duel.id });
+    broadcastRealtimeEvent('db:updated', { scope: 'school_duel', duelId: duel.id });
     res.json({ success: true, duel });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -14557,7 +14556,89 @@ function injectRuntimeSeoHtml(html: string, req: express.Request): string {
   return out.replace('</head>', `    ${extraTags.join('\n    ')}\n  </head>`);
 }
 
+function validateAndLogServerEnv() {
+  const hasFirebaseFile = fs.existsSync(path.join(process.cwd(), 'firebase-applet-config.json'));
+  const hasFirebaseEnv = Boolean(
+    String(process.env.FIREBASE_API_KEY || '').trim() &&
+      String(process.env.FIREBASE_PROJECT_ID || '').trim()
+  );
+  const botToken = String(
+    process.env.TELEGRAM_BOT_TOKEN ||
+      process.env.BOT_TOKEN ||
+      process.env.TELEGRAM_TOKEN ||
+      process.env.TELEGRAM_API_KEY ||
+      ''
+  ).trim();
+  const checks: { name: string; ok: boolean; requiredInProd: boolean; detail: string }[] = [
+    {
+      name: 'SESSION_SECRET',
+      ok: String(process.env.SESSION_SECRET || '').trim().length >= 32,
+      requiredInProd: true,
+      detail: '32+ character HMAC signing key for user session tokens',
+    },
+    {
+      name: 'FIREBASE_API_KEY / firebase-applet-config.json',
+      ok: hasFirebaseFile || hasFirebaseEnv || Boolean(String(process.env.FIREBASE_API_KEY || '').trim()),
+      requiredInProd: false,
+      detail: 'Firebase Auth token verification & Firestore REST catalog sync',
+    },
+    {
+      name: 'TELEGRAM_BOT_TOKEN',
+      ok: Boolean(botToken),
+      requiredInProd: false,
+      detail: 'Telegram bot polling/webhook & user notifications',
+    },
+    {
+      name: 'TELEGRAM_WEBHOOK_SECRET',
+      ok: Boolean(String(process.env.TELEGRAM_WEBHOOK_SECRET || '').trim()),
+      requiredInProd: false,
+      detail: 'Secret header validation for Telegram webhook (falls back to polling if missing)',
+    },
+    {
+      name: 'GEMINI_API_KEY',
+      ok: Boolean(String(process.env.GEMINI_API_KEY || '').trim()),
+      requiredInProd: false,
+      detail: 'Gemini AI eco-assistant, hazard analysis, and photo anti-cheat',
+    },
+    {
+      name: 'SUPER_ADMIN_EMAILS / SUPER_ADMIN_TELEGRAM_IDS',
+      ok: Boolean(
+        String(process.env.SUPER_ADMIN_EMAILS || '').trim() ||
+          String(process.env.SUPER_ADMIN_TELEGRAM_IDS || '').trim()
+      ),
+      requiredInProd: false,
+      detail: 'Bootstrap Super Admin access allowlist',
+    },
+    {
+      name: 'PUBLIC_APP_URL / RAILWAY_PUBLIC_DOMAIN',
+      ok: Boolean(
+        String(
+          process.env.PUBLIC_APP_URL ||
+            process.env.RAILWAY_PUBLIC_DOMAIN ||
+            process.env.RENDER_EXTERNAL_URL ||
+            ''
+        ).trim()
+      ),
+      requiredInProd: false,
+      detail: 'Public HTTPS URL used for Telegram Mini App buttons & webhooks',
+    },
+  ];
+
+  const missing = checks.filter((c) => !c.ok);
+  if (missing.length === 0) {
+    console.log('[ENV CHECK] All environment variables and service configs look ready.');
+    return;
+  }
+
+  console.warn('[ENV CHECK] Some environment variables are not configured:');
+  for (const item of missing) {
+    const level = item.requiredInProd && process.env.NODE_ENV === 'production' ? 'ERROR' : 'WARN';
+    console.warn(`  - [${level}] Missing ${item.name}: ${item.detail}`);
+  }
+}
+
 async function startServer() {
+  validateAndLogServerEnv();
   const distDir = path.resolve(__dirname, 'dist');
   const distIndexPath = path.join(distDir, 'index.html');
   const isAiStudioDev = String(process.env.K_SERVICE || '').startsWith('ais-dev-');
@@ -14676,7 +14757,7 @@ async function startServer() {
   ]);
 
   httpServer.listen(port, '0.0.0.0', async () => {
-    console.log(`ECO HERO platform HTTP + WebSocket server running on port ${port}`);
+    console.log(`ECO HERO platform HTTP + WebSocket server listening on http://0.0.0.0:${port}`);
     const isAiStudioSandbox =
       String(process.env.K_SERVICE || '').startsWith('ais-dev-') ||
       String(process.env.K_SERVICE || '').startsWith('ais-pre-') ||

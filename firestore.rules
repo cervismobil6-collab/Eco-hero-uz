@@ -598,6 +598,53 @@ service cloud.firestore {
         (data.updatedAt is timestamp || (data.updatedAt is string && data.updatedAt.size() <= 64));
     }
 
+    function isValidQrEcoScan(data) {
+      return data.keys().hasAll(['id', 'studentUid', 'schoolId', 'materialType', 'weightKg', 'coinsAwarded', 'scannedByUid', 'createdAt']) &&
+        data.keys().hasOnly([
+          'id', 'studentUid', 'studentName', 'studentGrade', 'schoolId', 'schoolName',
+          'region', 'district', 'materialType', 'weightKg', 'coinsAwarded',
+          'scannedByUid', 'scannedByName', 'note', 'createdAt'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.studentUid) &&
+        isValidId(data.scannedByUid) &&
+        data.schoolId is string && data.schoolId.size() <= 128 &&
+        data.materialType in ['plastic', 'paper', 'glass', 'metal', 'sapling'] &&
+        data.weightKg is number && data.weightKg > 0 &&
+        data.coinsAwarded is number && data.coinsAwarded >= 0 &&
+        (!('note' in data) || (data.note is string && data.note.size() <= 200)) &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidSchoolDuel(data) {
+      return data.keys().hasAll(['id', 'challengerSchoolId', 'opponentSchoolId', 'category', 'rewardCoins', 'status', 'createdByUid', 'createdAt']) &&
+        data.keys().hasOnly([
+          'id', 'challengerSchoolId', 'challengerName', 'opponentSchoolId', 'opponentName',
+          'category', 'rewardCoins', 'status', 'startedAt', 'endsAt', 'createdByUid', 'createdAt'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.challengerSchoolId) &&
+        isValidId(data.opponentSchoolId) &&
+        isValidId(data.createdByUid) &&
+        data.category in ['trees', 'waste_kg', 'coins'] &&
+        data.rewardCoins is number && data.rewardCoins >= 0 &&
+        data.status in ['pending', 'active', 'completed', 'declined'] &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidEcoCertificate(data) {
+      return data.keys().hasAll(['id', 'uid', 'entityName', 'tier', 'verificationCode', 'issuedAt']) &&
+        data.keys().hasOnly([
+          'id', 'uid', 'entityName', 'schoolName', 'tier', 'category', 'verificationCode', 'issuedAt'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.uid) &&
+        data.entityName is string && data.entityName.size() >= 2 && data.entityName.size() <= 150 &&
+        data.tier is string && data.tier.size() <= 64 &&
+        data.verificationCode is string && data.verificationCode.size() >= 4 && data.verificationCode.size() <= 64 &&
+        data.issuedAt is timestamp;
+    }
+
     // ========================================================
     // Collections
     // ========================================================
