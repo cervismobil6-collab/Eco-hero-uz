@@ -39,6 +39,11 @@ import {
   SchoolStudentRatingConfig,
   DistrictStudentRatingConfig,
   removeDeletedId,
+  getPersistentDataDir,
+  mergeUserAccounts,
+  resolveCanonicalUid,
+  syncUserStatsConsistency,
+  isSyntheticEmail,
 } from './server-db';
 import {
   fetchAllCatalogFromFirestoreRest,
@@ -83,7 +88,12 @@ process.on('uncaughtException', (err: any) => {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const UPLOADS_DIR = path.join(process.cwd(), 'public', 'uploads');
+const PERSISTENT_DATA_DIR = getPersistentDataDir();
+const LEGACY_PUBLIC_UPLOADS_DIR = path.join(process.cwd(), 'public', 'uploads');
+const UPLOADS_DIR =
+  PERSISTENT_DATA_DIR !== process.cwd()
+    ? path.join(PERSISTENT_DATA_DIR, 'uploads')
+    : LEGACY_PUBLIC_UPLOADS_DIR;
 try {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 } catch {
@@ -232,6 +242,9 @@ app.use((req, res, next) => {
   return (isLargeMediaRoute ? largeMediaJsonParser : standardJsonParser)(req, res, next);
 });
 app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '7d', acceptRanges: true }));
+if (UPLOADS_DIR !== LEGACY_PUBLIC_UPLOADS_DIR) {
+  app.use('/uploads', express.static(LEGACY_PUBLIC_UPLOADS_DIR, { maxAge: '7d', acceptRanges: true }));
+}
 app.use(
   '/cesium',
   express.static(path.resolve(__dirname, 'node_modules/cesium/Build/Cesium'), {
@@ -386,6 +399,7 @@ const apiGeneralLimiter = rateLimit({
 app.use('/api/auth/session', authRateLimiter);
 app.use('/api/auth/register-user', authRateLimiter);
 app.use('/api/auth/login-user', authRateLimiter);
+app.use('/api/auth/telegram-magic-login', authRateLimiter);
 app.use('/api/telegram/auth-webapp', authRateLimiter);
 app.use('/api/ai', aiRateLimiter);
 app.use('/api', apiGeneralLimiter);
@@ -2132,11 +2146,8 @@ async function approveReportAndReward(
       student.ecoCoins = (student.ecoCoins || 0) + reward;
       student.totalCoinsEarned = (student.totalCoinsEarned || 0) + reward;
       student.reportsCount = (student.reportsCount || 0) + 1;
-      student.activityStats = {
-        ...(student.activityStats || {}),
-        reportsCount: student.reportsCount,
-        totalCoinsEarned: student.totalCoinsEarned,
-      };
+      student.ecoXP = Math.max(Number(student.ecoXP || 0), Number(student.totalCoinsEarned || 0) * 4) + reward * 4;
+      syncUserStatsConsistency(student);
       recordTransaction({
         userId: student.uid,
         amount: reward,
@@ -2181,6 +2192,7 @@ async function approveReportAndReward(
         ambUser.ecoCoins = (ambUser.ecoCoins || 0) + resolutionBonus;
         ambUser.totalCoinsEarned = (ambUser.totalCoinsEarned || 0) + resolutionBonus;
         ambUser.cleanupsCount = (ambUser.cleanupsCount || 0) + 1;
+        syncUserStatsConsistency(ambUser);
         recordTransaction({
           userId: ambUser.uid,
           amount: resolutionBonus,
@@ -2930,9 +2942,63 @@ app.post('/api/auth/session', async (req, res) => {
     );
 
     if (user) {
-      if (isVerifiedSuper && user.role !== 'super_admin') {
+      // Link Firebase UID as an alias/linkedUid if user was matched via email on an existing Telegram/Web account
+      if (user.uid !== verifiedFb.uid) {
+        const fbUidDuplicate = centralDb.users[verifiedFb.uid];
+        if (fbUidDuplicate && fbUidDuplicate.uid !== user.uid && verifiedFb.emailVerified) {
+          user = mergeUserAccounts(user.uid, fbUidDuplicate.uid) || user;
+        } else {
+          if (!centralDb.uidAliases) centralDb.uidAliases = {};
+          centralDb.uidAliases[verifiedFb.uid] = user.uid;
+          const linked = new Set<string>(Array.isArray(user.linkedUids) ? user.linkedUids : [user.uid]);
+          linked.add(verifiedFb.uid);
+          user.linkedUids = Array.from(linked);
+          saveCentralDb();
+        }
+      }
+
+      // If Super Admin also has a Telegram Super Admin record under another UID, unify them automatically
+      if (isVerifiedSuper) {
+        const otherSuperAccounts = (Object.values(centralDb.users) as any[]).filter(
+          (u) => u && u.uid !== user.uid && (u.role === 'super_admin' || isSuperAdminTelegramId(u.telegramId))
+        );
+        for (const other of otherSuperAccounts) {
+          user = mergeUserAccounts(user.uid, other.uid) || user;
+        }
+        if (user.role !== 'super_admin') {
+          user = upsertUser({
+            ...user,
+            role: 'super_admin',
+            approvedRoles: [
+              'student',
+              'ambassador',
+              'school_admin',
+              'district_coordinator',
+              'regional_coordinator',
+              'moderator',
+              'super_admin',
+              'sponsor',
+            ],
+            isVerified: true,
+            isOnboarded: true,
+          });
+        }
+        saveCentralDb();
+      }
+    } else {
+      // If Super Admin signs in for the first time via Google while Telegram Super Admin already exists, link into that canonical account
+      const existingTgSuper = isVerifiedSuper
+        ? (Object.values(centralDb.users) as any[]).find(
+            (u) => u && (u.role === 'super_admin' || isSuperAdminTelegramId(u.telegramId))
+          )
+        : null;
+      if (existingTgSuper) {
         user = upsertUser({
-          ...user,
+          ...existingTgSuper,
+          email: verifiedFb.email || existingTgSuper.email,
+          fullName: existingTgSuper.fullName || verifiedFb.displayName || fullName || 'Super Admin',
+          avatarUrl: existingTgSuper.avatarUrl || verifiedFb.photoUrl || DEFAULT_AVATAR,
+          linkedUids: Array.from(new Set([...(existingTgSuper.linkedUids || [existingTgSuper.uid]), verifiedFb.uid])),
           role: 'super_admin',
           approvedRoles: [
             'student',
@@ -2947,38 +3013,131 @@ app.post('/api/auth/session', async (req, res) => {
           isVerified: true,
           isOnboarded: true,
         });
+        if (!centralDb.uidAliases) centralDb.uidAliases = {};
+        centralDb.uidAliases[verifiedFb.uid] = user.uid;
+        saveCentralDb();
+      } else {
+        const welcomeBonus = getConfiguredReward('welcomeBonus');
+        user = upsertUser({
+          uid: verifiedFb.uid,
+          fullName: verifiedFb.displayName || fullName || 'Eko-Qahramon',
+          email: verifiedFb.email || email || '',
+          avatarUrl: verifiedFb.photoUrl || DEFAULT_AVATAR,
+          profileImage: verifiedFb.photoUrl || DEFAULT_AVATAR,
+          role: isVerifiedSuper ? 'super_admin' : 'student',
+          approvedRoles: isVerifiedSuper
+            ? ['student', 'ambassador', 'school_admin', 'district_coordinator', 'regional_coordinator', 'moderator', 'super_admin', 'sponsor']
+            : ['student'],
+          ecoCoins: welcomeBonus,
+          totalCoinsEarned: welcomeBonus,
+          isVerified: isVerifiedSuper,
+          isOnboarded: isVerifiedSuper,
+          welcomeBonusClaimed: true,
+          region: 'Toshkent shahri',
+          district: 'Shayxontohur tumani',
+          schoolId: 'school_tashkent_17',
+          schoolName: 'Toshkent sh. 17-sonli ixtisoslashtirilgan maktab',
+          schoolNumber: '17',
+          registrationDate: new Date().toISOString(),
+          activityStats: { reportsCount: 0, cleanupsCount: 0, treesPlanted: 0, streakDays: 1, totalCoinsEarned: welcomeBonus },
+        });
         saveCentralDb();
       }
-    } else {
-      const welcomeBonus = getConfiguredReward('welcomeBonus');
-      user = upsertUser({
-        uid: verifiedFb.uid,
-        fullName: verifiedFb.displayName || fullName || 'Eko-Qahramon',
-        email: verifiedFb.email || email || '',
-        avatarUrl: verifiedFb.photoUrl || DEFAULT_AVATAR,
-        profileImage: verifiedFb.photoUrl || DEFAULT_AVATAR,
-        role: isVerifiedSuper ? 'super_admin' : 'student',
-        approvedRoles: isVerifiedSuper
-          ? ['student', 'ambassador', 'school_admin', 'district_coordinator', 'regional_coordinator', 'moderator', 'super_admin', 'sponsor']
-          : ['student'],
-        ecoCoins: welcomeBonus,
-        totalCoinsEarned: welcomeBonus,
-        isVerified: isVerifiedSuper,
-        isOnboarded: isVerifiedSuper,
-        welcomeBonusClaimed: true,
-        region: 'Toshkent shahri',
-        district: 'Shayxontohur tumani',
-        schoolId: 'school_tashkent_17',
-        schoolName: 'Toshkent sh. 17-sonli ixtisoslashtirilgan maktab',
-        schoolNumber: '17',
-        registrationDate: new Date().toISOString(),
-        activityStats: { reportsCount: 0, cleanupsCount: 0, treesPlanted: 0, streakDays: 1, totalCoinsEarned: welcomeBonus },
-      });
-      saveCentralDb();
     }
 
     const sessionToken = issueSessionToken(user);
     res.json({ success: true, sessionToken, user: sanitizeSelfUser(user) });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Generate 1-time 15-minute code to link current Web/PWA session with Telegram Bot & Mini App
+app.post('/api/auth/telegram-link-token', requireAuth, (req: AuthenticatedRequest, res) => {
+  try {
+    const caller = req.authUser;
+    const canonicalUid = resolveCanonicalUid(caller.uid) || caller.uid;
+    if (!centralDb.telegramLinkTokens) centralDb.telegramLinkTokens = {};
+
+    const nowMs = Date.now();
+    for (const [k, v] of Object.entries(centralDb.telegramLinkTokens)) {
+      if (!v?.expiresAt || Date.parse(v.expiresAt) < nowMs) {
+        delete centralDb.telegramLinkTokens[k];
+      }
+    }
+
+    const code = crypto.randomBytes(5).toString('hex').toUpperCase();
+    const createdAt = new Date(nowMs).toISOString();
+    const expiresAt = new Date(nowMs + 15 * 60 * 1000).toISOString();
+    centralDb.telegramLinkTokens[code] = {
+      code,
+      uid: canonicalUid,
+      createdAt,
+      expiresAt,
+    };
+    saveCentralDb();
+
+    const cleanBot = String(activeBotUsername || 'Ecoheros_bot').replace(/^@/, '');
+    res.json({
+      success: true,
+      code,
+      botUsername: cleanBot,
+      deepLink: `https://t.me/${cleanBot}?start=link_${code}`,
+      expiresAt,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Exchange 1-time /web magic token or 6-character code generated in Telegram Bot into Web/PWA session
+app.post('/api/auth/telegram-magic-login', (req, res) => {
+  try {
+    const { token, code } = req.body || {};
+    const rawInput = String(token || code || '').trim();
+    if (!rawInput) {
+      return res.status(400).json({ error: 'Telegram kirish kodi yoki havolasi talab qilinadi' });
+    }
+    if (!centralDb.telegramLoginTokens) centralDb.telegramLoginTokens = {};
+
+    const nowMs = Date.now();
+    for (const [k, v] of Object.entries(centralDb.telegramLoginTokens)) {
+      if (!v?.expiresAt || Date.parse(v.expiresAt) < nowMs) {
+        delete centralDb.telegramLoginTokens[k];
+      }
+    }
+
+    const upperInput = rawInput.toUpperCase();
+    const matchedEntry = Object.entries(centralDb.telegramLoginTokens).find(
+      ([k, v]) => k === rawInput || v.token === rawInput || String(v.code || '').toUpperCase() === upperInput
+    );
+
+    if (!matchedEntry) {
+      return res.status(401).json({
+        error: "Kirish kodi noto'g'ri yoki muddati tugagan. Telegram botda /web buyrug'ini qayta yuboring.",
+      });
+    }
+
+    const [entryKey, entry] = matchedEntry;
+    delete centralDb.telegramLoginTokens[entryKey];
+
+    const targetUser =
+      findUserByAnyIdentifier({ uid: entry.uid, telegramId: entry.telegramId }) ||
+      centralDb.users[resolveCanonicalUid(entry.uid)];
+    if (!targetUser) {
+      saveCentralDb();
+      return res.status(404).json({ error: 'Ushbu Telegram hisobi topilmadi' });
+    }
+
+    syncUserStatsConsistency(targetUser);
+    saveCentralDb();
+
+    const sessionToken = issueSessionToken(targetUser);
+    res.json({
+      success: true,
+      sessionToken,
+      user: sanitizeSelfUser(targetUser),
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -3134,8 +3293,28 @@ app.post('/api/user/onboarding', requireAuth, (req: AuthenticatedRequest, res) =
       return res.status(400).json({ error: "Ism-familiya va to'g'ri telefon raqami kiritilishi shart" });
     }
 
-    const existing = centralDb.users[caller.uid] || caller;
-    const canonicalUid = String(existing.uid);
+    let existing = centralDb.users[caller.uid] || caller;
+    let canonicalUid = String(existing.uid);
+
+    // Check if another account already holds this exact phone number
+    const phoneOwner = findUserByAnyIdentifier({ phoneNumber: cleanPhone });
+    if (phoneOwner && phoneOwner.uid !== canonicalUid) {
+      const sameVerifiedTelegram =
+        existing.telegramId &&
+        phoneOwner.telegramId &&
+        String(existing.telegramId) === String(phoneOwner.telegramId);
+      if (sameVerifiedTelegram) {
+        existing = mergeUserAccounts(phoneOwner.uid, canonicalUid) || phoneOwner;
+        canonicalUid = String(existing.uid);
+      } else if (phoneOwner.isOnboarded) {
+        return res.status(409).json({
+          error:
+            "Ushbu telefon raqami bilan hisob allaqachon mavjud. Yagona hisobingizga kirish uchun Telegram botda /web buyrug'ini yuboring yoki profilingizdan Telegram Bot bilan bog'lang.",
+          code: 'PHONE_ALREADY_EXISTS',
+        });
+      }
+    }
+
     const callerTelegramId = existing.telegramId || null;
     const callerTelegramUsername = existing.telegramUsername || '';
     const callerEmail = existing.email || '';
@@ -3289,6 +3468,8 @@ app.post('/api/user/profile', requireAuth, (req: AuthenticatedRequest, res) => {
       ...safeUpdates,
       uid: existing.uid,
     });
+    saveCentralDb();
+    broadcastRealtimeEvent('db:updated', { scope: 'users' });
 
     res.json({ success: true, profile: sanitizeSelfUser(updated) });
   } catch (err: any) {
@@ -5172,12 +5353,8 @@ function moderateMediaSubmission(params: {
       } else {
         author.cleanupsCount = (author.cleanupsCount || 0) + 1;
       }
-      author.activityStats = {
-        ...(author.activityStats || {}),
-        treesPlanted: author.treesPlanted || 0,
-        cleanupsCount: author.cleanupsCount || 0,
-        totalCoinsEarned: author.totalCoinsEarned,
-      };
+      author.ecoXP = Math.max(Number(author.ecoXP || 0), Number(author.totalCoinsEarned || 0) * 4) + awarded * 4;
+      syncUserStatsConsistency(author);
       recordTransaction({
         userId: author.uid,
         amount: awarded,
@@ -11346,6 +11523,7 @@ interface RegistrationSession {
     | 'REP_LOC'
     | 'REP_DESC';
   phoneNumber?: string;
+  phoneVerified?: boolean;
   fullName?: string;
   region?: string;
   district?: string;
@@ -11515,8 +11693,19 @@ async function sendTelegramPhoto(chatId: string | number, photoUrl: string, capt
   try {
     const cleanUrl = String(photoUrl || '').trim();
     if (cleanUrl.startsWith('/uploads/') || cleanUrl.startsWith('/assets/')) {
-      const localPath = path.join(process.cwd(), 'public', cleanUrl.replace(/^\/+/, ''));
-      if (fs.existsSync(localPath)) {
+      const rel = cleanUrl.replace(/^\/+/, '');
+      const candidates = cleanUrl.startsWith('/uploads/')
+        ? [
+            path.resolve(UPLOADS_DIR, path.basename(rel)),
+            path.resolve(process.cwd(), 'public', rel),
+          ]
+        : [path.resolve(process.cwd(), 'public', rel)];
+      const localPath = candidates.find((p) => {
+        const withinUploads = p.startsWith(path.resolve(UPLOADS_DIR) + path.sep);
+        const withinPublic = p.startsWith(path.resolve(process.cwd(), 'public') + path.sep);
+        return (withinUploads || withinPublic) && fs.existsSync(p);
+      });
+      if (localPath) {
         const buffer = fs.readFileSync(localPath);
         const ext = path.extname(localPath).toLowerCase() || '.jpg';
         const mime = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
@@ -11633,7 +11822,6 @@ app.post('/api/telegram/auth-webapp', (req, res) => {
     }
 
     const chatId = String(tgUser.id);
-    const registeredUser = findUserByAnyIdentifier({ telegramId: chatId, chatId });
     const isVerifiedSuper =
       !isDevBypass &&
       checkIsSuperAdmin({
@@ -11641,7 +11829,23 @@ app.post('/api/telegram/auth-webapp', (req, res) => {
         verifiedTelegram: true,
       });
 
+    let registeredUser = findUserByAnyIdentifier({ telegramId: chatId, chatId });
+    if (!registeredUser && isVerifiedSuper) {
+      registeredUser = (Object.values(centralDb.users) as any[]).find(
+        (u) => u && (u.role === 'super_admin' || isSuperAdminTelegramId(u.telegramId))
+      );
+    }
+
     if (registeredUser) {
+      if (isVerifiedSuper) {
+        const otherSupers = (Object.values(centralDb.users) as any[]).filter(
+          (u) => u && u.uid !== registeredUser.uid && (u.role === 'super_admin' || isSuperAdminTelegramId(u.telegramId))
+        );
+        for (const other of otherSupers) {
+          registeredUser = mergeUserAccounts(registeredUser.uid, other.uid) || registeredUser;
+        }
+      }
+
       const userRole = isVerifiedSuper ? 'super_admin' : registeredUser.role || 'student';
       const approvedRoles = isVerifiedSuper
         ? ['student', 'ambassador', 'school_admin', 'district_coordinator', 'regional_coordinator', 'moderator', 'super_admin', 'sponsor']
@@ -11651,11 +11855,17 @@ app.post('/api/telegram/auth-webapp', (req, res) => {
       registeredUser.approvedRoles = approvedRoles;
       registeredUser.telegramId = Number(tgUser.id) || tgUser.id;
       registeredUser.telegramChatId = chatId;
+      registeredUser.chatId = chatId;
       if (tgUser.username) registeredUser.telegramUsername = `@${tgUser.username}`;
       if (tgUser.photo_url) {
         registeredUser.avatarUrl = tgUser.photo_url;
         registeredUser.profileImage = tgUser.photo_url;
       }
+      if (!registeredUser.email || isSyntheticEmail(registeredUser.email)) {
+        registeredUser.email = registeredUser.email || `${tgUser.username || tgUser.id}@telegram.ecohero.uz`;
+      }
+      syncUserStatsConsistency(registeredUser);
+      upsertUser(registeredUser);
       saveCentralDb();
       broadcastRealtimeEvent('db:updated', { scope: 'users' });
 
@@ -11674,6 +11884,7 @@ app.post('/api/telegram/auth-webapp', (req, res) => {
       email: `${tgUser.username || tgUser.id}@telegram.ecohero.uz`,
       telegramId: tgUser.id,
       telegramChatId: chatId,
+      chatId,
       telegramUsername: tgUser.username ? `@${tgUser.username}` : undefined,
       telegramAuth: true,
       profileImage: tgUser.photo_url || DEFAULT_AVATAR,
@@ -11690,6 +11901,8 @@ app.post('/api/telegram/auth-webapp', (req, res) => {
         ? ['student', 'ambassador', 'school_admin', 'district_coordinator', 'regional_coordinator', 'moderator', 'super_admin', 'sponsor']
         : ['student'],
       ecoCoins: 0,
+      ecoXP: 0,
+      level: 1,
       reportsCount: 0,
       treesPlanted: 0,
       cleanupsCount: 0,
@@ -11759,7 +11972,14 @@ async function completeTelegramRegistration(
 ) {
   const chatKey = String(chatId);
   const schoolNumber = normalizeSchoolNumber(session.schoolName);
-  const existing = findUserByAnyIdentifier({ telegramId: chatKey, phoneNumber: session.phoneNumber });
+  let existing = session.phoneVerified
+    ? findUserByAnyIdentifier({ telegramId: chatKey, chatId: chatKey, phoneNumber: session.phoneNumber })
+    : findUserByAnyIdentifier({ telegramId: chatKey, chatId: chatKey });
+
+  const tgShellUid = `user_tg_${chatKey}`;
+  if (existing && existing.uid !== tgShellUid && centralDb.users[tgShellUid]) {
+    existing = mergeUserAccounts(existing.uid, tgShellUid) || existing;
+  }
 
   const isVerifiedSuper = checkIsSuperAdmin({
     telegramId: chatKey,
@@ -11768,8 +11988,10 @@ async function completeTelegramRegistration(
 
   const welcomeReward = getConfiguredReward('welcomeBonus');
   const isNewUser = !existing || !existing.welcomeBonusClaimed;
-  const coins = isNewUser ? welcomeReward : existing?.ecoCoins ?? welcomeReward;
-  const totalCoins = isNewUser ? welcomeReward : existing?.totalCoinsEarned ?? coins;
+  const coins = isNewUser ? Number(existing?.ecoCoins || 0) + welcomeReward : existing?.ecoCoins ?? welcomeReward;
+  const totalCoins = isNewUser
+    ? Math.max(Number(existing?.totalCoinsEarned || 0) + welcomeReward, coins)
+    : existing?.totalCoinsEarned ?? coins;
 
   const cleanRegion = session.region || 'Toshkent shahri';
   const cleanDistrict = session.district || 'Shayxontohur tumani';
@@ -11786,7 +12008,7 @@ async function completeTelegramRegistration(
     incrementStudents: !existing?.isOnboarded || !existing?.schoolId,
   });
 
-  const canonicalUid = existing?.uid || `user_tg_${chatKey}`;
+  const canonicalUid = existing?.uid || tgShellUid;
   const finalProfile = upsertUser({
     uid: canonicalUid,
     userId: canonicalUid,
@@ -11796,7 +12018,7 @@ async function completeTelegramRegistration(
     telegramUsername: username || existing?.telegramUsername || '',
     fullName: session.fullName || existing?.fullName || userFirstName || 'Eko-Qahramon',
     phoneNumber: session.phoneNumber || existing?.phoneNumber || '',
-    email: existing?.email || `${chatKey}@telegram.ecohero.uz`,
+    email: existing?.email && !isSyntheticEmail(existing.email) ? existing.email : existing?.email || `${chatKey}@telegram.ecohero.uz`,
     region: cleanRegion,
     district: cleanDistrict,
     schoolId: linkedSchool?.id || 'school_custom',
@@ -11805,6 +12027,7 @@ async function completeTelegramRegistration(
     grade: session.grade || existing?.grade || '9-sinf',
     ecoCoins: coins,
     totalCoinsEarned: totalCoins,
+    ecoXP: existing?.ecoXP,
     reportsCount: existing?.reportsCount || 0,
     treesPlanted: existing?.treesPlanted || 0,
     cleanupsCount: existing?.cleanupsCount || 0,
@@ -11899,12 +12122,14 @@ async function completeTelegramRegistration(
     }
   }
 
+  syncUserStatsConsistency(finalProfile);
+  upsertUser(finalProfile);
   deleteRegistrationSession(chatKey);
   saveCentralDb();
   broadcastRealtimeEvent('db:updated', { scope: 'users' });
 
   const completedText = isNewUser
-    ? `🎉 <b>TABRIKLAYMIZ! RO'YXATDAN MUVAFFAQIYATLI O'TDINGIZ!</b>\n\nSizga dastlabki <b>+${welcomeReward} ECO COIN</b> sovg'a taqdim etildi! 💰${referralSummaryText}\n\n📋 <b>Sizning ma'lumotlaringiz (Yagona bazaga saqlandi):</b>\n👤 <b>Ism-familiya:</b> ${finalProfile.fullName}\n📱 <b>Telefon:</b> ${finalProfile.phoneNumber}\n📍 <b>Hudud:</b> ${finalProfile.region}, ${finalProfile.district}\n🏫 <b>Maktab va sinf:</b> ${finalProfile.schoolName} (${finalProfile.grade})\n🏆 <b>Maktab reytingi o'rni:</b> #${linkedSchool?.ratingRank || '-'}\n💰 <b>Balans:</b> ${finalProfile.ecoCoins} EcoCoin\n\nBuyruqlar: /report · /activity · /profile · /invite · /coins · /help`
+    ? `🎉 <b>TABRIKLAYMIZ! RO'YXATDAN MUVAFFAQIYATLI O'TDINGIZ!</b>\n\nSizga dastlabki <b>+${welcomeReward} ECO COIN</b> sovg'a taqdim etildi! 💰${referralSummaryText}\n\n📋 <b>Sizning ma'lumotlaringiz (Yagona bazaga saqlandi):</b>\n👤 <b>Ism-familiya:</b> ${finalProfile.fullName}\n📱 <b>Telefon:</b> ${finalProfile.phoneNumber}\n📍 <b>Hudud:</b> ${finalProfile.region}, ${finalProfile.district}\n🏫 <b>Maktab va sinf:</b> ${finalProfile.schoolName} (${finalProfile.grade})\n🏆 <b>Maktab reytingi o'rni:</b> #${linkedSchool?.ratingRank || '-'}\n💰 <b>Balans:</b> ${finalProfile.ecoCoins} EcoCoin\n\nBuyruqlar: /report · /activity · /profile · /web · /sync · /invite · /coins · /help`
     : `✅ <b>PROFILINGIZ YANGILANDI!</b>\n\n👤 <b>Ism:</b> ${finalProfile.fullName}\n🏫 <b>Maktab:</b> ${finalProfile.schoolName} (${finalProfile.grade})\n💰 <b>Balans:</b> ${finalProfile.ecoCoins} EcoCoin`;
 
   await sendTelegramMessage(chatId, completedText, {
@@ -11915,6 +12140,92 @@ async function completeTelegramRegistration(
       ],
     },
   });
+}
+
+function createTelegramWebLoginLink(userObj: any): { token: string; code: string; loginUrl: string } {
+  if (!centralDb.telegramLoginTokens) centralDb.telegramLoginTokens = {};
+  const nowMs = Date.now();
+  for (const [k, v] of Object.entries(centralDb.telegramLoginTokens)) {
+    if (!v?.expiresAt || Date.parse(v.expiresAt) < nowMs) {
+      delete centralDb.telegramLoginTokens[k];
+    }
+  }
+  const canonicalUid = resolveCanonicalUid(userObj.uid) || userObj.uid;
+  const token = crypto.randomBytes(16).toString('hex');
+  const code = crypto.randomBytes(3).toString('hex').toUpperCase();
+  const createdAt = new Date(nowMs).toISOString();
+  const expiresAt = new Date(nowMs + 10 * 60 * 1000).toISOString();
+  centralDb.telegramLoginTokens[token] = {
+    token,
+    code,
+    uid: canonicalUid,
+    telegramId: userObj.telegramId || userObj.chatId || '',
+    createdAt,
+    expiresAt,
+  };
+  saveCentralDb();
+  const baseUrl = String(APP_URL || '').replace(/\/+$/, '');
+  return {
+    token,
+    code,
+    loginUrl: `${baseUrl}/?tg_login=${encodeURIComponent(token)}`,
+  };
+}
+
+function consumeTelegramLinkCode(
+  rawCode: string,
+  chatKey: string,
+  username?: string,
+  userFirstName?: string
+): { ok: boolean; user?: any; error?: string } {
+  if (!centralDb.telegramLinkTokens) centralDb.telegramLinkTokens = {};
+  const nowMs = Date.now();
+  for (const [k, v] of Object.entries(centralDb.telegramLinkTokens)) {
+    if (!v?.expiresAt || Date.parse(v.expiresAt) < nowMs) {
+      delete centralDb.telegramLinkTokens[k];
+    }
+  }
+  const normalizedCode = String(rawCode || '').trim().toUpperCase();
+  const entry = centralDb.telegramLinkTokens[normalizedCode];
+  if (!entry) {
+    return {
+      ok: false,
+      error: "Bog'lash kodi noto'g'ri yoki muddati tugagan. Veb-ilova / PWA Profilingizdan yangi kod oling.",
+    };
+  }
+
+  const targetUser = findUserByAnyIdentifier({ uid: entry.uid }) || centralDb.users[resolveCanonicalUid(entry.uid)];
+  if (!targetUser) {
+    delete centralDb.telegramLinkTokens[normalizedCode];
+    saveCentralDb();
+    return { ok: false, error: 'Ushbu veb-hisob topilmadi.' };
+  }
+
+  if (targetUser.telegramId && String(targetUser.telegramId) !== chatKey) {
+    return {
+      ok: false,
+      error: "Ushbu veb-hisob allaqachon boshqa Telegram akkauntiga bog'langan.",
+    };
+  }
+
+  delete centralDb.telegramLinkTokens[normalizedCode];
+  const existingTgUser = findUserByAnyIdentifier({ telegramId: chatKey, chatId: chatKey });
+  let unified = targetUser;
+  if (existingTgUser && existingTgUser.uid !== targetUser.uid) {
+    unified = mergeUserAccounts(targetUser.uid, existingTgUser.uid) || targetUser;
+  }
+
+  unified = upsertUser({
+    ...unified,
+    telegramId: Number(chatKey) || chatKey,
+    telegramChatId: chatKey,
+    chatId: chatKey,
+    telegramUsername: username || unified.telegramUsername || '',
+    fullName: unified.fullName || userFirstName || 'Eko-Qahramon',
+  });
+  saveCentralDb();
+  broadcastRealtimeEvent('db:updated', { scope: 'users' });
+  return { ok: true, user: unified };
 }
 
 async function processTelegramUpdate(update: any) {
@@ -12341,45 +12652,63 @@ async function handleTelegramUpdateSerialized(update: any) {
       return;
     }
 
-    // 1. Contact Handler (Fixes phone-request loop permanently)
+    // 1. Contact Handler (Verified by Telegram phone ownership check)
     if (msg.contact) {
+      if (msg.contact.user_id && String(msg.contact.user_id) !== chatKey) {
+        await sendTelegramMessage(
+          chatId,
+          "⚠️ Iltimos, faqat o'zingizning shaxsiy Telegram kontaktingizni yuboring (boshqa foydalanuvchi kontaktini ulash mumkin emas)."
+        );
+        return;
+      }
+
       let rawPhone = String(msg.contact.phone_number || '').trim();
       if (!rawPhone.startsWith('+')) rawPhone = `+${rawPhone}`;
       const contactFullName = [msg.contact.first_name, msg.contact.last_name].filter(Boolean).join(' ') || userFirstName;
       const isVerifiedSuper = checkIsSuperAdmin({ telegramId: chatKey, verifiedTelegram: true });
 
       if (isVerifiedSuper) {
+        let existingSuper =
+          findUserByAnyIdentifier({ telegramId: chatKey, chatId: chatKey, phoneNumber: rawPhone }) ||
+          (Object.values(centralDb.users) as any[]).find(
+            (u) => u && (u.role === 'super_admin' || isSuperAdminTelegramId(u.telegramId))
+          );
+        if (existingSuper && regUser && existingSuper.uid !== regUser.uid) {
+          existingSuper = mergeUserAccounts(existingSuper.uid, regUser.uid) || existingSuper;
+        }
         const superProfile = upsertUser({
-          uid: `user_tg_${chatKey}`,
+          ...(existingSuper || {}),
+          uid: existingSuper?.uid || `user_tg_${chatKey}`,
           chatId: chatKey,
           telegramId: Number(chatKey) || chatKey,
           telegramChatId: chatKey,
-          telegramUsername: username || '',
-          fullName: contactFullName,
-          phoneNumber: rawPhone,
-          region: 'Toshkent shahri',
-          district: 'Shayxontohur tumani',
-          schoolId: 'central_hq',
-          schoolName: 'ECO HERO Markaziy Boshqarmasi',
-          schoolNumber: '1',
-          grade: 'Super Admin',
+          telegramUsername: username || existingSuper?.telegramUsername || '',
+          fullName: existingSuper?.fullName || contactFullName,
+          phoneNumber: existingSuper?.phoneNumber || rawPhone,
+          region: existingSuper?.region || 'Toshkent shahri',
+          district: existingSuper?.district || 'Shayxontohur tumani',
+          schoolId: existingSuper?.schoolId || 'central_hq',
+          schoolName: existingSuper?.schoolName || 'ECO HERO Markaziy Boshqarmasi',
+          schoolNumber: existingSuper?.schoolNumber || '1',
+          grade: existingSuper?.grade || 'Super Admin',
           role: 'super_admin',
           approvedRoles: ['student', 'ambassador', 'school_admin', 'district_coordinator', 'regional_coordinator', 'moderator', 'super_admin', 'sponsor'],
           welcomeBonusClaimed: true,
-          avatarUrl: DEFAULT_AVATAR,
+          avatarUrl: existingSuper?.avatarUrl || DEFAULT_AVATAR,
           badge: 'Bosh Administrator',
           isOnboarded: true,
           isVerified: true,
         });
         deleteRegistrationSession(chatKey);
         saveCentralDb();
-        broadcastRealtimeEvent('db:updated', { scope: 'metrics' });
+        broadcastRealtimeEvent('db:updated', { scope: 'users' });
 
         await sendTelegramMessage(
           chatId,
           `👑 <b>XUSH KELIBSIZ, BOSH ADMINISTRATOR!</b>\n\n🛡 <b>Vakolat:</b> Super Admin\n💰 <b>Balans:</b> ${superProfile.ecoCoins || 0} EcoCoin`,
           {
             reply_markup: {
+              remove_keyboard: true,
               inline_keyboard: [[{ text: '🌍 ECO HERO Boshqaruv Panelini ochish', web_app: { url: APP_URL } }]],
             },
           }
@@ -12387,21 +12716,27 @@ async function handleTelegramUpdateSerialized(update: any) {
         return;
       }
 
-      // If user already onboarded (matched by telegramId OR phoneNumber), link Telegram ID & complete immediately instead of looping!
-      const matchedExisting = findUserByAnyIdentifier({ telegramId: chatKey, chatId: chatKey, phoneNumber: rawPhone });
+      // If user already onboarded (matched by telegramId OR verified phoneNumber), merge & link into canonical account!
+      let matchedExisting = findUserByAnyIdentifier({ telegramId: chatKey, chatId: chatKey, phoneNumber: rawPhone });
       if (matchedExisting && matchedExisting.isOnboarded) {
-        matchedExisting.telegramId = Number(chatKey) || chatKey;
-        matchedExisting.telegramChatId = chatKey;
-        matchedExisting.chatId = chatKey;
-        if (username) matchedExisting.telegramUsername = username;
-        if (!matchedExisting.phoneNumber) matchedExisting.phoneNumber = rawPhone;
+        if (regUser && regUser.uid !== matchedExisting.uid) {
+          matchedExisting = mergeUserAccounts(matchedExisting.uid, regUser.uid) || matchedExisting;
+        }
+        matchedExisting = upsertUser({
+          ...matchedExisting,
+          telegramId: Number(chatKey) || chatKey,
+          telegramChatId: chatKey,
+          chatId: chatKey,
+          telegramUsername: username || matchedExisting.telegramUsername || '',
+          phoneNumber: matchedExisting.phoneNumber || rawPhone,
+        });
         deleteRegistrationSession(chatKey);
         saveCentralDb();
-        broadcastRealtimeEvent('db:updated', { scope: 'metrics' });
+        broadcastRealtimeEvent('db:updated', { scope: 'users' });
 
         await sendTelegramMessage(
           chatId,
-          `✅ <b>Hisobingiz muvaffaqiyatli bog'landi, ${matchedExisting.fullName}!</b>\n\n🏫 <b>Maktab:</b> ${matchedExisting.schoolName}\n💰 <b>Balans:</b> ${matchedExisting.ecoCoins || 0} EcoCoin\n\nBuyruqlar: /report, /activity, /apply, /tasks, /coins`,
+          `✅ <b>Hisobingiz muvaffaqiyatli bog'landi (Yagona Xotira), ${matchedExisting.fullName}!</b>\n\n🏫 <b>Maktab:</b> ${matchedExisting.schoolName}\n💰 <b>Balans:</b> ${matchedExisting.ecoCoins || 0} EcoCoin · ⚡ <b>XP:</b> ${matchedExisting.ecoXP || 0}\n\nBuyruqlar: /report, /activity, /web, /sync, /tasks, /coins`,
           {
             reply_markup: {
               remove_keyboard: true,
@@ -12416,6 +12751,7 @@ async function handleTelegramUpdateSerialized(update: any) {
         mode: 'REGISTER',
         step: 'REGION',
         phoneNumber: rawPhone,
+        phoneVerified: true,
         fullName: contactFullName,
         referredBy: session?.referredBy,
         updatedAt: Date.now(),
@@ -12531,6 +12867,9 @@ async function handleTelegramUpdateSerialized(update: any) {
         `🌿 <b>ECO HERO BOT — BARCHA BUYRUQLAR</b>\n\n` +
           `🚀 /start — Ro'yxatdan o'tish va bosh menyu\n` +
           `🌍 /menu — Mini App ilovasini ochish\n` +
+          `🌐 /web — Veb-ilova / PWA ga bir martalik kirish havolasi\n` +
+          `🔗 /link KOD — Veb-profilni Telegram bot bilan bog'lash\n` +
+          `🔄 /sync — Yagona xotiradagi balans va natijani ko'rish\n` +
           `👤 /profile — Mening profilim va reytingim\n` +
           `🚨 /report — Ekologik muammo xabar qilish (foto + lokatsiya)\n` +
           `🎬 /activity — Eko-faoliyat (daraxt ekish, tozalash) yuklash\n` +
@@ -12549,13 +12888,108 @@ async function handleTelegramUpdateSerialized(update: any) {
       return;
     }
 
+    if (text.startsWith('/link')) {
+      const codeArg = text.split(/\s+/)[1]?.trim();
+      if (!codeArg) {
+        await sendTelegramMessage(
+          chatId,
+          `🔗 <b>Veb / PWA hisobini bog'lash:</b>\n\n1. Veb-ilova yoki PWA Profilingizga kiring\n2. «Telegram Bot bilan bog'lash» tugmasini bosing\n3. Olingan kodni <code>/link KOD</code> ko'rinishida yuboring.`
+        );
+        return;
+      }
+      const resLink = consumeTelegramLinkCode(codeArg, chatKey, username, userFirstName);
+      if (!resLink.ok || !resLink.user) {
+        await sendTelegramMessage(chatId, `⚠️ ${resLink.error || "Bog'lash amalga oshmadi."}`);
+        return;
+      }
+      deleteRegistrationSession(chatKey);
+      await sendTelegramMessage(
+        chatId,
+        `✅ <b>YAGONA XOTIRA ULANGAN!</b>\n\n👤 <b>Profil:</b> ${resLink.user.fullName}\n💰 <b>Balans:</b> ${resLink.user.ecoCoins || 0} EcoCoin · ⚡ <b>XP:</b> ${resLink.user.ecoXP || 0}\n🏫 <b>Maktab:</b> ${resLink.user.schoolName || '-'}\n\nEndi Telegram Bot, Mini App va Veb / PWA ilovasida natijalaringiz 100% bir xil saqlanadi!`,
+        {
+          reply_markup: {
+            remove_keyboard: true,
+            inline_keyboard: [[{ text: '🌍 ECO HERO ilovasini ochish', web_app: { url: APP_URL } }]],
+          },
+        }
+      );
+      return;
+    }
+
+    if (text === '/web' || text === '/login' || text.startsWith('/web@')) {
+      if (!regUser || !regUser.isOnboarded) {
+        await sendTelegramMessage(chatId, "🌐 Veb-ilova / PWA ga kirish uchun avval botda ro'yxatdan o'ting:", {
+          reply_markup: { inline_keyboard: [[{ text: "🚀 Ro'yxatdan o'tish", callback_data: 'restart_reg' }]] },
+        });
+        return;
+      }
+      const magic = createTelegramWebLoginLink(regUser);
+      const isPublicHttps = /^https:\/\//i.test(magic.loginUrl) && !isPrivateAiStudioOrLocalUrl(magic.loginUrl);
+      const inlineRows: any[] = [];
+      if (isPublicHttps) {
+        inlineRows.push([{ text: '🌐 Veb / PWA ilovada ochish', url: magic.loginUrl }]);
+      }
+      inlineRows.push([{ text: '📱 Mini Appda ochish', web_app: { url: APP_URL } }]);
+      await sendTelegramMessage(
+        chatId,
+        `🌐 <b>VEB-ILOVA VA PWA GA KIRISH (10 DAQIQA)</b>\n\n👤 <b>Hisob:</b> ${regUser.fullName}\n💰 <b>Balans:</b> ${regUser.ecoCoins || 0} EcoCoin\n\n🔑 <b>Bir martalik kirish kodi:</b> <code>${magic.code}</code>\n${isPublicHttps ? `\n🔗 Yoki tayyor havola orqali kiring:\n${magic.loginUrl}` : "\n📱 Brauzer yoki PWA ilovada «Kirish» → «Telegram Bot kodi bilan kirish» bo'limiga yuqoridagi kodni kiriting."}`,
+        {
+          reply_markup: { inline_keyboard: inlineRows },
+        }
+      );
+      return;
+    }
+
+    if (text === '/sync' || text === '/sinxron') {
+      if (!regUser) {
+        await sendTelegramMessage(chatId, "🔄 Sinxronlash uchun avval ro'yxatdan o'ting yoki veb-profilingizdan <code>/link KOD</code> yuboring.", {
+          reply_markup: { inline_keyboard: [[{ text: "🚀 Ro'yxatdan o'tish", callback_data: 'restart_reg' }]] },
+        });
+        return;
+      }
+      syncUserStatsConsistency(regUser);
+      saveCentralDb();
+      broadcastRealtimeEvent('db:updated', { scope: 'users' });
+      await sendTelegramMessage(
+        chatId,
+        `🔄 <b>YAGONA XOTIRA SINXRONLANDI!</b>\n\n👤 <b>Foydalanuvchi:</b> ${regUser.fullName}\n💰 <b>Balans:</b> ${regUser.ecoCoins || 0} EcoCoin\n⚡ <b>Tajriba:</b> ${regUser.ecoXP || 0} XP (Daraja ${regUser.level || 1})\n🔥 <b>Kunlik streak:</b> ${regUser.streakDays || 1} kun\n🏫 <b>Maktab:</b> ${regUser.schoolName || '-'}\n\nUshbu natijalar Bot, Mini App va Veb / PWA ilovasida bir vaqtning o'zida amal qiladi.`,
+        {
+          reply_markup: {
+            inline_keyboard: [[{ text: '🌍 ECO HERO ilovasini ochish', web_app: { url: APP_URL } }]],
+          },
+        }
+      );
+      return;
+    }
+
     if (text.startsWith('/start')) {
       const startParam = text.split(/\s+/)[1]?.trim();
       deleteRegistrationSession(chatKey);
+
+      if (startParam && startParam.startsWith('link_')) {
+        const linkCode = startParam.slice(5).trim();
+        const resLink = consumeTelegramLinkCode(linkCode, chatKey, username, userFirstName);
+        if (!resLink.ok || !resLink.user) {
+          await sendTelegramMessage(chatId, `⚠️ ${resLink.error || "Bog'lash amalga oshmadi."}`);
+          return;
+        }
+        await sendTelegramMessage(
+          chatId,
+          `✅ <b>YAGONA XOTIRA ULANGAN!</b>\n\n👤 <b>Profil:</b> ${resLink.user.fullName}\n💰 <b>Balans:</b> ${resLink.user.ecoCoins || 0} EcoCoin · ⚡ <b>XP:</b> ${resLink.user.ecoXP || 0}\n🏫 <b>Maktab:</b> ${resLink.user.schoolName || '-'}\n\nEndi Telegram Bot, Mini App va Veb / PWA ilovasida natijalaringiz 100% bir xil!`,
+          {
+            reply_markup: {
+              remove_keyboard: true,
+              inline_keyboard: [[{ text: '🌍 ECO HERO ilovasini ochish', web_app: { url: APP_URL } }]],
+            },
+          }
+        );
+        return;
+      }
+
       if (checkIsSuperAdmin({ telegramId: chatKey, verifiedTelegram: true }) || Boolean(regUser && checkIsSuperAdmin(regUser))) {
         await sendTelegramMessage(
           chatId,
-          `👑 <b>Assalomu alaykum, Bosh Administrator!</b>\n\nBot va yagona baza faol ishlamoqda.\nBuyruqlar: /admin · /profile · /apply · /activity · /report · /tasks · /rank · /coins · /invite`,
+          `👑 <b>Assalomu alaykum, Bosh Administrator!</b>\n\nBot, Mini App va Veb/PWA yagona xotirada faol ishlamoqda.\nBuyruqlar: /admin · /profile · /web · /sync · /apply · /activity · /report · /tasks · /rank · /coins · /invite`,
           {
             reply_markup: {
               inline_keyboard: [
@@ -12571,7 +13005,7 @@ async function handleTelegramUpdateSerialized(update: any) {
       if (isRegistered && regUser) {
         await sendTelegramMessage(
           chatId,
-          `🌿 <b>Assalomu alaykum, ${regUser.fullName}!</b>\n\n💰 <b>Balans:</b> ${regUser.ecoCoins} EcoCoin\n🏫 <b>Maktab:</b> ${regUser.schoolName}\n🛡 <b>Rol:</b> ${regUser.role}\n\n<b>Mavjud buyruqlar:</b>\n• /report — Ekologik muammo xabar qilish\n• /activity — Eko-faoliyat (foto/video) yuklash\n• /profile — Profilim · /invite — Do'st taklif qilish\n• /tasks — Vazifalarim · /rank — Reytinglar · /coins — Hamyon`,
+          `🌿 <b>Assalomu alaykum, ${regUser.fullName}!</b>\n\n💰 <b>Balans:</b> ${regUser.ecoCoins} EcoCoin · ⚡ <b>${regUser.ecoXP || 0} XP</b>\n🏫 <b>Maktab:</b> ${regUser.schoolName}\n🛡 <b>Rol:</b> ${regUser.role}\n\n<b>Mavjud buyruqlar:</b>\n• /report — Ekologik muammo xabar qilish\n• /activity — Eko-faoliyat (foto/video) yuklash\n• /web — Veb / PWA ga kirish kodi · /sync — Sinxronlash\n• /profile — Profilim · /invite — Do'st taklif qilish\n• /tasks — Vazifalarim · /rank — Reytinglar · /coins — Hamyon`,
           {
             reply_markup: {
               inline_keyboard: [
@@ -12859,16 +13293,32 @@ async function handleTelegramUpdateSerialized(update: any) {
       if (session.step === 'PHONE') {
         if (text.replace(/[^\d]/g, '').length >= 9) {
           const norm = text.startsWith('+') ? text : `+${text}`;
-          const already = findUserByAnyIdentifier({ telegramId: chatKey, phoneNumber: norm });
-          if (already && already.isOnboarded) {
-            already.telegramId = Number(chatKey) || chatKey;
-            already.telegramChatId = chatKey;
+          const alreadyByPhone = findUserByAnyIdentifier({ phoneNumber: norm });
+          if (alreadyByPhone && alreadyByPhone.isOnboarded && String(alreadyByPhone.telegramId || '') !== chatKey) {
+            await sendTelegramMessage(
+              chatId,
+              `🔐 Ushbu telefon raqami avval ro'yxatdan o'tgan hisobga biriktirilgan.\n\nXavfsiz ulash uchun pastdagi <b>«📲 Telefon raqamni yuborish»</b> tugmasini bosing yoki veb-profilingizdan <code>/link KOD</code> oling:`,
+              {
+                reply_markup: {
+                  keyboard: [[{ text: '📲 Telefon raqamni yuborish', request_contact: true }]],
+                  resize_keyboard: true,
+                  one_time_keyboard: true,
+                },
+              }
+            );
+            return;
+          }
+          const alreadySelf = findUserByAnyIdentifier({ telegramId: chatKey, chatId: chatKey });
+          if (alreadySelf && alreadySelf.isOnboarded) {
             deleteRegistrationSession(chatKey);
             saveCentralDb();
-            await sendTelegramMessage(chatId, `✅ Hisobingiz topildi va ulandi, <b>${already.fullName}</b>! /coins yoki /report yuborishingiz mumkin.`);
+            await sendTelegramMessage(chatId, `✅ Hisobingiz faol, <b>${alreadySelf.fullName}</b>! /coins yoki /report yuborishingiz mumkin.`, {
+              reply_markup: { remove_keyboard: true },
+            });
             return;
           }
           session.phoneNumber = norm;
+          session.phoneVerified = false;
           session.step = 'NAME';
           setRegistrationSession(chatKey, session);
           await sendTelegramMessage(chatId, `✅ Telefon qabul qilindi: <b>${norm}</b>\n\n2️⃣ <b>Ism va familiyangizni kiriting:</b>`, {
@@ -13048,6 +13498,7 @@ async function handleTelegramUpdateSerialized(update: any) {
         centralDb.mediaSubmissions.unshift(sub);
         deleteRegistrationSession(chatKey);
         saveCentralDb();
+        broadcastRealtimeEvent('db:updated', { scope: 'media' });
 
         notifySuperAdminsTelegram(
           `🎬 <b>BOTDAN YANGI EKO-MEDIA (MODERATSIYA)</b>\n👤 ${sub.userName} (${sub.schoolName})\n🏷 ${sub.activityCategory}\n📝 ${sub.description}`,
@@ -13155,6 +13606,7 @@ async function handleTelegramUpdateSerialized(update: any) {
         notifySchoolAdminsForReport(report);
         deleteRegistrationSession(chatKey);
         saveCentralDb();
+        broadcastRealtimeEvent('db:updated', { scope: 'reports' });
 
         notifySuperAdminsTelegram(
           `📸 <b>BOTDAN YANGI MUAMMO HISOBOTI (AI TASDIQLADI)</b>\n👤 ${report.reporterName} (${report.schoolName})\n🏷 ${cat}${hazard.isHazardous ? '\n🚨 <b>XAVFLI HOLAT — O‘QUVCHILAR TEGMASIN!</b>' : ''}\n📝 ${desc}`,
@@ -13297,6 +13749,9 @@ async function syncTelegramBotProfile(token: string, targetUrl?: string, forcePr
         commands: [
           { command: 'start', description: 'ECO HERO ilovasini ochish' },
           { command: 'menu', description: 'Mini App menyusini ochish' },
+          { command: 'web', description: 'Veb / PWA ilovasiga kirish havolasi' },
+          { command: 'link', description: 'Veb-hisobni Telegramga ulash' },
+          { command: 'sync', description: 'Yagona xotira natijalarini sinxronlash' },
           { command: 'profile', description: 'Mening profilim va kodim' },
           { command: 'report', description: 'Ekologik muammo xabar qilish' },
           { command: 'activity', description: 'Eko-faoliyat (foto/video) yuklash' },
@@ -13845,9 +14300,10 @@ app.post(
       const xpAwarded = coinsAwarded * 2;
       const nowIso = new Date().toISOString();
 
+      const prevCoinsTotal = Number(targetUser.totalCoinsEarned || targetUser.ecoCoins || 0);
       targetUser.ecoCoins = Number(targetUser.ecoCoins || 0) + coinsAwarded;
-      targetUser.totalCoinsEarned = Number(targetUser.totalCoinsEarned || targetUser.ecoCoins || 0) + coinsAwarded;
-      targetUser.ecoXP = Number(targetUser.ecoXP || 0) + xpAwarded;
+      targetUser.totalCoinsEarned = prevCoinsTotal + coinsAwarded;
+      targetUser.ecoXP = Math.max(Number(targetUser.ecoXP || 0), prevCoinsTotal * 4) + xpAwarded;
       if (!targetUser.activityStats) {
         targetUser.activityStats = {
           reportsCount: targetUser.reportsCount || 0,
@@ -13866,6 +14322,7 @@ app.post(
         targetUser.activityStats.cleanupsCount = targetUser.cleanupsCount;
       }
       targetUser.activityStats.totalCoinsEarned = targetUser.totalCoinsEarned;
+      syncUserStatsConsistency(targetUser);
       upsertUser(targetUser);
 
       if (targetUser.schoolName || targetUser.schoolId) {

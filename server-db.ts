@@ -101,6 +101,22 @@ export interface UnifiedDatabase {
   qrEcoScans: any[];
   schoolDuels: any[];
   certificates: any[];
+  uidAliases: Record<string, string>;
+  telegramLinkTokens: Record<
+    string,
+    { code: string; uid: string; createdAt: string; expiresAt: string }
+  >;
+  telegramLoginTokens: Record<
+    string,
+    {
+      token: string;
+      code: string;
+      uid: string;
+      telegramId: string;
+      createdAt: string;
+      expiresAt: string;
+    }
+  >;
   meta: {
     version: number;
     updatedAt: string;
@@ -109,8 +125,22 @@ export interface UnifiedDatabase {
   };
 }
 
-const UNIFIED_DB_PATH = path.join(process.cwd(), 'server-unified-db.json');
-const UNIFIED_DB_BACKUP_PATH = path.join(process.cwd(), 'server-unified-db.backup.json');
+export function getPersistentDataDir(): string {
+  const raw = String(process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || '').trim();
+  if (!raw) return process.cwd();
+  const resolved = path.resolve(raw);
+  try {
+    fs.mkdirSync(resolved, { recursive: true });
+    return resolved;
+  } catch (err: any) {
+    console.error(`[CentralDB ENV ERROR] Could not create DATA_DIR (${resolved}):`, err?.message || err);
+    return process.cwd();
+  }
+}
+
+const DATA_ROOT_DIR = getPersistentDataDir();
+const UNIFIED_DB_PATH = path.join(DATA_ROOT_DIR, 'server-unified-db.json');
+const UNIFIED_DB_BACKUP_PATH = path.join(DATA_ROOT_DIR, 'server-unified-db.backup.json');
 const LEGACY_USERS_FILE = path.join(process.cwd(), 'registered-users.json');
 const LEGACY_ROLE_REQUESTS_FILE = path.join(process.cwd(), 'role-requests.json');
 const LEGACY_SESSIONS_FILE = path.join(process.cwd(), 'server-registration-sessions.json');
@@ -940,6 +970,9 @@ function createDefaultDatabase(): UnifiedDatabase {
     qrEcoScans: [],
     schoolDuels: [],
     certificates: [],
+    uidAliases: {},
+    telegramLinkTokens: {},
+    telegramLoginTokens: {},
     meta: {
       version: 2,
       updatedAt: new Date().toISOString(),
@@ -1306,6 +1339,16 @@ function loadUnifiedDatabase(): { db: UnifiedDatabase; needsSave: boolean } {
         qrEcoScans: Array.isArray(parsed.qrEcoScans) ? parsed.qrEcoScans : [],
         schoolDuels: Array.isArray(parsed.schoolDuels) ? parsed.schoolDuels : [],
         certificates: Array.isArray(parsed.certificates) ? parsed.certificates : [],
+        uidAliases:
+          parsed.uidAliases && typeof parsed.uidAliases === 'object' ? parsed.uidAliases : {},
+        telegramLinkTokens:
+          parsed.telegramLinkTokens && typeof parsed.telegramLinkTokens === 'object'
+            ? parsed.telegramLinkTokens
+            : {},
+        telegramLoginTokens:
+          parsed.telegramLoginTokens && typeof parsed.telegramLoginTokens === 'object'
+            ? parsed.telegramLoginTokens
+            : {},
       };
 
       const { db: purgedDb, changed } = purgeDemoRecordsFromDb(hydrated);
@@ -1590,6 +1633,59 @@ export function findOrCreateSchool(params: {
   return school;
 }
 
+export function phoneMatchKey(phone?: string | null): string {
+  const digits = String(phone || '').replace(/[^\d]/g, '');
+  if (digits.length >= 9) {
+    return digits.slice(-9);
+  }
+  return digits;
+}
+
+export function isSyntheticEmail(email?: string | null): boolean {
+  const clean = String(email || '').trim().toLowerCase();
+  return !clean || clean.endsWith('@telegram.ecohero.uz') || clean.endsWith('@ecohero.uz');
+}
+
+export function resolveCanonicalUid(uid?: string | null): string {
+  let current = String(uid || '').trim();
+  if (!current) return '';
+  const seen = new Set<string>();
+  const aliases = centralDb.uidAliases || {};
+  while (aliases[current] && !seen.has(current)) {
+    seen.add(current);
+    current = String(aliases[current]).trim();
+  }
+  return current;
+}
+
+export function syncUserStatsConsistency(u: any): any {
+  if (!u || typeof u !== 'object') return u;
+  const totalEarned = Math.max(Number(u.totalCoinsEarned || 0), Number(u.activityStats?.totalCoinsEarned || 0), Number(u.ecoCoins || 0));
+  const reportsCount = Math.max(Number(u.reportsCount || 0), Number(u.activityStats?.reportsCount || 0));
+  const cleanupsCount = Math.max(Number(u.cleanupsCount || 0), Number(u.activityStats?.cleanupsCount || 0));
+  const treesPlanted = Math.max(Number(u.treesPlanted || 0), Number(u.activityStats?.treesPlanted || 0));
+  const streakDays = Math.max(1, Number(u.streakDays ?? u.activityStats?.streakDays ?? 1));
+  const computedXp = Math.max(Number(u.ecoXP || 0), totalEarned * 4);
+  const computedLevel = Math.max(1, Math.floor(computedXp / 500) + 1);
+
+  u.totalCoinsEarned = totalEarned;
+  u.reportsCount = reportsCount;
+  u.cleanupsCount = cleanupsCount;
+  u.treesPlanted = treesPlanted;
+  u.streakDays = streakDays;
+  u.ecoXP = computedXp;
+  u.level = computedLevel;
+  u.activityStats = {
+    ...(u.activityStats || {}),
+    reportsCount,
+    cleanupsCount,
+    treesPlanted,
+    streakDays,
+    totalCoinsEarned: totalEarned,
+  };
+  return u;
+}
+
 export function findUserByAnyIdentifier(identifier: {
   uid?: string;
   telegramId?: string | number;
@@ -1598,28 +1694,50 @@ export function findUserByAnyIdentifier(identifier: {
   phoneNumber?: string;
 }) {
   const usersList = Object.values(centralDb.users);
-  if (identifier.uid && centralDb.users[identifier.uid]) {
-    return centralDb.users[identifier.uid];
+  if (identifier.uid) {
+    const rawUid = String(identifier.uid).trim();
+    const canonical = resolveCanonicalUid(rawUid);
+    if (canonical && centralDb.users[canonical]) {
+      return centralDb.users[canonical];
+    }
+    if (centralDb.users[rawUid]) {
+      return centralDb.users[rawUid];
+    }
+    const byLinked = usersList.find(
+      (u: any) =>
+        Array.isArray(u?.linkedUids) &&
+        (u.linkedUids.includes(rawUid) || (canonical && u.linkedUids.includes(canonical)))
+    );
+    if (byLinked) return byLinked;
   }
   const tgId = identifier.telegramId ?? identifier.chatId;
   if (tgId !== undefined && tgId !== null && tgId !== '') {
-    const tgStr = String(tgId);
+    const tgStr = String(tgId).trim();
+    const tgUidCanonical = resolveCanonicalUid(`user_tg_${tgStr}`);
+    if (tgUidCanonical && centralDb.users[tgUidCanonical]) {
+      return centralDb.users[tgUidCanonical];
+    }
     const byTg = usersList.find(
-      (u) => String(u.telegramId || '') === tgStr || String(u.chatId || '') === tgStr || u.uid === `user_tg_${tgStr}`
+      (u: any) =>
+        String(u.telegramId || '') === tgStr ||
+        String(u.telegramChatId || '') === tgStr ||
+        String(u.chatId || '') === tgStr ||
+        u.uid === `user_tg_${tgStr}` ||
+        (Array.isArray(u.linkedUids) && u.linkedUids.includes(`user_tg_${tgStr}`))
     );
     if (byTg) return byTg;
   }
   if (identifier.email) {
     const emailLower = String(identifier.email).trim().toLowerCase();
-    const byEmail = usersList.find((u) => String(u.email || '').trim().toLowerCase() === emailLower);
-    if (byEmail) return byEmail;
+    if (emailLower) {
+      const byEmail = usersList.find((u: any) => String(u.email || '').trim().toLowerCase() === emailLower);
+      if (byEmail) return byEmail;
+    }
   }
   if (identifier.phoneNumber) {
-    const cleanPhone = String(identifier.phoneNumber).replace(/[^\d]/g, '');
-    if (cleanPhone.length >= 9) {
-      const byPhone = usersList.find(
-        (u) => String(u.phoneNumber || '').replace(/[^\d]/g, '') === cleanPhone
-      );
+    const key = phoneMatchKey(identifier.phoneNumber);
+    if (key.length >= 9) {
+      const byPhone = usersList.find((u: any) => phoneMatchKey(u.phoneNumber) === key);
       if (byPhone) return byPhone;
     }
   }
@@ -1627,22 +1745,287 @@ export function findUserByAnyIdentifier(identifier: {
 }
 
 export function upsertUser(profile: any) {
-  const uid = String(profile.uid || profile.userId || (profile.chatId ? `user_tg_${profile.chatId}` : `user_${Date.now()}`));
-  const existing = centralDb.users[uid] || findUserByAnyIdentifier({
-    telegramId: profile.telegramId || profile.chatId,
-    phoneNumber: profile.phoneNumber,
-    email: profile.email,
-  });
+  const rawUid = String(
+    profile.uid || profile.userId || (profile.chatId ? `user_tg_${profile.chatId}` : `user_${Date.now()}`)
+  );
+  const canonicalRaw = resolveCanonicalUid(rawUid);
+  const existing =
+    centralDb.users[canonicalRaw] ||
+    centralDb.users[rawUid] ||
+    findUserByAnyIdentifier({
+      uid: rawUid,
+      telegramId: profile.telegramId || profile.chatId || profile.telegramChatId,
+      phoneNumber: profile.phoneNumber,
+      email: profile.email,
+    });
 
-  const merged = {
+  const targetUid = existing?.uid || canonicalRaw || rawUid;
+  const linkedSet = new Set<string>([
+    targetUid,
+    ...(Array.isArray(existing?.linkedUids) ? existing.linkedUids : []),
+    ...(Array.isArray(profile.linkedUids) ? profile.linkedUids : []),
+  ]);
+  if (rawUid && rawUid !== targetUid) {
+    linkedSet.add(rawUid);
+    if (!centralDb.uidAliases) centralDb.uidAliases = {};
+    centralDb.uidAliases[rawUid] = targetUid;
+  }
+
+  const merged = syncUserStatsConsistency({
     ...(existing || {}),
     ...profile,
-    uid: existing?.uid || uid,
-    userId: existing?.uid || uid,
+    uid: targetUid,
+    userId: targetUid,
+    linkedUids: Array.from(linkedSet),
     lastUpdated: new Date().toISOString(),
-  };
+  });
 
   centralDb.users[merged.uid] = merged;
+  saveCentralDb();
+  return merged;
+}
+
+const ROLE_PRIVILEGE_RANK: Record<string, number> = {
+  student: 1,
+  ambassador: 2,
+  sponsor: 3,
+  school_admin: 4,
+  district_coordinator: 5,
+  regional_coordinator: 6,
+  moderator: 7,
+  super_admin: 8,
+};
+
+export function mergeUserAccounts(
+  primaryUidInput: string,
+  secondaryUidInput: string
+): any | null {
+  const primaryUid = resolveCanonicalUid(primaryUidInput) || String(primaryUidInput || '').trim();
+  const secondaryUid = resolveCanonicalUid(secondaryUidInput) || String(secondaryUidInput || '').trim();
+  if (!primaryUid || !secondaryUid) return centralDb.users[primaryUid || secondaryUid] || null;
+  if (primaryUid === secondaryUid) return centralDb.users[primaryUid] || null;
+
+  const primary = centralDb.users[primaryUid];
+  const secondary = centralDb.users[secondaryUid];
+  if (!primary && !secondary) return null;
+  if (!primary && secondary) {
+    return secondary;
+  }
+  if (primary && !secondary) {
+    if (!centralDb.uidAliases) centralDb.uidAliases = {};
+    centralDb.uidAliases[secondaryUid] = primaryUid;
+    saveCentralDb();
+    return primary;
+  }
+
+  // Merge balances smartly without duplicating two brand-new welcome bonuses
+  const welcomeBonus = Number(centralDb.rewardSettings?.welcomeBonus ?? 100);
+  const bothClaimedWelcome = Boolean(primary.welcomeBonusClaimed && secondary.welcomeBonusClaimed);
+  const secNonBonusTxCount = (centralDb.transactions || []).filter(
+    (t: any) =>
+      t?.userId === secondaryUid &&
+      !String(t?.reason || '').toLowerCase().includes("ro'yxatdan o'tish")
+  ).length;
+  const duplicateWelcomeOffset =
+    bothClaimedWelcome && secNonBonusTxCount === 0 && Number(secondary.ecoCoins || 0) <= welcomeBonus
+      ? Number(secondary.ecoCoins || 0)
+      : bothClaimedWelcome
+      ? Math.min(welcomeBonus, Number(secondary.ecoCoins || 0))
+      : 0;
+
+  const addedEcoCoins = Math.max(0, Number(secondary.ecoCoins || 0) - duplicateWelcomeOffset);
+  const addedTotalEarned = Math.max(
+    0,
+    Number(secondary.totalCoinsEarned || secondary.ecoCoins || 0) - duplicateWelcomeOffset
+  );
+
+  const mergedApprovedRoles = Array.from(
+    new Set([
+      ...(Array.isArray(primary.approvedRoles) ? primary.approvedRoles : [primary.role || 'student']),
+      ...(Array.isArray(secondary.approvedRoles) ? secondary.approvedRoles : [secondary.role || 'student']),
+    ])
+  ).filter(Boolean);
+
+  const primaryRoleRank = ROLE_PRIVILEGE_RANK[String(primary.role || 'student')] || 1;
+  const secondaryRoleRank = ROLE_PRIVILEGE_RANK[String(secondary.role || 'student')] || 1;
+  const highestRole =
+    secondaryRoleRank > primaryRoleRank ? secondary.role : primary.role || 'student';
+
+  const latestStreakDate =
+    String(secondary.lastStreakClaimDate || '') > String(primary.lastStreakClaimDate || '')
+      ? secondary.lastStreakClaimDate
+      : primary.lastStreakClaimDate;
+
+  const preferredName =
+    primary.fullName && !['Eko-Qahramon', "O'quvchi", ''].includes(String(primary.fullName).trim())
+      ? primary.fullName
+      : secondary.fullName || primary.fullName;
+
+  const preferredEmail = !isSyntheticEmail(primary.email)
+    ? primary.email
+    : !isSyntheticEmail(secondary.email)
+    ? secondary.email
+    : primary.email || secondary.email || '';
+
+  const preferredSchoolValid = (u: any) =>
+    Boolean(u?.schoolName && u.schoolName !== 'Maktab kiritilmagan' && u.schoolId !== 'school_new');
+
+  const schoolOwner = preferredSchoolValid(primary) ? primary : preferredSchoolValid(secondary) ? secondary : primary;
+
+  const linkedSet = new Set<string>([
+    primaryUid,
+    secondaryUid,
+    ...(Array.isArray(primary.linkedUids) ? primary.linkedUids : []),
+    ...(Array.isArray(secondary.linkedUids) ? secondary.linkedUids : []),
+  ]);
+
+  const merged = syncUserStatsConsistency({
+    ...secondary,
+    ...primary,
+    uid: primaryUid,
+    userId: primaryUid,
+    fullName: preferredName,
+    email: preferredEmail,
+    passwordHash: primary.passwordHash || secondary.passwordHash,
+    phoneNumber: primary.phoneNumber || secondary.phoneNumber || '',
+    telegramId: primary.telegramId || secondary.telegramId,
+    telegramChatId: primary.telegramChatId || secondary.telegramChatId || primary.chatId || secondary.chatId,
+    chatId: primary.chatId || secondary.chatId || primary.telegramChatId || secondary.telegramChatId,
+    telegramUsername: primary.telegramUsername || secondary.telegramUsername || '',
+    telegramAuth: Boolean(primary.telegramAuth || secondary.telegramAuth || primary.telegramId || secondary.telegramId),
+    schoolId: schoolOwner.schoolId,
+    schoolName: schoolOwner.schoolName,
+    schoolNumber: schoolOwner.schoolNumber,
+    region: schoolOwner.region || primary.region || secondary.region,
+    district: schoolOwner.district || primary.district || secondary.district,
+    grade: primary.grade || secondary.grade || '',
+    role: highestRole,
+    approvedRoles: mergedApprovedRoles,
+    isVerified: Boolean(primary.isVerified || secondary.isVerified),
+    isOnboarded: Boolean(primary.isOnboarded || secondary.isOnboarded),
+    welcomeBonusClaimed: Boolean(primary.welcomeBonusClaimed || secondary.welcomeBonusClaimed),
+    privacyConsentAccepted: Boolean(primary.privacyConsentAccepted || secondary.privacyConsentAccepted),
+    ecoCoins: Number(primary.ecoCoins || 0) + addedEcoCoins,
+    totalCoinsEarned: Number(primary.totalCoinsEarned || 0) + addedTotalEarned,
+    ecoXP: Math.max(
+      Number(primary.ecoXP || 0) + Number(secondary.ecoXP || 0),
+      (Number(primary.totalCoinsEarned || 0) + addedTotalEarned) * 4
+    ),
+    reportsCount: Number(primary.reportsCount || 0) + Number(secondary.reportsCount || 0),
+    cleanupsCount: Number(primary.cleanupsCount || 0) + Number(secondary.cleanupsCount || 0),
+    treesPlanted: Number(primary.treesPlanted || 0) + Number(secondary.treesPlanted || 0),
+    referralCount: Number(primary.referralCount || 0) + Number(secondary.referralCount || 0),
+    referralEarnings: Number(primary.referralEarnings || 0) + Number(secondary.referralEarnings || 0),
+    streakDays: Math.max(Number(primary.streakDays || 1), Number(secondary.streakDays || 1)),
+    ...(latestStreakDate ? { lastStreakClaimDate: latestStreakDate } : {}),
+    linkedUids: Array.from(linkedSet),
+    lastUpdated: new Date().toISOString(),
+  });
+
+  // Re-point all child records from secondaryUid -> primaryUid
+  for (const r of centralDb.reports || []) {
+    if (r.reporterUid === secondaryUid) r.reporterUid = primaryUid;
+    if (r.authorUid === secondaryUid) r.authorUid = primaryUid;
+    if (r.assignedAmbassadorUid === secondaryUid) r.assignedAmbassadorUid = primaryUid;
+    if (Array.isArray(r.upvotedBy)) {
+      r.upvotedBy = Array.from(new Set(r.upvotedBy.map((u: string) => (u === secondaryUid ? primaryUid : u))));
+    }
+  }
+  for (const m of centralDb.mediaSubmissions || []) {
+    if (m.userId === secondaryUid) m.userId = primaryUid;
+  }
+  for (const t of centralDb.ecoTasks || []) {
+    if (t.assigneeUid === secondaryUid) t.assigneeUid = primaryUid;
+    if (t.assignedByUid === secondaryUid) t.assignedByUid = primaryUid;
+  }
+  for (const o of centralDb.shopOrders || []) {
+    if (o.userId === secondaryUid) o.userId = primaryUid;
+  }
+  for (const tx of centralDb.transactions || []) {
+    if (tx.userId === secondaryUid) tx.userId = primaryUid;
+  }
+  for (const n of centralDb.notifications || []) {
+    if (n.userId === secondaryUid) n.userId = primaryUid;
+  }
+  for (const rr of centralDb.roleRequests || []) {
+    if (rr.userId === secondaryUid) rr.userId = primaryUid;
+  }
+  for (const app of centralDb.registrationApplications || []) {
+    if (app.userId === secondaryUid) app.userId = primaryUid;
+  }
+  for (const amb of centralDb.ambassadors || []) {
+    if (amb.uid === secondaryUid) amb.uid = primaryUid;
+  }
+  for (const ms of centralDb.missionSubmissions || []) {
+    if (ms.userId === secondaryUid) ms.userId = primaryUid;
+  }
+  if (centralDb.missionCompletions && centralDb.missionCompletions[secondaryUid]) {
+    const combined = Array.from(
+      new Set([
+        ...(centralDb.missionCompletions[primaryUid] || []),
+        ...centralDb.missionCompletions[secondaryUid],
+      ])
+    );
+    centralDb.missionCompletions[primaryUid] = combined;
+    delete centralDb.missionCompletions[secondaryUid];
+  }
+  if (centralDb.dailyQuizClaims && centralDb.dailyQuizClaims[secondaryUid]) {
+    if (
+      !centralDb.dailyQuizClaims[primaryUid] ||
+      centralDb.dailyQuizClaims[secondaryUid] > centralDb.dailyQuizClaims[primaryUid]
+    ) {
+      centralDb.dailyQuizClaims[primaryUid] = centralDb.dailyQuizClaims[secondaryUid];
+    }
+    delete centralDb.dailyQuizClaims[secondaryUid];
+  }
+  for (const adClaim of centralDb.adRewardClaims || []) {
+    if (adClaim.userId === secondaryUid) adClaim.userId = primaryUid;
+  }
+  for (const scan of centralDb.qrEcoScans || []) {
+    if (scan.studentUid === secondaryUid) scan.studentUid = primaryUid;
+    if (scan.scannedByUid === secondaryUid) scan.scannedByUid = primaryUid;
+  }
+  for (const cert of centralDb.certificates || []) {
+    if (cert.uid === secondaryUid) cert.uid = primaryUid;
+  }
+  for (const ref of centralDb.referrals || []) {
+    if (ref.referrerUid === secondaryUid) ref.referrerUid = primaryUid;
+    if (ref.referredUid === secondaryUid) ref.referredUid = primaryUid;
+  }
+  for (const msg of centralDb.chatMessages || []) {
+    if (msg.senderUid === secondaryUid) msg.senderUid = primaryUid;
+    if (msg.recipientUid === secondaryUid) msg.recipientUid = primaryUid;
+  }
+  for (const perm of centralDb.chatPermissions || []) {
+    if (perm.requesterUid === secondaryUid) perm.requesterUid = primaryUid;
+    if (perm.targetUid === secondaryUid) perm.targetUid = primaryUid;
+  }
+  if (centralDb.weeklyChallenge?.participants?.[secondaryUid]) {
+    const secPart = centralDb.weeklyChallenge.participants[secondaryUid];
+    const priPart = centralDb.weeklyChallenge.participants[primaryUid];
+    if (priPart) {
+      priPart.progress = Number(priPart.progress || 0) + Number(secPart.progress || 0);
+      priPart.claimed = Boolean(priPart.claimed || secPart.claimed);
+    } else {
+      centralDb.weeklyChallenge.participants[primaryUid] = {
+        ...secPart,
+        uid: primaryUid,
+      };
+    }
+    delete centralDb.weeklyChallenge.participants[secondaryUid];
+  }
+
+  if (!centralDb.uidAliases) centralDb.uidAliases = {};
+  centralDb.uidAliases[secondaryUid] = primaryUid;
+  for (const [aliasKey, targetVal] of Object.entries(centralDb.uidAliases)) {
+    if (targetVal === secondaryUid) {
+      centralDb.uidAliases[aliasKey] = primaryUid;
+    }
+  }
+  delete centralDb.users[secondaryUid];
+  centralDb.users[primaryUid] = merged;
+
+  recalculateSchoolRanks();
   saveCentralDb();
   return merged;
 }

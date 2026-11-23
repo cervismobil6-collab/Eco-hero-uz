@@ -163,6 +163,15 @@ interface EcoContextType {
   loginUser: (email: string, pass: string) => Promise<void>;
   registerUser: (email: string, pass: string, data: Partial<UserProfile>) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
+  loginWithTelegramCode: (codeOrToken: string) => Promise<void>;
+  createTelegramLinkToken: () => Promise<{
+    success: boolean;
+    code?: string;
+    deepLink?: string;
+    botUsername?: string;
+    expiresAt?: string;
+    error?: string;
+  }>;
   logoutUser: () => Promise<void>;
   authModalOpen: boolean;
   openAuthModal: () => void;
@@ -1387,9 +1396,20 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setIsServerConnected(false);
     };
 
+    const lastFocusSyncRef = { current: 0 };
+    const handleVisibilityOrFocus = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      const now = Date.now();
+      if (now - lastFocusSyncRef.current < 3000) return;
+      lastFocusSyncRef.current = now;
+      syncBootstrap();
+    };
+
     window.addEventListener('popstate', handlePopState);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
 
     checkServerHealth();
     syncBootstrap();
@@ -1399,6 +1419,8 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       window.removeEventListener('popstate', handlePopState);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
     };
   }, [checkServerHealth, syncBootstrap, flushOfflineQueue]);
 
@@ -1674,8 +1696,76 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [apiFetch, rewardSettings.referralInvitee, showNotification, triggerConfetti, triggerHaptic, syncBootstrap]
   );
 
+  const loginWithTelegramCode = useCallback(
+    async (codeOrToken: string) => {
+      const cleanInput = String(codeOrToken || '').trim();
+      if (!cleanInput) {
+        throw new Error('Telegram kirish kodini kiriting');
+      }
+      const isHexToken = cleanInput.length >= 20;
+      const res = await fetch(apiUrl('/api/auth/telegram-magic-login'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(isHexToken ? { token: cleanInput } : { code: cleanInput.toUpperCase() }),
+      });
+      const data = await parseApiJson<any>(res);
+      if (!res.ok || !data?.success || !data?.user) {
+        throw new Error(data?.error || "Kirish kodi noto'g'ri yoki muddati tugagan");
+      }
+      if (data.sessionToken) saveSessionToken(data.sessionToken);
+      setUser(prev => ({ ...prev, ...data.user }));
+      if (data.user.uid) localStorage.setItem('ecohero_session_uid', data.user.uid);
+      if (data.user.isOnboarded) {
+        localStorage.setItem('ecohero_onboarded', 'true');
+        setOnboardingModalOpen(false);
+      }
+      if (data.user.welcomeBonusClaimed) {
+        localStorage.setItem('ecohero_welcome_bonus_claimed', 'true');
+      }
+      await syncBootstrap(data.user.uid, data.user.telegramId);
+      triggerHaptic('success');
+      showNotification(`Yagona xotira ulandi! Xush kelibsiz, ${data.user.fullName || 'Eko-Qahramon'}!`, 'success');
+    },
+    [saveSessionToken, syncBootstrap, triggerHaptic, showNotification]
+  );
+
+  const createTelegramLinkToken = useCallback(async () => {
+    try {
+      const res = await apiFetch('/api/auth/telegram-link-token', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      const data = await parseApiJson<any>(res);
+      if (!res.ok || !data?.success) {
+        return {
+          success: false,
+          error: data?.error || "Bog'lash kodini yaratib bo'lmadi. Avval tizimga kiring.",
+        };
+      }
+      return {
+        success: true,
+        code: data.code,
+        deepLink: data.deepLink,
+        botUsername: data.botUsername,
+        expiresAt: data.expiresAt,
+      };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Tarmoq xatoligi' };
+    }
+  }, [apiFetch]);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const tgLoginToken = params.get('tg_login');
+    if (tgLoginToken) {
+      params.delete('tg_login');
+      const nextSearch = params.toString();
+      const cleanUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}${window.location.hash || ''}`;
+      window.history.replaceState(null, '', cleanUrl);
+      loginWithTelegramCode(tgLoginToken).catch((err) => {
+        showNotification(err?.message || "Telegram havolasi muddati tugagan", 'warning');
+      });
+    }
     const tab = params.get('tab');
     if (tab && VALID_TABS.has(tab.toLowerCase())) {
       setActiveTab(tab.toLowerCase());
@@ -1684,7 +1774,7 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (refCode && refCode !== userRef.current.uid && refCode !== userRef.current.referralCode) {
       claimReferral(refCode);
     }
-  }, [claimReferral]);
+  }, [claimReferral, loginWithTelegramCode, showNotification]);
 
   const toggleTheme = () => setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
 
@@ -4294,6 +4384,8 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         loginUser,
         registerUser,
         loginWithGoogle,
+        loginWithTelegramCode,
+        createTelegramLinkToken,
         logoutUser,
         authModalOpen,
         openAuthModal: () => setAuthModalOpen(true),

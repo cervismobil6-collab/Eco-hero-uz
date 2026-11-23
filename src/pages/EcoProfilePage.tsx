@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   User,
   Settings,
@@ -20,6 +20,11 @@ import {
   CheckCircle2,
   Lock,
   Sparkles,
+  RefreshCw,
+  Link2,
+  Copy,
+  ExternalLink,
+  Smartphone,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useEco } from '../context/EcoContext';
@@ -35,11 +40,69 @@ export const EcoProfilePage: React.FC = () => {
     schools,
     missionCompletions,
     openEditProfileModal,
+    openAuthModal,
     logoutUser,
     setActiveTab,
     showNotification,
     triggerHaptic,
+    syncBootstrap,
+    createTelegramLinkToken,
+    sessionToken,
   } = useEco();
+
+  const [syncingNow, setSyncingNow] = useState(false);
+  const [linkingTelegram, setLinkingTelegram] = useState(false);
+  const [linkPayload, setLinkPayload] = useState<{
+    code?: string;
+    deepLink?: string;
+    botUsername?: string;
+  } | null>(null);
+
+  const handleManualSync = async () => {
+    setSyncingNow(true);
+    triggerHaptic('light');
+    try {
+      await syncBootstrap();
+      showNotification('Yagona xotira natijalari sinxronlandi!', 'success');
+    } finally {
+      setSyncingNow(false);
+    }
+  };
+
+  const handleGenerateTelegramLink = async () => {
+    if (!sessionToken) {
+      openAuthModal();
+      showNotification("Avval veb-hisobingizga kiring yoki ro'yxatdan o'ting", 'info');
+      return;
+    }
+    setLinkingTelegram(true);
+    triggerHaptic('light');
+    try {
+      const res = await createTelegramLinkToken();
+      if (!res.success || !res.code) {
+        showNotification(res.error || "Bog'lash kodini yaratib bo'lmadi", 'warning');
+        return;
+      }
+      setLinkPayload({
+        code: res.code,
+        deepLink: res.deepLink,
+        botUsername: res.botUsername,
+      });
+      showNotification("Telegram bog'lash kodi tayyor!", 'success');
+    } finally {
+      setLinkingTelegram(false);
+    }
+  };
+
+  const handleCopyCommand = async (cmd: string) => {
+    try {
+      await navigator.clipboard.writeText(cmd);
+      triggerHaptic('success');
+      showNotification('Nusxalandi: ' + cmd, 'success');
+    } catch {
+      showNotification("Qo'lda nusxalab oling: " + cmd, 'info');
+    }
+  };
 
   const userRankIdx = studentsLeaderboard.findIndex(s => s.uid === user.uid);
   const schoolObj = schools.find(s => s.id === user.schoolId);
@@ -340,6 +403,99 @@ export const EcoProfilePage: React.FC = () => {
           </div>
 
           <div className="lg:col-span-4 space-y-6">
+            {/* Unified Memory & Cross-Platform Sync Card */}
+            <div className="eco-surface rounded-[28px] p-5 shadow-xl space-y-4">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/15 text-emerald-500 flex items-center justify-center shrink-0">
+                    <Smartphone className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">
+                      Yagona Xotira Tizimi
+                    </h3>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Bot · Mini App · Web/PWA
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleManualSync}
+                  disabled={syncingNow}
+                  title="Natijalarni sinxronlash"
+                  className="p-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-4 h-4 ${syncingNow ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+
+              <div className="space-y-2 text-xs">
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/70 dark:bg-[#040D0A]/70 border border-slate-200/70 dark:border-emerald-500/15">
+                  <span className="font-bold text-slate-700 dark:text-slate-300">Web / PWA Ilova</span>
+                  <span className="font-extrabold text-emerald-600 dark:text-emerald-400">Faol</span>
+                </div>
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/70 dark:bg-[#040D0A]/70 border border-slate-200/70 dark:border-emerald-500/15">
+                  <span className="font-bold text-slate-700 dark:text-slate-300">Telegram Bot & Mini App</span>
+                  {user.telegramId ? (
+                    <span className="font-extrabold text-emerald-600 dark:text-emerald-400 truncate max-w-[140px]">
+                      {user.telegramUsername || `ID:${user.telegramId}`}
+                    </span>
+                  ) : (
+                    <span className="font-bold text-amber-500">Ulanmagan</span>
+                  )}
+                </div>
+              </div>
+
+              {!user.telegramId ? (
+                <div className="space-y-3">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Telegram botdagi va ilovadagi natijalaringiz bir xil bo&apos;lishi uchun profilingizni botga bog&apos;lang:
+                  </p>
+                  <button
+                    onClick={handleGenerateTelegramLink}
+                    disabled={linkingTelegram}
+                    className="w-full py-2.5 px-3 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-[#040D0A] font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <Link2 className="w-4 h-4" />
+                    <span>{linkingTelegram ? 'Kod yaratilmoqda...' : "Telegram Bot bilan bog'lash"}</span>
+                  </button>
+
+                  {linkPayload?.code && (
+                    <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 space-y-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200">
+                          Botga yuborish kodi:
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyCommand(`/link ${linkPayload.code}`)}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white/80 dark:bg-[#040D0A] text-[11px] font-mono font-bold text-emerald-600 dark:text-emerald-400 cursor-pointer"
+                        >
+                          <Copy className="w-3 h-3" />
+                          <span>/link {linkPayload.code}</span>
+                        </button>
+                      </div>
+                      {linkPayload.deepLink && (
+                        <a
+                          href={linkPayload.deepLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full py-2 px-3 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-[#040D0A] text-[11px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>Telegram Botda 1 bosishda ulash</span>
+                        </a>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-[11px] text-emerald-700 dark:text-emerald-300/90 leading-relaxed">
+                  EcoCoin, EcoXP, daraja va yutuqlaringiz barcha qurilmalarda yagona markaziy xotirada bir xil saqlanmoqda. Botda <code className="font-mono font-bold">/web</code> yuborib boshqa brauzerlarga ham kiring.
+                </p>
+              )}
+            </div>
+
             <div className="eco-surface rounded-[28px] p-5 shadow-xl space-y-3">
               <h3 className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest px-2">
                 Sozlamalar

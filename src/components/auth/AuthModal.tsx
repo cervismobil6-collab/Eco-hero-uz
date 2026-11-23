@@ -5,6 +5,7 @@ import {
   Lock,
   User,
   AlertCircle,
+  KeyRound,
 } from 'lucide-react';
 import { useEco } from '../../context/EcoContext';
 import { UZBEKISTAN_REGIONS, UZBEKISTAN_DISTRICTS } from '../../data/mockData';
@@ -15,9 +16,10 @@ interface AuthModalProps {
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
-  const { loginUser, registerUser, loginWithGoogle } = useEco();
+  const { loginUser, registerUser, loginWithGoogle, loginWithTelegramCode } = useEco();
 
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [mode, setMode] = useState<'login' | 'register' | 'telegram'>('login');
+  const [tgCode, setTgCode] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -38,7 +40,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
     setLoading(true);
 
     try {
-      if (mode === 'login') {
+      if (mode === 'telegram') {
+        await loginWithTelegramCode(tgCode);
+        onClose();
+      } else if (mode === 'login') {
         await loginUser(email, password);
         onClose();
       } else {
@@ -92,17 +97,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
             ECO HERO XAVFSIZ TIZIMI
           </span>
           <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
-            {mode === 'login' ? 'Tizimga Kirish' : 'Eko-Qahramon Bo\'lish'}
+            {mode === 'login'
+              ? 'Tizimga Kirish'
+              : mode === 'telegram'
+              ? 'Telegram Orqali Kirish'
+              : "Eko-Qahramon Bo'lish"}
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400">
             {mode === 'login'
               ? 'Shaxsiy hisobingizga kiring va EcoCoinlaringizni boshqaring'
-              : 'O\'zbekiston yoshlari ekologik ekotizimida ro\'yxatdan o\'ting'}
+              : mode === 'telegram'
+              ? 'Telegram botdagi hisobingiz va balansingizni Web / PWA ilovaga ulang'
+              : "O'zbekiston yoshlari ekologik ekotizimida ro'yxatdan o'ting"}
           </p>
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-xs font-semibold">
+        <div className="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-[11px] font-semibold gap-1">
           <button
             type="button"
             onClick={() => {
@@ -130,6 +141,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
             }`}
           >
             Ro'yxatdan o'tish
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMode('telegram');
+              setError(null);
+            }}
+            className={`flex-1 py-2 rounded-lg transition-colors cursor-pointer ${
+              mode === 'telegram'
+                ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm'
+                : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            Telegram Kodi
           </button>
         </div>
 
@@ -246,47 +271,86 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
             </>
           )}
 
-          <div>
-            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
-              Elektron Pochta
-            </label>
-            <div className="relative">
-              <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="misol@maktab.uz"
-                className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
-              />
+          {mode === 'telegram' ? (
+            <div className="space-y-3">
+              <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-xs text-slate-700 dark:text-slate-200 space-y-1.5">
+                <p className="font-bold text-emerald-700 dark:text-emerald-300">
+                  Bot va Web / PWA yagona xotirasini ulash:
+                </p>
+                <p className="text-[11px] leading-relaxed">
+                  1. Telegram botga kirib <code className="font-mono font-bold">/web</code> buyrug&apos;ini yuboring.
+                  <br />
+                  2. Bot bergan 6 belgili kodni pastga kiriting yoki tayyor havolani bosing.
+                </p>
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Telegram Bot Kirish Kodi
+                </label>
+                <div className="relative">
+                  <KeyRound className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    required
+                    value={tgCode}
+                    onChange={e => setTgCode(e.target.value.toUpperCase())}
+                    placeholder="Masalan: A3F9C2"
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono tracking-widest uppercase text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
             </div>
-          </div>
+          ) : (
+            <>
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Elektron Pochta
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    placeholder="misol@maktab.uz"
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
 
-          <div>
-            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
-              Maxfiy Parol
-            </label>
-            <div className="relative">
-              <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="password"
-                required
-                minLength={6}
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="Kamida 6 ta belgi"
-                className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
-              />
-            </div>
-          </div>
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Maxfiy Parol
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="password"
+                    required
+                    minLength={6}
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    placeholder="Kamida 6 ta belgi"
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+            </>
+          )}
 
           <button
             type="submit"
             disabled={loading}
             className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-emerald-500/20 transition-all cursor-pointer disabled:opacity-50"
           >
-            {loading ? 'Bajarilmoqda...' : mode === 'login' ? 'Tizimga Kirish' : 'Ro\'yxatdan O\'tish'}
+            {loading
+              ? 'Bajarilmoqda...'
+              : mode === 'telegram'
+              ? 'Telegram Kodi Bilan Kirish'
+              : mode === 'login'
+              ? 'Tizimga Kirish'
+              : "Ro'yxatdan O'tish"}
           </button>
 
           <button

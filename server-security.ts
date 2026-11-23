@@ -3,7 +3,12 @@ import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
 import type { Request, Response, NextFunction } from 'express';
-import { centralDb, findUserByAnyIdentifier } from './server-db';
+import {
+  centralDb,
+  findUserByAnyIdentifier,
+  resolveCanonicalUid,
+  syncUserStatsConsistency,
+} from './server-db';
 
 dotenv.config({ override: true });
 
@@ -211,7 +216,11 @@ export function verifySessionToken(token?: string | null): any | null {
     if (!decoded?.sub || !decoded?.exp || Date.now() / 1000 > decoded.exp) {
       return null;
     }
-    const dbUser = centralDb.users[decoded.sub] || findUserByAnyIdentifier({ uid: decoded.sub });
+    const canonicalSub = resolveCanonicalUid(decoded.sub);
+    const dbUser =
+      centralDb.users[canonicalSub] ||
+      centralDb.users[decoded.sub] ||
+      findUserByAnyIdentifier({ uid: decoded.sub });
     return dbUser || null;
   } catch {
     return null;
@@ -373,7 +382,7 @@ export function assertRegionAccess(user: any, region?: string): boolean {
 export function sanitizeSelfUser(u: any) {
   if (!u) return null;
   const { passwordHash: _ph, ...safe } = u;
-  return safe;
+  return syncUserStatsConsistency({ ...safe });
 }
 
 export function sanitizePublicUser(u: any) {
