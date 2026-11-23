@@ -87,6 +87,8 @@ import {
   mergeServerAndFirestoreCatalog,
   syncLiveMetricsToFirestore,
   subscribeLiveMetricsFromFirestore,
+  saveUltraBackupToFirestore,
+  loadUltraBackupFromFirestore,
 } from '../services/firestoreCatalogSync';
 
 // One-time cleanup of legacy cached demo records in browser storage
@@ -930,7 +932,10 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const refreshSessionPromiseRef = useRef<Promise<string | null> | null>(null);
   const silentRefreshTriedRef = useRef<boolean>(false);
   const lastBootstrapServerMsRef = useRef<number>(0);
+  const hasServerMetricsRef = useRef<boolean>(false);
   const lastSyncedMetricsKeyRef = useRef<string>('');
+  const cloudVaultCheckedUidRef = useRef<string | null>(null);
+  const lastCloudVaultSigRef = useRef<string>('');
   const [firebaseAuthUid, setFirebaseAuthUid] = useState<string | null>(null);
 
   const saveSessionToken = useCallback((token: string | null) => {
@@ -1261,6 +1266,7 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (Number.isFinite(parsedNow)) lastBootstrapServerMsRef.current = parsedNow;
         }
         if (data.liveMetrics) {
+          hasServerMetricsRef.current = true;
           setLiveMetrics(data.liveMetrics);
           try {
             localStorage.setItem('ecohero_live_metrics', JSON.stringify(data.liveMetrics));
@@ -1412,6 +1418,18 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     document.addEventListener('visibilitychange', handleVisibilityOrFocus);
 
     checkServerHealth();
+    fetch(apiUrl('/api/metrics/live'))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((mData) => {
+        if (mData?.success && mData?.liveMetrics) {
+          hasServerMetricsRef.current = true;
+          setLiveMetrics(mData.liveMetrics);
+          try {
+            localStorage.setItem('ecohero_live_metrics', JSON.stringify(mData.liveMetrics));
+          } catch {}
+        }
+      })
+      .catch(() => {});
     syncBootstrap();
     flushOfflineQueue();
 
@@ -1563,41 +1581,104 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => unsub();
   }, [saveSessionToken, syncBootstrap]);
 
-  // Real-time Google Cloud Firestore onSnapshot listener for live_metrics/global (when Firebase Auth is ready)
+  // Real-time Google Cloud Firestore onSnapshot listener for live_metrics/global (zero-drop guarded)
   useEffect(() => {
     if (!firebaseAuthUid) return;
     const unsubscribe = subscribeLiveMetricsFromFirestore((remoteMetrics) => {
       const remoteTs = remoteMetrics.updatedAt ? Date.parse(remoteMetrics.updatedAt) : 0;
-      if (Number.isFinite(remoteTs) && remoteTs > lastBootstrapServerMsRef.current) {
+      const hasNonZeroRemote =
+        Number(remoteMetrics.totalUsers || 0) > 0 ||
+        Number(remoteMetrics.totalSchools || 0) > 0 ||
+        Number(remoteMetrics.botUsersCount || 0) > 0;
+      if (!hasNonZeroRemote) return;
+      if (!hasServerMetricsRef.current || (Number.isFinite(remoteTs) && remoteTs > lastBootstrapServerMsRef.current + 2000)) {
         const { updatedAt: _u, ...cleanMetrics } = remoteMetrics as any;
-        setLiveMetrics((prev) => ({ ...prev, ...cleanMetrics }));
+        setLiveMetrics((prev) => ({
+          ...prev,
+          ...cleanMetrics,
+          totalSchools: Math.max(Number(prev.totalSchools || 0), Number(cleanMetrics.totalSchools || 0)),
+          totalUsers: Math.max(Number(prev.totalUsers || 0), Number(cleanMetrics.totalUsers || 0)),
+          botUsersCount: Math.max(Number(prev.botUsersCount || 0), Number(cleanMetrics.botUsersCount || 0)),
+        }));
       }
     });
     return () => unsubscribe();
   }, [firebaseAuthUid]);
 
-  // Mirror authoritative liveMetrics to Firestore live_metrics/global when signed-in Super Admin is active
+  // Bidirectional Super Admin Cloud Vault & liveMetrics Firestore mirror
   useEffect(() => {
-    if (!firebaseAuthUid || !auth?.currentUser) return;
+    if (!firebaseAuthUid || !auth?.currentUser || !isServerConnected) return;
     const isSuper =
       user.role === 'super_admin' ||
       (Array.isArray(user.approvedRoles) && user.approvedRoles.includes('super_admin'));
     if (!isSuper) return;
-    const signature = JSON.stringify({
-      s: liveMetrics.totalSchools,
-      u: liveMetrics.totalUsers,
-      b: liveMetrics.botUsersCount,
-      r: liveMetrics.resolvedReports,
-      t: liveMetrics.treesPlanted,
-      a: liveMetrics.activeAmbassadors,
-    });
-    if (signature === lastSyncedMetricsKeyRef.current) return;
-    const timer = window.setTimeout(() => {
-      lastSyncedMetricsKeyRef.current = signature;
-      syncLiveMetricsToFirestore(liveMetrics).catch(() => {});
-    }, 600);
-    return () => window.clearTimeout(timer);
-  }, [firebaseAuthUid, user.role, user.approvedRoles, liveMetrics]);
+
+    let cancelled = false;
+    const syncTimer = window.setTimeout(async () => {
+      try {
+        // 1. On first attach for this UID, check if Cloud Vault has richer data than server (e.g. after container reset)
+        if (cloudVaultCheckedUidRef.current !== firebaseAuthUid) {
+          cloudVaultCheckedUidRef.current = firebaseAuthUid;
+          const remoteVault = await loadUltraBackupFromFirestore().catch(() => null);
+          if (!cancelled && remoteVault) {
+            const remoteUsers = Number(remoteVault.totalUsers || 0);
+            const remoteSchools = Number(remoteVault.totalSchools || 0);
+            const remoteBots = Number(remoteVault.botUsersCount || 0);
+            const localUsers = Number(liveMetrics.totalUsers || 0);
+            const localSchools = Number(liveMetrics.totalSchools || 0);
+            const localBots = Number(liveMetrics.botUsersCount || 0);
+
+            if (remoteUsers > localUsers || remoteSchools > localSchools || remoteBots > localBots) {
+              const restoreRes = await apiFetch('/api/admin/cloud-backup/restore', {
+                method: 'POST',
+                body: JSON.stringify({ snapshot: remoteVault }),
+              });
+              if (restoreRes.ok) {
+                await syncBootstrap();
+                return;
+              }
+            }
+          }
+        }
+
+        if (cancelled) return;
+
+        // 2. Mirror liveMetrics to public live_metrics/global
+        const signature = JSON.stringify({
+          s: liveMetrics.totalSchools,
+          u: liveMetrics.totalUsers,
+          b: liveMetrics.botUsersCount,
+          r: liveMetrics.resolvedReports,
+          t: liveMetrics.treesPlanted,
+          a: liveMetrics.activeAmbassadors,
+        });
+        if (signature !== lastSyncedMetricsKeyRef.current) {
+          lastSyncedMetricsKeyRef.current = signature;
+          syncLiveMetricsToFirestore(liveMetrics).catch(() => {});
+        }
+
+        // 3. Export compact server snapshot and back it up to ultra_backups/primary_v1
+        const vaultSig = `${liveMetrics.totalUsers}:${liveMetrics.totalSchools}:${liveMetrics.botUsersCount}:${liveMetrics.totalReports}:${liveMetrics.treesPlanted}`;
+        if (vaultSig !== lastCloudVaultSigRef.current && (liveMetrics.totalUsers > 0 || liveMetrics.totalSchools > 0 || liveMetrics.botUsersCount > 0)) {
+          const exportRes = await apiFetch('/api/admin/cloud-backup/export');
+          if (exportRes.ok) {
+            const exportData = await exportRes.json().catch(() => null);
+            if (!cancelled && exportData?.success && exportData?.snapshot) {
+              const ok = await saveUltraBackupToFirestore(exportData.snapshot);
+              if (ok) lastCloudVaultSigRef.current = vaultSig;
+            }
+          }
+        }
+      } catch {
+        // non-blocking cloud sync
+      }
+    }, 1200);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(syncTimer);
+    };
+  }, [firebaseAuthUid, isServerConnected, user.role, user.approvedRoles, liveMetrics, apiFetch, syncBootstrap]);
 
   // Telegram WebApp detection & auto-authentication
   useEffect(() => {
@@ -3988,6 +4069,13 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const payload = JSON.parse(evt.data);
             if (!payload || !payload.type) return;
             if (payload.type === 'db:updated') {
+              if (payload.liveMetrics && typeof payload.liveMetrics === 'object') {
+                hasServerMetricsRef.current = true;
+                setLiveMetrics(payload.liveMetrics);
+                try {
+                  localStorage.setItem('ecohero_live_metrics', JSON.stringify(payload.liveMetrics));
+                } catch {}
+              }
               if (syncDebounceRef.current) window.clearTimeout(syncDebounceRef.current);
               syncDebounceRef.current = window.setTimeout(() => {
                 syncBootstrap();

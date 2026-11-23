@@ -8,6 +8,7 @@ import {
   query,
   where,
   setDoc,
+  serverTimestamp,
   Timestamp,
 } from 'firebase/firestore';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
@@ -378,4 +379,95 @@ export function subscribeLiveMetricsFromFirestore(
     return () => {};
   }
 }
+
+export async function saveUltraBackupToFirestore(snapshot: Record<string, any>): Promise<boolean> {
+  if (!db || !auth?.currentUser || !snapshot || typeof snapshot !== 'object') return false;
+  try {
+    const cleanUsers = normalizeFirestoreValue(snapshot.usersMap || {}) || {};
+    const userEntries = Object.entries(cleanUsers).slice(0, 5000);
+    const boundedUsers = Object.fromEntries(userEntries);
+
+    const cleanStarters = normalizeFirestoreValue(snapshot.botStartersMap || {}) || {};
+    const starterEntries = Object.entries(cleanStarters).slice(0, 10000);
+    const boundedStarters = Object.fromEntries(starterEntries);
+
+    const boundedSchools = (Array.isArray(snapshot.schoolsList) ? snapshot.schoolsList : [])
+      .slice(0, 5000)
+      .map((s) => normalizeFirestoreValue(s))
+      .filter(Boolean);
+
+    let reportsList = (Array.isArray(snapshot.reportsList) ? snapshot.reportsList : [])
+      .slice(0, 400)
+      .map((r) => normalizeFirestoreValue(r))
+      .filter(Boolean);
+
+    let mediaList = (Array.isArray(snapshot.mediaList) ? snapshot.mediaList : [])
+      .slice(0, 400)
+      .map((m) => normalizeFirestoreValue(m))
+      .filter(Boolean);
+
+    let transactionsList = (Array.isArray(snapshot.transactionsList) ? snapshot.transactionsList : [])
+      .slice(0, 1000)
+      .map((t) => normalizeFirestoreValue(t))
+      .filter(Boolean);
+
+    const rawExtra = normalizeFirestoreValue(snapshot.extraCollections || {}) || {};
+    const extraEntries = Object.entries(rawExtra).slice(0, 40);
+    let extraCollections = Object.fromEntries(extraEntries);
+
+    const buildPayload = () => ({
+      id: 'primary_v1',
+      version: Math.max(1, Math.min(100, Number(snapshot.version || 2))),
+      totalUsers: Math.max(0, Math.round(Number(snapshot.totalUsers || userEntries.length || 0))),
+      totalSchools: Math.max(0, Math.round(Number(snapshot.totalSchools || boundedSchools.length || 0))),
+      botUsersCount: Math.max(0, Math.round(Number(snapshot.botUsersCount || starterEntries.length || 0))),
+      usersMap: boundedUsers,
+      schoolsList: boundedSchools,
+      botStartersMap: boundedStarters,
+      reportsList,
+      mediaList,
+      transactionsList,
+      extraCollections,
+      updatedByUid: auth.currentUser!.uid,
+      updatedAt: serverTimestamp(),
+    });
+
+    // Keep well below Firestore 1 MiB document ceiling while preserving 100% of users, schools, and bot starters
+    let payload = buildPayload();
+    let approxBytes = JSON.stringify({ ...payload, updatedAt: 'iso' }).length;
+    if (approxBytes > 750_000) {
+      transactionsList = transactionsList.slice(0, 200);
+      reportsList = reportsList.slice(0, 150);
+      mediaList = mediaList.slice(0, 150);
+      payload = buildPayload();
+      approxBytes = JSON.stringify({ ...payload, updatedAt: 'iso' }).length;
+    }
+    if (approxBytes > 820_000) {
+      transactionsList = [];
+      reportsList = reportsList.slice(0, 50);
+      mediaList = mediaList.slice(0, 50);
+      extraCollections = { uidAliases: extraCollections.uidAliases || {} };
+      payload = buildPayload();
+    }
+
+    await setDoc(doc(db, 'ultra_backups', 'primary_v1'), payload);
+    return true;
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, 'ultra_backups/primary_v1');
+    return false;
+  }
+}
+
+export async function loadUltraBackupFromFirestore(): Promise<Record<string, any> | null> {
+  if (!db || !auth?.currentUser) return null;
+  try {
+    const snap = await getDoc(doc(db, 'ultra_backups', 'primary_v1'));
+    if (!snap.exists()) return null;
+    return normalizeFirestoreValue({ id: snap.id, ...snap.data() }) || null;
+  } catch (err) {
+    handleFirestoreError(err, OperationType.GET, 'ultra_backups/primary_v1');
+    return null;
+  }
+}
+
 

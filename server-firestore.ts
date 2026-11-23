@@ -483,3 +483,20 @@ export function mergeCatalogListWithFirestore(
     changed,
   };
 }
+
+export async function fetchSchoolsFromFirestoreRest(): Promise<Record<string, any>[]> {
+  const cfg = getFirebaseConfig();
+  if (!cfg) return [];
+  return runFirestoreQuery('schools', {
+    fieldPath: 'status',
+    op: 'IN',
+    value: ['active', 'verified'],
+  });
+}
+
+export async function fetchLiveMetricsFromFirestoreRest(): Promise<Record<string, any> | null> {
+  const cfg = getFirebaseConfig();
+  if (!cfg) return null;
+  return getSingleFirestoreDoc('live_metrics', 'global');
+}
+

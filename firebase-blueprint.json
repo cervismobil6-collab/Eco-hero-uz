@@ -664,6 +664,28 @@
         "issuedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "uid", "entityName", "tier", "verificationCode", "issuedAt"]
+    },
+    "UltraBackup": {
+      "title": "UltraBackup",
+      "description": "Super Admin yagona xotira bulut zaxira nusxasi (Native Maps & Lists)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "version": { "type": "number" },
+        "totalUsers": { "type": "number" },
+        "totalSchools": { "type": "number" },
+        "botUsersCount": { "type": "number" },
+        "usersMap": { "type": "object" },
+        "schoolsList": { "type": "array" },
+        "botStartersMap": { "type": "object" },
+        "reportsList": { "type": "array" },
+        "mediaList": { "type": "array" },
+        "transactionsList": { "type": "array" },
+        "extraCollections": { "type": "object" },
+        "updatedByUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "version", "totalUsers", "totalSchools", "botUsersCount", "usersMap", "schoolsList", "botStartersMap", "updatedByUid", "updatedAt"]
     }
   },
   "firestore": {
@@ -790,6 +812,10 @@
     "/certificates/{certId}": {
       "schema": "EcoCertificate",
       "description": "QR-kodli rasmiy eko-sertifikatlar"
+    },
+    "/ultra_backups/{backupId}": {
+      "schema": "UltraBackup",
+      "description": "Faqat Super Admin uchun yagona xotira bulut zaxira hujjatlari"
     }
   }
 }

@@ -645,6 +645,30 @@ service cloud.firestore {
         data.issuedAt is timestamp;
     }
 
+    function isValidUltraBackup(data) {
+      return data.keys().hasAll(['id', 'version', 'totalUsers', 'totalSchools', 'botUsersCount', 'usersMap', 'schoolsList', 'botStartersMap', 'updatedByUid', 'updatedAt']) &&
+        data.keys().hasOnly([
+          'id', 'version', 'totalUsers', 'totalSchools', 'botUsersCount',
+          'usersMap', 'schoolsList', 'botStartersMap', 'reportsList', 'mediaList',
+          'transactionsList', 'extraCollections', 'updatedByUid', 'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        data.id.size() <= 64 &&
+        data.version is number && data.version >= 1 && data.version <= 100 &&
+        data.totalUsers is number && data.totalUsers >= 0 &&
+        data.totalSchools is number && data.totalSchools >= 0 &&
+        data.botUsersCount is number && data.botUsersCount >= 0 &&
+        data.usersMap is map && data.usersMap.size() <= 5000 &&
+        data.schoolsList is list && data.schoolsList.size() <= 5000 &&
+        data.botStartersMap is map && data.botStartersMap.size() <= 10000 &&
+        (!('reportsList' in data) || (data.reportsList is list && data.reportsList.size() <= 2000)) &&
+        (!('mediaList' in data) || (data.mediaList is list && data.mediaList.size() <= 2000)) &&
+        (!('transactionsList' in data) || (data.transactionsList is list && data.transactionsList.size() <= 5000)) &&
+        (!('extraCollections' in data) || (data.extraCollections is map && data.extraCollections.size() <= 50)) &&
+        isValidId(data.updatedByUid) &&
+        data.updatedAt is timestamp;
+    }
+
     // ========================================================
     // Collections
     // ========================================================
@@ -1216,6 +1240,17 @@ service cloud.firestore {
       allow create, update: if isValidId(certId) && isSuperAdmin() && isValidEcoCertificate(incoming()) &&
         incoming().issuedAt == request.time;
       allow delete: if isValidId(certId) && isSuperAdmin();
+    }
+
+    // 21. Ultra Memory Cloud Vault Backup (Super Admin ONLY — strict PII protection)
+    match /ultra_backups/{backupId} {
+      allow get: if isValidId(backupId) && isSuperAdmin();
+      allow list: if isBootstrappedAdmin();
+      allow create, update: if isValidId(backupId) && isSuperAdmin() &&
+        isValidUltraBackup(incoming()) &&
+        incoming().updatedByUid == request.auth.uid &&
+        incoming().updatedAt == request.time;
+      allow delete: if isValidId(backupId) && isSuperAdmin();
     }
   }
 }

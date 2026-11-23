@@ -141,6 +141,8 @@ export function getPersistentDataDir(): string {
 const DATA_ROOT_DIR = getPersistentDataDir();
 const UNIFIED_DB_PATH = path.join(DATA_ROOT_DIR, 'server-unified-db.json');
 const UNIFIED_DB_BACKUP_PATH = path.join(DATA_ROOT_DIR, 'server-unified-db.backup.json');
+const UNIFIED_DB_SNAPSHOTS_DIR = path.join(DATA_ROOT_DIR, 'db-backups');
+const UNIFIED_DB_NONEMPTY_PATH = path.join(UNIFIED_DB_SNAPSHOTS_DIR, 'snapshot-latest-nonempty.json');
 const LEGACY_USERS_FILE = path.join(process.cwd(), 'registered-users.json');
 const LEGACY_ROLE_REQUESTS_FILE = path.join(process.cwd(), 'role-requests.json');
 const LEGACY_SESSIONS_FILE = path.join(process.cwd(), 'server-registration-sessions.json');
@@ -1192,6 +1194,140 @@ function purgeDemoRecordsFromDb(db: any): { db: UnifiedDatabase; changed: boolea
   };
 }
 
+const CYRILLIC_TO_LATIN_MAP: Record<string, string> = {
+  а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'yo', ж: 'j', з: 'z',
+  и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r',
+  с: 's', т: 't', у: 'u', ф: 'f', х: 'x', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'sh',
+  ъ: '', ы: 'i', ь: '', э: 'e', ю: 'yu', я: 'ya', ў: "o'", қ: 'q', ғ: "g'", һ: 'h',
+};
+
+export function normalizeUzText(input?: string | null): string {
+  const raw = String(input || '').trim().toLowerCase();
+  if (!raw) return '';
+  let out = '';
+  for (const ch of raw) {
+    out += CYRILLIC_TO_LATIN_MAP[ch] !== undefined ? CYRILLIC_TO_LATIN_MAP[ch] : ch;
+  }
+  return out
+    .replace(/[\u02BB\u02BC\u2018\u2019\u201B\u0060\u00B4']/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function normalizeRegionKey(region?: string | null): string {
+  const text = normalizeUzText(region);
+  if (!text) return '';
+  const noQuotes = text.replace(/'/g, '');
+  if (noQuotes.includes('toshkent') && (noQuotes.includes('sh.') || noQuotes.includes('shahar') || noQuotes.includes('shahri'))) {
+    return 'toshkent_sh';
+  }
+  if (noQuotes.includes('toshkent') && noQuotes.includes('vil')) {
+    return 'toshkent_vil';
+  }
+  return noQuotes
+    .replace(/\b(viloyati|viloyat|vil|shahri|shahar|sh|respublikasi|respublika)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+export function normalizeDistrictKey(district?: string | null): string {
+  const text = normalizeUzText(district);
+  if (!text) return '';
+  return text
+    .replace(/'/g, '')
+    .replace(/\b(tumani|tuman|tum|t|shahri|shahar|sh)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+export function extractSchoolIdentity(
+  schoolName?: string | null,
+  explicitNumber?: string | null
+): {
+  isPlaceholder: boolean;
+  kind: 'general' | 'lyceum' | 'college' | 'presidential';
+  number: string;
+  nameSlug: string;
+} {
+  const clean = normalizeUzText(schoolName);
+  const cleanNoQuotes = clean.replace(/'/g, '');
+  const isPlaceholder =
+    !cleanNoQuotes ||
+    cleanNoQuotes === 'maktab kiritilmagan' ||
+    cleanNoQuotes === 'school_new' ||
+    cleanNoQuotes === 'school_custom';
+
+  const kind: 'general' | 'lyceum' | 'college' | 'presidential' =
+    /\b(litsey|akademik)\b/.test(cleanNoQuotes)
+      ? 'lyceum'
+      : /\b(kollej|texnikum|kasb)\b/.test(cleanNoQuotes)
+      ? 'college'
+      : /\bprezident\b/.test(cleanNoQuotes)
+      ? 'presidential'
+      : 'general';
+
+  const explicitStr = String(explicitNumber || '').trim();
+  const explicitMatch = explicitStr.match(/\d+/);
+  const nameNumMatch = cleanNoQuotes.match(/(?:^|\D)(\d{1,5})(?:\D|$)/);
+  const number = explicitMatch ? explicitMatch[0] : nameNumMatch ? nameNumMatch[1] : '';
+
+  const strippedWords = cleanNoQuotes
+    .replace(/\b(sonli|son|umumiy|orta|talim|ixtisoslashtirilgan|davlat|maktabi|maktab|idum|idumi|umi|sh|tumani|tuman|viloyati|viloyat)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+  const nameSlug = strippedWords || cleanNoQuotes.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'school';
+
+  return {
+    isPlaceholder,
+    kind,
+    number,
+    nameSlug,
+  };
+}
+
+export function getSchoolCanonicalKey(school: {
+  name?: string;
+  schoolName?: string;
+  number?: string;
+  schoolNumber?: string;
+  region?: string;
+  district?: string;
+}): string {
+  const name = school?.name || school?.schoolName || '';
+  const ident = extractSchoolIdentity(name, school?.number || school?.schoolNumber);
+  if (ident.isPlaceholder) return '';
+  const regKey = normalizeRegionKey(school?.region || 'Toshkent shahri') || 'toshkent_sh';
+  const distKey = normalizeDistrictKey(school?.district || 'Markaziy tumani') || 'markaziy';
+  const targetPart = ident.number ? `num_${ident.number}` : `name_${ident.nameSlug}`;
+  return `${regKey}__${distKey}__${ident.kind}__${targetPart}`;
+}
+
+function getDbRichnessScore(parsed: any): number {
+  if (!parsed || typeof parsed !== 'object') return 0;
+  const users = Object.keys(parsed.users || {}).length;
+  const schools = Array.isArray(parsed.schools) ? parsed.schools.length : 0;
+  const starters = Object.keys(parsed.botStarters || {}).length;
+  const reports = Array.isArray(parsed.reports) ? parsed.reports.length : 0;
+  const media = Array.isArray(parsed.mediaSubmissions) ? parsed.mediaSubmissions.length : 0;
+  const txs = Array.isArray(parsed.transactions) ? parsed.transactions.length : 0;
+  return users * 100 + schools * 30 + starters * 10 + reports * 5 + media * 5 + txs;
+}
+
+function listRecentSnapshotFiles(): string[] {
+  try {
+    if (!fs.existsSync(UNIFIED_DB_SNAPSHOTS_DIR)) return [];
+    const files = fs
+      .readdirSync(UNIFIED_DB_SNAPSHOTS_DIR)
+      .filter((f) => f.endsWith('.json') && f !== 'snapshot-latest-nonempty.json')
+      .sort()
+      .reverse();
+    return files.map((f) => path.join(UNIFIED_DB_SNAPSHOTS_DIR, f));
+  } catch {
+    return [];
+  }
+}
+
 function readValidDbJson(filePath: string): any | null {
   if (!fs.existsSync(filePath)) return null;
   try {
@@ -1210,14 +1346,35 @@ function readValidDbJson(filePath: string): any | null {
 function loadUnifiedDatabase(): { db: UnifiedDatabase; needsSave: boolean } {
   const defaults = createDefaultDatabase();
 
+  const candidatePaths = [
+    UNIFIED_DB_PATH,
+    UNIFIED_DB_BACKUP_PATH,
+    UNIFIED_DB_NONEMPTY_PATH,
+    ...listRecentSnapshotFiles(),
+  ];
+
   let parsed = readValidDbJson(UNIFIED_DB_PATH);
   let recoveredFromBackup = false;
 
-  if (!parsed) {
-    const backupParsed = readValidDbJson(UNIFIED_DB_BACKUP_PATH);
-    if (backupParsed) {
-      console.warn('[CentralDB] Asosiy baza bo\'sh yoki buzilgan — server-unified-db.backup.json dan tiklanmoqda!');
-      parsed = backupParsed;
+  const primaryScore = getDbRichnessScore(parsed);
+  if (!parsed || primaryScore === 0) {
+    let bestParsed = parsed;
+    let bestScore = primaryScore;
+    let bestPath = UNIFIED_DB_PATH;
+    for (const candPath of candidatePaths.slice(1)) {
+      const cand = readValidDbJson(candPath);
+      const score = getDbRichnessScore(cand);
+      if (cand && score > bestScore) {
+        bestParsed = cand;
+        bestScore = score;
+        bestPath = candPath;
+      }
+    }
+    if (bestParsed && bestScore > primaryScore) {
+      console.warn(
+        `[CentralDB] Asosiy baza bo'sh/kam — ${path.basename(bestPath)} (score=${bestScore}) dan avtomatik tiklanmoqda!`
+      );
+      parsed = bestParsed;
       recoveredFromBackup = true;
     }
   }
@@ -1364,8 +1521,33 @@ function loadUnifiedDatabase(): { db: UnifiedDatabase; needsSave: boolean } {
 const loadedDbResult = loadUnifiedDatabase();
 export const centralDb: UnifiedDatabase = loadedDbResult.db;
 
-export function saveCentralDb() {
+let highWaterUserCount = Object.keys(centralDb.users || {}).length;
+let highWaterSchoolCount = (centralDb.schools || []).length;
+let highWaterStarterCount = Object.keys(centralDb.botStarters || {}).length;
+let lastRollingSnapshotHour = '';
+
+export function saveCentralDb(options?: { allowShrink?: boolean }) {
   try {
+    const curUsers = Object.keys(centralDb.users || {}).length;
+    const curSchools = (centralDb.schools || []).length;
+    const curStarters = Object.keys(centralDb.botStarters || {}).length;
+
+    // Zero-wipe safety shield: never let accidental empty state overwrite non-empty backups
+    if (
+      !options?.allowShrink &&
+      highWaterUserCount > 0 &&
+      curUsers === 0
+    ) {
+      console.error(
+        `[CentralDB SAFETY SHIELD] Blocked accidental empty-users overwrite (had ${highWaterUserCount} users, attempted to save 0).`
+      );
+      return;
+    }
+
+    highWaterUserCount = Math.max(highWaterUserCount, curUsers);
+    highWaterSchoolCount = Math.max(highWaterSchoolCount, curSchools);
+    highWaterStarterCount = Math.max(highWaterStarterCount, curStarters);
+
     centralDb.meta.updatedAt = new Date().toISOString();
     const serialized = JSON.stringify(centralDb, null, 2);
     if (!serialized || serialized.length < 20) return;
@@ -1377,69 +1559,229 @@ export function saveCentralDb() {
     const backupTmpPath = `${UNIFIED_DB_BACKUP_PATH}.tmp`;
     fs.writeFileSync(backupTmpPath, serialized, 'utf-8');
     fs.renameSync(backupTmpPath, UNIFIED_DB_BACKUP_PATH);
+
+    if (curUsers > 0 || curSchools > 0 || curStarters > 0) {
+      try {
+        fs.mkdirSync(UNIFIED_DB_SNAPSHOTS_DIR, { recursive: true });
+        const nonEmptyTmp = `${UNIFIED_DB_NONEMPTY_PATH}.tmp`;
+        fs.writeFileSync(nonEmptyTmp, serialized, 'utf-8');
+        fs.renameSync(nonEmptyTmp, UNIFIED_DB_NONEMPTY_PATH);
+
+        const hourKey = centralDb.meta.updatedAt.slice(0, 13).replace(/[:T]/g, '-');
+        if (hourKey !== lastRollingSnapshotHour) {
+          lastRollingSnapshotHour = hourKey;
+          const snapPath = path.join(UNIFIED_DB_SNAPSHOTS_DIR, `snapshot-${hourKey}.json`);
+          fs.writeFileSync(snapPath, serialized, 'utf-8');
+
+          const allSnaps = fs
+            .readdirSync(UNIFIED_DB_SNAPSHOTS_DIR)
+            .filter((f) => f.startsWith('snapshot-20') && f.endsWith('.json'))
+            .sort();
+          if (allSnaps.length > 12) {
+            for (const stale of allSnaps.slice(0, allSnaps.length - 12)) {
+              try {
+                fs.unlinkSync(path.join(UNIFIED_DB_SNAPSHOTS_DIR, stale));
+              } catch {}
+            }
+          }
+        }
+      } catch (snapErr: any) {
+        console.warn('[CentralDB] Rolling snapshot warning:', snapErr?.message || snapErr);
+      }
+    }
   } catch (e) {
     console.error('[CentralDB] Failed to save unified database:', e);
   }
 }
 
-// Save initial DB on boot if file didn't exist, was empty, or recovery/purge changed records
-if (!fs.existsSync(UNIFIED_DB_PATH) || loadedDbResult.needsSave) {
-  recalculateSchoolRanks();
-  saveCentralDb();
-}
-
 export function normalizeSchoolNumber(schoolName?: string, explicitNumber?: string): string {
-  if (explicitNumber && String(explicitNumber).trim()) {
-    return String(explicitNumber).trim();
-  }
-  const match = String(schoolName || '').match(/\d+/);
-  return match ? match[0] : '1';
+  const ident = extractSchoolIdentity(schoolName, explicitNumber);
+  return ident.number || '';
 }
 
 export function getSchoolLiveStudentCount(school: any): number {
   const usersList = Object.values(centralDb.users || {});
   const targetId = String(school?.id || '').trim();
-  const targetName = String(school?.name || '').trim().toLowerCase();
-  const targetDistrict = String(school?.district || '').trim().toLowerCase();
-  const targetNumber = String(school?.number || '').trim();
+  const targetKey = getSchoolCanonicalKey(school);
+  const seenUids = new Set<string>();
 
-  return usersList.filter((u: any) => {
-    if (!u || typeof u !== 'object') return false;
-    if (targetId && u.schoolId && String(u.schoolId).trim() === targetId) return true;
-    const uName = String(u.schoolName || '').trim().toLowerCase();
-    if (targetName && uName && uName === targetName) return true;
-    if (
-      targetNumber &&
-      u.schoolNumber &&
-      String(u.schoolNumber).trim() === targetNumber &&
-      targetDistrict &&
-      String(u.district || '').trim().toLowerCase() === targetDistrict
-    ) {
-      return true;
+  for (const u of usersList as any[]) {
+    if (!u || typeof u !== 'object') continue;
+    const uid = String(u.uid || u.userId || '').trim();
+    if (!uid || seenUids.has(uid)) continue;
+
+    if (targetId && u.schoolId && String(u.schoolId).trim() === targetId) {
+      seenUids.add(uid);
+      continue;
     }
-    return false;
-  }).length;
+
+    if (targetKey) {
+      const userSchoolKey = getSchoolCanonicalKey({
+        schoolName: u.schoolName,
+        schoolNumber: u.schoolNumber,
+        region: u.region,
+        district: u.district,
+      });
+      if (userSchoolKey && userSchoolKey === targetKey) {
+        seenUids.add(uid);
+      }
+    }
+  }
+  return seenUids.size;
 }
 
 export function getDistrictLiveParticipantCount(region?: string, district?: string): number {
-  const targetDistrict = String(district || '').trim().toLowerCase();
-  const targetRegion = String(region || '').trim().toLowerCase();
-  if (!targetDistrict) return 0;
+  const targetDistKey = normalizeDistrictKey(district);
+  const targetRegKey = normalizeRegionKey(region);
+  if (!targetDistKey) return 0;
 
   const usersList = Object.values(centralDb.users || {});
   const seenUids = new Set<string>();
   for (const u of usersList as any[]) {
     if (!u || typeof u !== 'object') continue;
-    const uDist = String(u.district || '').trim().toLowerCase();
-    const uReg = String(u.region || '').trim().toLowerCase();
-    if (uDist !== targetDistrict) continue;
-    if (targetRegion && uReg && uReg !== targetRegion) continue;
+    const uDistKey = normalizeDistrictKey(u.district);
+    const uRegKey = normalizeRegionKey(u.region);
+    if (uDistKey !== targetDistKey) continue;
+    if (targetRegKey && uRegKey && uRegKey !== targetRegKey) continue;
     seenUids.add(String(u.uid));
   }
   return seenUids.size;
 }
 
+export function reconcileSchoolsAndStudents(persistIfChanged = false): boolean {
+  let changed = false;
+  if (!Array.isArray(centralDb.schools)) {
+    centralDb.schools = [];
+    changed = true;
+  }
+
+  // 1. Deduplicate existing schools by canonical key (region + district + schoolKind + schoolNumber/name)
+  const canonicalMap = new Map<string, any>();
+  const idRedirectMap = new Map<string, { targetId: string; targetName: string }>();
+  const dedupedSchools: any[] = [];
+
+  for (const rawSchool of centralDb.schools) {
+    if (!rawSchool || typeof rawSchool !== 'object') continue;
+    const school = enrichSchoolProfile(rawSchool);
+    const canonKey = getSchoolCanonicalKey(school) || String(school.id || '');
+    const existing = canonicalMap.get(canonKey);
+
+    if (!existing) {
+      canonicalMap.set(canonKey, school);
+      dedupedSchools.push(school);
+    } else {
+      changed = true;
+      idRedirectMap.set(String(school.id), { targetId: String(existing.id), targetName: String(existing.name) });
+      existing.totalCoins = Math.max(Number(existing.totalCoins || 0), 0) + Math.max(Number(school.totalCoins || 0), 0);
+      existing.treesPlanted = Number(existing.treesPlanted || 0) + Number(school.treesPlanted || 0);
+      existing.cleanupsCompleted = Number(existing.cleanupsCompleted || 0) + Number(school.cleanupsCompleted || 0);
+      if ((!existing.ambassadorName || existing.ambassadorName === 'Tayinlanmagan') && school.ambassadorName && school.ambassadorName !== 'Tayinlanmagan') {
+        existing.ambassadorName = school.ambassadorName;
+      }
+      if (!existing.adminEmail && school.adminEmail) existing.adminEmail = school.adminEmail;
+      if (String(school.name || '').length > String(existing.name || '').length && /maktab|litsey|kollej/i.test(String(school.name))) {
+        // prefer informative name
+        if (!/maktab|litsey|kollej/i.test(String(existing.name))) {
+          existing.name = school.name;
+        }
+      }
+    }
+  }
+
+  if (dedupedSchools.length !== centralDb.schools.length) {
+    centralDb.schools = dedupedSchools;
+    changed = true;
+  }
+
+  const schoolById = new Map<string, any>();
+  for (const s of centralDb.schools) {
+    schoolById.set(String(s.id), s);
+  }
+
+  // 2. Ensure every user with a real schoolName points to their canonical school in centralDb.schools
+  for (const u of Object.values(centralDb.users || {}) as any[]) {
+    if (!u || typeof u !== 'object') continue;
+    const oldSid = String(u.schoolId || '').trim();
+    if (oldSid && idRedirectMap.has(oldSid)) {
+      const redir = idRedirectMap.get(oldSid)!;
+      u.schoolId = redir.targetId;
+      u.schoolName = redir.targetName;
+      changed = true;
+    }
+
+    const sName = String(u.schoolName || '').trim();
+    const ident = extractSchoolIdentity(sName, u.schoolNumber);
+    const isCentralHq = oldSid === 'central_hq' || normalizeUzText(sName).includes('markaziy boshqarma');
+    if (ident.isPlaceholder || isCentralHq) continue;
+
+    const currentSchool = oldSid && schoolById.get(oldSid);
+    if (!currentSchool || oldSid === 'school_custom' || oldSid === 'school_new') {
+      const linked = findOrCreateSchoolInternal(
+        {
+          schoolId: currentSchool ? currentSchool.id : undefined,
+          schoolName: sName,
+          schoolNumber: u.schoolNumber,
+          region: u.region || 'Toshkent shahri',
+          district: u.district || 'Shayxontohur tumani',
+        },
+        false
+      );
+      if (linked) {
+        if (u.schoolId !== linked.id || u.schoolName !== linked.name) {
+          u.schoolId = linked.id;
+          u.schoolName = linked.name;
+          u.schoolNumber = linked.number || ident.number || u.schoolNumber || '';
+          changed = true;
+        }
+        schoolById.set(String(linked.id), linked);
+      }
+    }
+  }
+
+  // 3. Re-point duplicate schoolIds in child records
+  if (idRedirectMap.size > 0) {
+    const collections = [
+      centralDb.reports,
+      centralDb.mediaSubmissions,
+      centralDb.ecoTasks,
+      centralDb.shopOrders,
+      centralDb.ambassadors,
+      centralDb.registrationApplications,
+      centralDb.roleRequests,
+      centralDb.qrEcoScans,
+    ];
+    for (const arr of collections) {
+      for (const item of arr || []) {
+        if (!item || typeof item !== 'object') continue;
+        const redir = item.schoolId ? idRedirectMap.get(String(item.schoolId)) : null;
+        if (redir) {
+          item.schoolId = redir.targetId;
+          if ('schoolName' in item) item.schoolName = redir.targetName;
+          changed = true;
+        }
+      }
+    }
+  }
+
+  // 4. Sync exact live student counts on every school
+  for (const s of centralDb.schools) {
+    const liveCount = getSchoolLiveStudentCount(s);
+    if (s.registeredStudentsCount !== liveCount || s.studentsCount !== liveCount) {
+      s.registeredStudentsCount = liveCount;
+      s.studentsCount = liveCount;
+      changed = true;
+    }
+  }
+
+  if (changed && persistIfChanged) {
+    recalculateSchoolRanks();
+    saveCentralDb();
+  }
+  return changed;
+}
+
 export function getLiveSchoolsList(includeAdminEmail = false): any[] {
+  reconcileSchoolsAndStudents(false);
   recalculateSchoolRanks();
   return (centralDb.schools || []).map((s: any) => {
     const liveStudents = getSchoolLiveStudentCount(s);
@@ -1455,6 +1797,7 @@ export function getLiveSchoolsList(includeAdminEmail = false): any[] {
 }
 
 export function computeLiveMetrics() {
+  reconcileSchoolsAndStudents(false);
   const usersList = Object.values(centralDb.users || {});
   const schoolsList = centralDb.schools || [];
   const reportsList = centralDb.reports || [];
@@ -1500,16 +1843,16 @@ export function computeLiveMetrics() {
   const districtKeys = new Set<string>();
   const regionKeys = new Set<string>();
   for (const s of schoolsList as any[]) {
-    const reg = String(s?.region || '').trim();
-    const dist = String(s?.district || '').trim();
-    if (reg) regionKeys.add(reg.toLowerCase());
-    if (dist) districtKeys.add(`${reg.toLowerCase()}__${dist.toLowerCase()}`);
+    const regKey = normalizeRegionKey(s?.region);
+    const distKey = normalizeDistrictKey(s?.district);
+    if (regKey) regionKeys.add(regKey);
+    if (distKey) districtKeys.add(`${regKey}__${distKey}`);
   }
   for (const u of usersList as any[]) {
-    const reg = String(u?.region || '').trim();
-    const dist = String(u?.district || '').trim();
-    if (reg) regionKeys.add(reg.toLowerCase());
-    if (dist) districtKeys.add(`${reg.toLowerCase()}__${dist.toLowerCase()}`);
+    const regKey = normalizeRegionKey(u?.region);
+    const distKey = normalizeDistrictKey(u?.district);
+    if (regKey) regionKeys.add(regKey);
+    if (distKey) districtKeys.add(`${regKey}__${distKey}`);
   }
 
   const schoolCaptainsCount = (usersList as any[]).filter((u: any) => u?.role === 'school_admin').length;
@@ -1540,58 +1883,76 @@ export function recalculateSchoolRanks() {
   });
 }
 
-export function findOrCreateSchool(params: {
-  schoolId?: string;
-  schoolName: string;
-  schoolNumber?: string;
-  region: string;
-  district: string;
-  coinsDelta?: number;
-  incrementStudents?: boolean;
-  treesDelta?: number;
-  cleanupsDelta?: number;
-  ambassadorName?: string;
-  adminEmail?: string;
-}) {
+function findOrCreateSchoolInternal(
+  params: {
+    schoolId?: string;
+    schoolName: string;
+    schoolNumber?: string;
+    region: string;
+    district: string;
+    coinsDelta?: number;
+    incrementStudents?: boolean;
+    treesDelta?: number;
+    cleanupsDelta?: number;
+    ambassadorName?: string;
+    adminEmail?: string;
+  },
+  shouldSave = true
+) {
   const cleanName = String(params.schoolName || '').trim();
   const region = String(params.region || 'Toshkent shahri').trim();
   const district = String(params.district || 'Markaziy tumani').trim();
-  const number = normalizeSchoolNumber(cleanName, params.schoolNumber);
+  const ident = extractSchoolIdentity(cleanName, params.schoolNumber);
 
-  if (!cleanName || cleanName === 'Maktab kiritilmagan') {
+  if (ident.isPlaceholder) {
     return null;
   }
 
-  const normalizedNameLower = cleanName.toLowerCase().replace(/[^a-z0-9a-zA-Zа-яА-Яўқғҳ]/g, '');
+  const targetRegKey = normalizeRegionKey(region);
+  const targetDistKey = normalizeDistrictKey(district);
+  const targetCanonKey = getSchoolCanonicalKey({
+    schoolName: cleanName,
+    schoolNumber: params.schoolNumber,
+    region,
+    district,
+  });
 
   let school = centralDb.schools.find((s) => {
-    const sameRegion = String(s.region || '').toLowerCase() === region.toLowerCase();
-    const sameDistrict = !district || String(s.district || '').toLowerCase() === district.toLowerCase();
-    if (params.schoolId && params.schoolId !== 'school_custom' && s.id === params.schoolId && sameRegion && sameDistrict) {
+    if (
+      params.schoolId &&
+      params.schoolId !== 'school_custom' &&
+      params.schoolId !== 'school_new' &&
+      s.id === params.schoolId &&
+      normalizeRegionKey(s.region) === targetRegKey &&
+      (!targetDistKey || normalizeDistrictKey(s.district) === targetDistKey)
+    ) {
       return true;
     }
-    if (!sameRegion) return false;
-    const sNum = normalizeSchoolNumber(s.name, s.number);
-    if (sameDistrict && number && sNum === number && /\d/.test(cleanName)) return true;
-    const sNorm = String(s.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    const pNorm = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '');
-    return sNorm && pNorm && (sNorm === pNorm || sNorm.includes(pNorm) || pNorm.includes(sNorm)) && sameDistrict;
+    const sCanonKey = getSchoolCanonicalKey(s);
+    if (sCanonKey && targetCanonKey && sCanonKey === targetCanonKey) {
+      return true;
+    }
+    return false;
   });
 
   if (!school) {
-    const slugRegion = region.toLowerCase().replace(/[^a-z0-9]/g, '_');
-    const slugDistrict = district.toLowerCase().replace(/[^a-z0-9]/g, '_');
-    const slugSchool = (number || normalizedNameLower || 'school').toLowerCase().replace(/[^a-z0-9]/g, '_');
+    const slugRegion = targetRegKey || 'toshkent_sh';
+    const slugDistrict = targetDistKey || 'markaziy';
+    const slugSchool = ident.number ? `${ident.kind}_${ident.number}` : `${ident.kind}_${ident.nameSlug}`;
     const id = `school_${slugRegion}_${slugDistrict}_${slugSchool}`.slice(0, 80);
     const coords = REGION_COORDS[region] || { lat: 41.2995, lng: 69.2401 };
     const jitter = () => (Math.random() - 0.5) * 0.02;
 
+    const cleanLower = normalizeUzText(cleanName);
+    const hasSchoolWord = /\b(maktab|litsey|kollej|texnikum|idum|idumi)\b/.test(cleanLower);
+    const displayName = hasSchoolWord
+      ? cleanName
+      : `${region.split(' ')[0]} ${district.split(' ')[0]} ${ident.number ? `${ident.number}-maktab` : `${cleanName}-maktab`}`;
+
     school = enrichSchoolProfile({
       id,
-      name: cleanName.includes('maktab') || cleanName.includes('litsey') || cleanName.includes('kollej')
-        ? cleanName
-        : `${region.split(' ')[0]} ${district.split(' ')[0]} ${cleanName}-maktab`,
-      number,
+      name: displayName,
+      number: ident.number || cleanName.slice(0, 20),
       region,
       district,
       address: `${district}, ${region}`,
@@ -1610,10 +1971,6 @@ export function findOrCreateSchool(params: {
     });
     centralDb.schools.push(school);
   } else {
-    if (params.incrementStudents) {
-      school.registeredStudentsCount = (school.registeredStudentsCount || school.studentsCount || 0) + 1;
-      school.studentsCount = school.registeredStudentsCount;
-    }
     if (params.coinsDelta) {
       school.totalCoins = (school.totalCoins || 0) + params.coinsDelta;
     }
@@ -1626,11 +1983,281 @@ export function findOrCreateSchool(params: {
     if (params.ambassadorName && (!school.ambassadorName || school.ambassadorName === 'Tayinlanmagan')) {
       school.ambassadorName = params.ambassadorName;
     }
+    const liveCount = getSchoolLiveStudentCount(school);
+    school.registeredStudentsCount = Math.max(liveCount, params.incrementStudents ? 1 : 0);
+    school.studentsCount = school.registeredStudentsCount;
   }
 
+  if (shouldSave) {
+    recalculateSchoolRanks();
+    saveCentralDb();
+  }
+  return school;
+}
+
+export function findOrCreateSchool(params: {
+  schoolId?: string;
+  schoolName: string;
+  schoolNumber?: string;
+  region: string;
+  district: string;
+  coinsDelta?: number;
+  incrementStudents?: boolean;
+  treesDelta?: number;
+  cleanupsDelta?: number;
+  ambassadorName?: string;
+  adminEmail?: string;
+}) {
+  return findOrCreateSchoolInternal(params, true);
+}
+
+function stripOversizedDataUrls(value: any): any {
+  if (value === null || value === undefined) return value;
+  if (typeof value === 'string') {
+    if (value.startsWith('data:image/') && value.length > 4000) return '';
+    return value;
+  }
+  if (Array.isArray(value)) return value.map(stripOversizedDataUrls);
+  if (typeof value === 'object') {
+    const out: Record<string, any> = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (v !== undefined) out[k] = stripOversizedDataUrls(v);
+    }
+    return out;
+  }
+  return value;
+}
+
+export function exportCompactBackupSnapshot() {
+  reconcileSchoolsAndStudents(false);
+  const metrics = computeLiveMetrics();
+  const compactUsers: Record<string, any> = {};
+  for (const [uid, u] of Object.entries(centralDb.users || {})) {
+    compactUsers[uid] = stripOversizedDataUrls(u);
+  }
+  return {
+    id: 'primary_v1',
+    version: 2,
+    totalUsers: metrics.totalUsers,
+    totalSchools: metrics.totalSchools,
+    botUsersCount: metrics.botUsersCount,
+    usersMap: compactUsers,
+    schoolsList: stripOversizedDataUrls(centralDb.schools || []),
+    botStartersMap: centralDb.botStarters || {},
+    reportsList: stripOversizedDataUrls((centralDb.reports || []).slice(0, 1000)),
+    mediaList: stripOversizedDataUrls((centralDb.mediaSubmissions || []).slice(0, 1000)),
+    transactionsList: (centralDb.transactions || []).slice(0, 2000),
+    extraCollections: stripOversizedDataUrls({
+      ambassadors: centralDb.ambassadors || [],
+      ecoTasks: centralDb.ecoTasks || [],
+      shopOrders: centralDb.shopOrders || [],
+      roleRequests: centralDb.roleRequests || [],
+      registrationApplications: centralDb.registrationApplications || [],
+      referrals: centralDb.referrals || [],
+      certificates: centralDb.certificates || [],
+      schoolDuels: centralDb.schoolDuels || [],
+      qrEcoScans: centralDb.qrEcoScans || [],
+      dailyQuizClaims: centralDb.dailyQuizClaims || {},
+      missionSubmissions: centralDb.missionSubmissions || [],
+      missionCompletions: centralDb.missionCompletions || {},
+      uidAliases: centralDb.uidAliases || {},
+      weeklyChallenge: centralDb.weeklyChallenge || createDefaultWeeklyChallenge(),
+      ratingConfigs: centralDb.ratingConfigs || { schoolRatings: {}, districtStudentRatings: {} },
+      studentMonthlyAwards: centralDb.studentMonthlyAwards || [],
+      monthlyAwards: centralDb.monthlyAwards || [],
+      adRewardClaims: centralDb.adRewardClaims || [],
+    }),
+  };
+}
+
+export function mergeDatabaseSnapshotNonDestructive(snapshot: any): {
+  restoredUsers: number;
+  restoredSchools: number;
+  restoredStarters: number;
+  changed: boolean;
+} {
+  if (!snapshot || typeof snapshot !== 'object') {
+    return { restoredUsers: 0, restoredSchools: 0, restoredStarters: 0, changed: false };
+  }
+
+  let changed = false;
+  let restoredUsers = 0;
+  let restoredSchools = 0;
+  let restoredStarters = 0;
+
+  if (snapshot.botStartersMap && typeof snapshot.botStartersMap === 'object') {
+    if (!centralDb.botStarters) centralDb.botStarters = {};
+    for (const [k, starter] of Object.entries(snapshot.botStartersMap) as [string, any][]) {
+      if (!k || !starter) continue;
+      if (!centralDb.botStarters[k]) {
+        centralDb.botStarters[k] = starter;
+        restoredStarters += 1;
+        changed = true;
+      }
+    }
+  }
+
+  if (Array.isArray(snapshot.schoolsList)) {
+    for (const remoteSchool of snapshot.schoolsList) {
+      if (!remoteSchool || typeof remoteSchool !== 'object') continue;
+      const beforeLen = centralDb.schools.length;
+      const linked = findOrCreateSchoolInternal(
+        {
+          schoolId: remoteSchool.id,
+          schoolName: remoteSchool.name,
+          schoolNumber: remoteSchool.number,
+          region: remoteSchool.region || 'Toshkent shahri',
+          district: remoteSchool.district || 'Markaziy tumani',
+          ambassadorName: remoteSchool.ambassadorName,
+          adminEmail: remoteSchool.adminEmail,
+        },
+        false
+      );
+      if (linked) {
+        if (centralDb.schools.length > beforeLen) {
+          restoredSchools += 1;
+          changed = true;
+        }
+        linked.totalCoins = Math.max(Number(linked.totalCoins || 0), Number(remoteSchool.totalCoins || 0));
+        linked.treesPlanted = Math.max(Number(linked.treesPlanted || 0), Number(remoteSchool.treesPlanted || 0));
+        linked.cleanupsCompleted = Math.max(Number(linked.cleanupsCompleted || 0), Number(remoteSchool.cleanupsCompleted || 0));
+      }
+    }
+  }
+
+  if (snapshot.usersMap && typeof snapshot.usersMap === 'object') {
+    for (const [uid, remoteUser] of Object.entries(snapshot.usersMap) as [string, any][]) {
+      if (!remoteUser || typeof remoteUser !== 'object') continue;
+      const existing =
+        centralDb.users[uid] ||
+        findUserByAnyIdentifier({
+          uid: remoteUser.uid || uid,
+          telegramId: remoteUser.telegramId || remoteUser.chatId,
+          phoneNumber: remoteUser.phoneNumber,
+          email: isSyntheticEmail(remoteUser.email) ? undefined : remoteUser.email,
+        });
+
+      if (!existing) {
+        const cleanUser = syncUserStatsConsistency({ ...remoteUser, uid: remoteUser.uid || uid });
+        centralDb.users[cleanUser.uid] = cleanUser;
+        restoredUsers += 1;
+        changed = true;
+      } else {
+        const mergedCoins = Math.max(Number(existing.ecoCoins || 0), Number(remoteUser.ecoCoins || 0));
+        const mergedEarned = Math.max(
+          Number(existing.totalCoinsEarned || 0),
+          Number(remoteUser.totalCoinsEarned || 0)
+        );
+        const mergedXp = Math.max(Number(existing.ecoXP || 0), Number(remoteUser.ecoXP || 0));
+        const shouldPreferRemoteSchool =
+          (!existing.schoolName || existing.schoolName === 'Maktab kiritilmagan') &&
+          remoteUser.schoolName &&
+          remoteUser.schoolName !== 'Maktab kiritilmagan';
+
+        if (
+          mergedCoins > Number(existing.ecoCoins || 0) ||
+          mergedEarned > Number(existing.totalCoinsEarned || 0) ||
+          (!existing.isOnboarded && remoteUser.isOnboarded) ||
+          shouldPreferRemoteSchool
+        ) {
+          centralDb.users[existing.uid] = syncUserStatsConsistency({
+            ...remoteUser,
+            ...existing,
+            ecoCoins: mergedCoins,
+            totalCoinsEarned: mergedEarned,
+            ecoXP: mergedXp,
+            reportsCount: Math.max(Number(existing.reportsCount || 0), Number(remoteUser.reportsCount || 0)),
+            cleanupsCount: Math.max(Number(existing.cleanupsCount || 0), Number(remoteUser.cleanupsCount || 0)),
+            treesPlanted: Math.max(Number(existing.treesPlanted || 0), Number(remoteUser.treesPlanted || 0)),
+            streakDays: Math.max(Number(existing.streakDays || 1), Number(remoteUser.streakDays || 1)),
+            isOnboarded: Boolean(existing.isOnboarded || remoteUser.isOnboarded),
+            welcomeBonusClaimed: Boolean(existing.welcomeBonusClaimed || remoteUser.welcomeBonusClaimed),
+            ...(shouldPreferRemoteSchool
+              ? {
+                  schoolId: remoteUser.schoolId,
+                  schoolName: remoteUser.schoolName,
+                  schoolNumber: remoteUser.schoolNumber,
+                  region: remoteUser.region || existing.region,
+                  district: remoteUser.district || existing.district,
+                }
+              : {}),
+          });
+          changed = true;
+        }
+      }
+    }
+  }
+
+  const mergeArrayById = (targetKey: keyof UnifiedDatabase, incomingArr: any[]) => {
+    if (!Array.isArray(incomingArr) || incomingArr.length === 0) return;
+    const targetArr = Array.isArray(centralDb[targetKey]) ? (centralDb[targetKey] as any[]) : [];
+    const seen = new Set(targetArr.map((item) => String(item?.id || '')));
+    for (const item of incomingArr) {
+      const id = String(item?.id || '');
+      if (id && !seen.has(id)) {
+        seen.add(id);
+        targetArr.push(item);
+        changed = true;
+      }
+    }
+    (centralDb as any)[targetKey] = targetArr;
+  };
+
+  if (Array.isArray(snapshot.reportsList)) mergeArrayById('reports', snapshot.reportsList);
+  if (Array.isArray(snapshot.mediaList)) mergeArrayById('mediaSubmissions', snapshot.mediaList);
+  if (Array.isArray(snapshot.transactionsList)) mergeArrayById('transactions', snapshot.transactionsList);
+
+  const extra = snapshot.extraCollections;
+  if (extra && typeof extra === 'object') {
+    if (Array.isArray(extra.ambassadors)) mergeArrayById('ambassadors', extra.ambassadors);
+    if (Array.isArray(extra.ecoTasks)) mergeArrayById('ecoTasks', extra.ecoTasks);
+    if (Array.isArray(extra.shopOrders)) mergeArrayById('shopOrders', extra.shopOrders);
+    if (Array.isArray(extra.roleRequests)) mergeArrayById('roleRequests', extra.roleRequests);
+    if (Array.isArray(extra.registrationApplications)) {
+      mergeArrayById('registrationApplications', extra.registrationApplications);
+    }
+    if (Array.isArray(extra.referrals)) mergeArrayById('referrals', extra.referrals);
+    if (Array.isArray(extra.certificates)) mergeArrayById('certificates', extra.certificates);
+    if (Array.isArray(extra.schoolDuels)) mergeArrayById('schoolDuels', extra.schoolDuels);
+    if (Array.isArray(extra.qrEcoScans)) mergeArrayById('qrEcoScans', extra.qrEcoScans);
+    if (Array.isArray(extra.missionSubmissions)) mergeArrayById('missionSubmissions', extra.missionSubmissions);
+    if (Array.isArray(extra.monthlyAwards)) mergeArrayById('monthlyAwards', extra.monthlyAwards);
+    if (Array.isArray(extra.studentMonthlyAwards)) mergeArrayById('studentMonthlyAwards', extra.studentMonthlyAwards);
+    if (Array.isArray(extra.adRewardClaims)) mergeArrayById('adRewardClaims', extra.adRewardClaims);
+
+    if (extra.uidAliases && typeof extra.uidAliases === 'object') {
+      centralDb.uidAliases = { ...extra.uidAliases, ...(centralDb.uidAliases || {}) };
+    }
+    if (extra.dailyQuizClaims && typeof extra.dailyQuizClaims === 'object') {
+      centralDb.dailyQuizClaims = { ...extra.dailyQuizClaims, ...(centralDb.dailyQuizClaims || {}) };
+    }
+    if (extra.missionCompletions && typeof extra.missionCompletions === 'object') {
+      for (const [uid, arr] of Object.entries(extra.missionCompletions) as [string, any][]) {
+        if (!Array.isArray(arr)) continue;
+        centralDb.missionCompletions[uid] = Array.from(
+          new Set([...(centralDb.missionCompletions[uid] || []), ...arr])
+        );
+      }
+    }
+  }
+
+  if (reconcileSchoolsAndStudents(false)) {
+    changed = true;
+  }
+
+  if (changed) {
+    recalculateSchoolRanks();
+    saveCentralDb();
+  }
+
+  return { restoredUsers, restoredSchools, restoredStarters, changed };
+}
+
+// Reconcile canonical schools and exact student counts right on boot
+const reconciledOnBoot = reconcileSchoolsAndStudents(false);
+if (!fs.existsSync(UNIFIED_DB_PATH) || loadedDbResult.needsSave || reconciledOnBoot) {
   recalculateSchoolRanks();
   saveCentralDb();
-  return school;
 }
 
 export function phoneMatchKey(phone?: string | null): string {

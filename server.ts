@@ -44,12 +44,16 @@ import {
   resolveCanonicalUid,
   syncUserStatsConsistency,
   isSyntheticEmail,
+  reconcileSchoolsAndStudents,
+  mergeDatabaseSnapshotNonDestructive,
+  exportCompactBackupSnapshot,
 } from './server-db';
 import {
   fetchAllCatalogFromFirestoreRest,
   upsertCatalogDocToFirestoreRest,
   deleteCatalogDocFromFirestoreRest,
   mergeCatalogListWithFirestore,
+  fetchSchoolsFromFirestoreRest,
 } from './server-firestore';
 import {
   attachAuthUser,
@@ -428,7 +432,11 @@ function getAllPublicUsersForRankings() {
 }
 
 function broadcastRealtimeEvent(type: string, payload: Record<string, any> = {}) {
-  const frame = JSON.stringify({ type, ...payload, ts: new Date().toISOString() });
+  const enrichedPayload =
+    type === 'db:updated' && payload.liveMetrics === undefined
+      ? { ...payload, liveMetrics: computeLiveMetrics() }
+      : payload;
+  const frame = JSON.stringify({ type, ...enrichedPayload, ts: new Date().toISOString() });
   for (const client of wsClients) {
     if (client.ws.readyState !== WebSocket.OPEN) continue;
     try {
@@ -497,6 +505,45 @@ app.get('/api/health', (_req, res) => {
       mediaSubmissions: centralDb.mediaSubmissions.length,
     },
   });
+});
+
+app.get('/api/metrics/live', (_req, res) => {
+  try {
+    reconcileSchoolsAndStudents(false);
+    res.json({
+      success: true,
+      liveMetrics: computeLiveMetrics(),
+      serverNow: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/cloud-backup/export', requireRoles('super_admin'), (_req: AuthenticatedRequest, res) => {
+  try {
+    const snapshot = exportCompactBackupSnapshot();
+    res.json({ success: true, snapshot });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/cloud-backup/restore', requireRoles('super_admin'), (req: AuthenticatedRequest, res) => {
+  try {
+    const rawSnapshot = req.body?.snapshot || req.body;
+    const result = mergeDatabaseSnapshotNonDestructive(rawSnapshot);
+    if (result.changed) {
+      broadcastRealtimeEvent('db:updated', { scope: 'cloud_restore' });
+    }
+    res.json({
+      success: true,
+      ...result,
+      liveMetrics: computeLiveMetrics(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Unified Scoped Bootstrap Endpoint (Strict RBAC & PII Redaction)
@@ -670,93 +717,118 @@ function getFirebaseTokenFromReq(req: express.Request): string | null {
 
 async function hydrateCatalogFromFirestoreOnBoot(): Promise<void> {
   try {
-    const remote = await fetchAllCatalogFromFirestoreRest();
-    if (!remote) return;
+    const [remote, remoteSchools] = await Promise.all([
+      fetchAllCatalogFromFirestoreRest(),
+      centralDb.schools.length === 0 ? fetchSchoolsFromFirestoreRest() : Promise.resolve([]),
+    ]);
 
-    const deletedSet = new Set<string>(
-      Array.isArray(centralDb.deletedIds) ? centralDb.deletedIds.map(String) : []
-    );
     let anyChanged = false;
 
-    if (remote.missions.length > 0 || remote.tombstones.some((t) => t.collectionName === 'eco_missions')) {
-      const mRes = mergeCatalogListWithFirestore(
-        centralDb.ecoMissions || [],
-        remote.missions,
-        remote.tombstones,
-        'eco_missions',
-        deletedSet
+    if (Array.isArray(remoteSchools) && remoteSchools.length > 0) {
+      for (const rs of remoteSchools) {
+        if (!rs?.name) continue;
+        findOrCreateSchool({
+          schoolId: rs.id,
+          schoolName: rs.name,
+          schoolNumber: rs.number,
+          region: rs.region || 'Toshkent shahri',
+          district: rs.district || 'Markaziy tumani',
+          ambassadorName: rs.ambassadorName,
+        });
+        anyChanged = true;
+      }
+    }
+
+    if (remote) {
+      const deletedSet = new Set<string>(
+        Array.isArray(centralDb.deletedIds) ? centralDb.deletedIds.map(String) : []
       );
-      if (mRes.changed) {
-        centralDb.ecoMissions = mRes.merged;
+
+      if (remote.missions.length > 0 || remote.tombstones.some((t) => t.collectionName === 'eco_missions')) {
+        const mRes = mergeCatalogListWithFirestore(
+          centralDb.ecoMissions || [],
+          remote.missions,
+          remote.tombstones,
+          'eco_missions',
+          deletedSet
+        );
+        if (mRes.changed) {
+          centralDb.ecoMissions = mRes.merged;
+          anyChanged = true;
+        }
+      }
+
+      if (remote.shopItems.length > 0 || remote.tombstones.some((t) => t.collectionName === 'shopItems')) {
+        const sRes = mergeCatalogListWithFirestore(
+          centralDb.shopItems || [],
+          remote.shopItems,
+          remote.tombstones,
+          'shopItems',
+          deletedSet
+        );
+        if (sRes.changed) {
+          centralDb.shopItems = sRes.merged;
+          anyChanged = true;
+        }
+      }
+
+      if (remote.ecoAds.length > 0 || remote.tombstones.some((t) => t.collectionName === 'eco_ads')) {
+        const aRes = mergeCatalogListWithFirestore(
+          centralDb.ecoAds || [],
+          remote.ecoAds,
+          remote.tombstones,
+          'eco_ads',
+          deletedSet
+        );
+        if (aRes.changed) {
+          centralDb.ecoAds = aRes.merged;
+          anyChanged = true;
+        }
+      }
+
+      if (remote.homePosts.length > 0 || remote.tombstones.some((t) => t.collectionName === 'home_posts')) {
+        const hRes = mergeCatalogListWithFirestore(
+          centralDb.homePosts || [],
+          remote.homePosts,
+          remote.tombstones,
+          'home_posts',
+          deletedSet
+        );
+        if (hRes.changed) {
+          centralDb.homePosts = hRes.merged;
+          anyChanged = true;
+        }
+      }
+
+      if (remote.rewardSettings && remote.rewardSettings.updatedAt) {
+        const remoteTs = Date.parse(String(remote.rewardSettings.updatedAt)) || 0;
+        const localTs = Date.parse(String(centralDb.rewardSettings?.updatedAt || '')) || 0;
+        if (remoteTs > localTs) {
+          const { id: _ignoreId, ...rest } = remote.rewardSettings;
+          centralDb.rewardSettings = {
+            ...centralDb.rewardSettings,
+            ...rest,
+          };
+          anyChanged = true;
+        }
+      }
+
+      const nextDeleted = Array.from(deletedSet);
+      if (nextDeleted.length !== (centralDb.deletedIds || []).length) {
+        centralDb.deletedIds = nextDeleted;
         anyChanged = true;
       }
     }
 
-    if (remote.shopItems.length > 0 || remote.tombstones.some((t) => t.collectionName === 'shopItems')) {
-      const sRes = mergeCatalogListWithFirestore(
-        centralDb.shopItems || [],
-        remote.shopItems,
-        remote.tombstones,
-        'shopItems',
-        deletedSet
-      );
-      if (sRes.changed) {
-        centralDb.shopItems = sRes.merged;
-        anyChanged = true;
-      }
-    }
-
-    if (remote.ecoAds.length > 0 || remote.tombstones.some((t) => t.collectionName === 'eco_ads')) {
-      const aRes = mergeCatalogListWithFirestore(
-        centralDb.ecoAds || [],
-        remote.ecoAds,
-        remote.tombstones,
-        'eco_ads',
-        deletedSet
-      );
-      if (aRes.changed) {
-        centralDb.ecoAds = aRes.merged;
-        anyChanged = true;
-      }
-    }
-
-    if (remote.homePosts.length > 0 || remote.tombstones.some((t) => t.collectionName === 'home_posts')) {
-      const hRes = mergeCatalogListWithFirestore(
-        centralDb.homePosts || [],
-        remote.homePosts,
-        remote.tombstones,
-        'home_posts',
-        deletedSet
-      );
-      if (hRes.changed) {
-        centralDb.homePosts = hRes.merged;
-        anyChanged = true;
-      }
-    }
-
-    if (remote.rewardSettings && remote.rewardSettings.updatedAt) {
-      const remoteTs = Date.parse(String(remote.rewardSettings.updatedAt)) || 0;
-      const localTs = Date.parse(String(centralDb.rewardSettings?.updatedAt || '')) || 0;
-      if (remoteTs > localTs) {
-        const { id: _ignoreId, ...rest } = remote.rewardSettings;
-        centralDb.rewardSettings = {
-          ...centralDb.rewardSettings,
-          ...rest,
-        };
-        anyChanged = true;
-      }
-    }
-
-    const nextDeleted = Array.from(deletedSet);
-    if (nextDeleted.length !== (centralDb.deletedIds || []).length) {
-      centralDb.deletedIds = nextDeleted;
+    if (reconcileSchoolsAndStudents(false)) {
       anyChanged = true;
     }
 
     if (anyChanged) {
+      recalculateSchoolRanks();
       saveCentralDb();
       broadcastRealtimeEvent('db:updated', { scope: 'catalog' });
-      console.log('[FirestoreBootSync] Katalog ma\'lumotlari Firestore bilan sinxronlandi.');
+      console.log('[FirestoreBootSync] Katalog va maktablar Firestore bilan sinxronlandi.');
     }
   } catch (err: any) {
     console.warn('[FirestoreBootSync] Katalog sinxronizatsiyasi o\'tkazib yuborildi:', err?.message || err);
@@ -3033,14 +3105,15 @@ app.post('/api/auth/session', async (req, res) => {
           isVerified: isVerifiedSuper,
           isOnboarded: isVerifiedSuper,
           welcomeBonusClaimed: true,
-          region: 'Toshkent shahri',
-          district: 'Shayxontohur tumani',
-          schoolId: 'school_tashkent_17',
-          schoolName: 'Toshkent sh. 17-sonli ixtisoslashtirilgan maktab',
-          schoolNumber: '17',
+          region: isVerifiedSuper ? 'Toshkent shahri' : '',
+          district: isVerifiedSuper ? 'Shayxontohur tumani' : '',
+          schoolId: 'school_new',
+          schoolName: 'Maktab kiritilmagan',
+          schoolNumber: '',
           registrationDate: new Date().toISOString(),
           activityStats: { reportsCount: 0, cleanupsCount: 0, treesPlanted: 0, streakDays: 1, totalCoinsEarned: welcomeBonus },
         });
+        reconcileSchoolsAndStudents(false);
         saveCentralDb();
       }
     }
@@ -3220,6 +3293,7 @@ app.post('/api/auth/register-user', async (req, res) => {
       status: 'approved',
       reason: `ECO HERO ro'yxatdan o'tish tabrik bonusi (+${welcomeBonus} EcoCoin)`,
     });
+    reconcileSchoolsAndStudents(false);
     saveCentralDb();
     broadcastRealtimeEvent('db:updated', { scope: 'users' });
 
@@ -3234,7 +3308,14 @@ app.post('/api/auth/register-user', async (req, res) => {
     });
 
     const sessionToken = issueSessionToken(userProfile);
-    res.json({ success: true, sessionToken, user: sanitizeSelfUser(userProfile), school: linkedSchool });
+    const refreshedSchool = centralDb.schools.find((s) => s.id === userProfile.schoolId) || linkedSchool;
+    res.json({
+      success: true,
+      sessionToken,
+      user: sanitizeSelfUser(userProfile),
+      school: refreshedSchool,
+      liveMetrics: computeLiveMetrics(),
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -3394,17 +3475,20 @@ app.post('/api/user/onboarding', requireAuth, (req: AuthenticatedRequest, res) =
     if (callerTelegramId && centralDb.registrationSessions[String(callerTelegramId)]) {
       delete centralDb.registrationSessions[String(callerTelegramId)];
     }
+    reconcileSchoolsAndStudents(false);
     saveCentralDb();
     broadcastRealtimeEvent('db:updated', { scope: 'users' });
 
     const sessionToken = issueSessionToken(profile);
     const sanitized = sanitizeSelfUser(profile);
+    const refreshedSchool = centralDb.schools.find((s) => s.id === profile.schoolId) || linkedSchool;
     res.json({
       success: true,
       sessionToken,
       profile: sanitized,
       user: sanitized,
-      school: linkedSchool,
+      school: refreshedSchool,
+      liveMetrics: computeLiveMetrics(),
       message: "Ma'lumotlar yagona bazaga saqlandi!",
     });
   } catch (err: any) {
@@ -3468,10 +3552,11 @@ app.post('/api/user/profile', requireAuth, (req: AuthenticatedRequest, res) => {
       ...safeUpdates,
       uid: existing.uid,
     });
+    reconcileSchoolsAndStudents(false);
     saveCentralDb();
     broadcastRealtimeEvent('db:updated', { scope: 'users' });
 
-    res.json({ success: true, profile: sanitizeSelfUser(updated) });
+    res.json({ success: true, profile: sanitizeSelfUser(updated), liveMetrics: computeLiveMetrics() });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -12124,6 +12209,7 @@ async function completeTelegramRegistration(
 
   syncUserStatsConsistency(finalProfile);
   upsertUser(finalProfile);
+  reconcileSchoolsAndStudents(false);
   deleteRegistrationSession(chatKey);
   saveCentralDb();
   broadcastRealtimeEvent('db:updated', { scope: 'users' });
@@ -12875,6 +12961,7 @@ async function handleTelegramUpdateSerialized(update: any) {
           `🎬 /activity — Eko-faoliyat (daraxt ekish, tozalash) yuklash\n` +
           `📋 /tasks — Menga biriktirilgan vazifalar\n` +
           `🏆 /rank — Maktablar TOP reytingi\n` +
+          `📊 /stats — Jonli statistika (maktab va o'quvchilar soni)\n` +
           `💰 /coins — EcoCoin hamyon va kutilayotgan mukofotlar\n` +
           `🎁 /invite — Do'stlarni taklif qilib bonus olish\n` +
           `🛡 /apply — Sardor / Eko-Elchi lavozimiga ariza\n` +
@@ -13116,19 +13203,54 @@ async function handleTelegramUpdateSerialized(update: any) {
       return;
     }
 
+    if (text === '/stats' || text === '/jonli' || text.startsWith('/stats@')) {
+      reconcileSchoolsAndStudents(false);
+      const metrics = computeLiveMetrics();
+      const topLiveSchools = getLiveSchoolsList(true).slice(0, 5);
+      const schoolLines =
+        topLiveSchools.length > 0
+          ? topLiveSchools
+              .map(
+                (s, i) =>
+                  `${i + 1}. <b>${s.name}</b> — ${s.registeredStudentsCount || s.studentsCount || 0} o'quvchi · ${s.totalCoins || 0} ECO`
+              )
+              .join('\n')
+          : "Hozircha maktablar ro'yxatdan o'tmagan.";
+      await sendTelegramMessage(
+        chatId,
+        `📊 <b>ECO HERO JONLI STATISTIKA (ULTRA REJIM)</b>\n\n` +
+          `🏫 <b>Ro'yxatdan o'tgan maktablar:</b> ${metrics.totalSchools}\n` +
+          `👥 <b>Ro'yxatdagi o'quvchilar:</b> ${metrics.totalUsers}\n` +
+          `🤖 <b>Bot foydalanuvchilari:</b> ${metrics.botUsersCount}\n` +
+          `🗺 <b>Tumanlar / Viloyatlar:</b> ${metrics.totalDistricts} / ${metrics.totalRegions}\n` +
+          `✅ <b>Hal qilingan muammolar:</b> ${metrics.resolvedReports}\n` +
+          `🌱 <b>Ekilgan daraxtlar:</b> ${metrics.treesPlanted}\n\n` +
+          `🏆 <b>TOP-5 FAOL MAKTAB:</b>\n${schoolLines}`,
+        {
+          reply_markup: {
+            inline_keyboard: [[{ text: '📱 Jonli ilovani ochish', web_app: { url: APP_URL } }]],
+          },
+        }
+      );
+      return;
+    }
+
     if (text === '/admin') {
       if (!checkIsSuperAdmin({ telegramId: chatId, verifiedTelegram: true }) && !(regUser && checkIsSuperAdmin(regUser))) {
         await sendTelegramMessage(chatId, '⛔️ Ushbu buyruq faqat Super Admin uchun.');
         return;
       }
+      reconcileSchoolsAndStudents(false);
+      const live = computeLiveMetrics();
       const pendingRep = centralDb.reports.filter((r) => r.status === 'pending' || r.status === 'PENDING_REVIEW').length;
       const pendingMed = (centralDb.mediaSubmissions || []).filter((m) => m.status === 'PENDING').length;
       const pendingApps = (centralDb.registrationApplications || []).filter((a) => a.status === 'pending').length;
       await sendTelegramMessage(
         chatId,
         `👑 <b>ECO HERO ADMIN HISOBOTI</b>\n\n` +
-          `👥 <b>Foydalanuvchilar:</b> ${Object.keys(centralDb.users).length}\n` +
-          `🏫 <b>Maktablar:</b> ${centralDb.schools.length}\n` +
+          `👥 <b>Ro'yxatdagi o'quvchilar:</b> ${live.totalUsers} (Bot: ${live.botUsersCount})\n` +
+          `🏫 <b>Yagona maktablar:</b> ${live.totalSchools}\n` +
+          `✅ <b>Hal qilingan / Daraxtlar:</b> ${live.resolvedReports} / ${live.treesPlanted}\n` +
           `⏳ <b>Kutilayotgan muammolar:</b> ${pendingRep}\n` +
           `🎬 <b>Kutilayotgan media:</b> ${pendingMed}\n` +
           `🛡 <b>Kutilayotgan arizalar:</b> ${pendingApps}\n` +
@@ -13250,14 +13372,19 @@ async function handleTelegramUpdateSerialized(update: any) {
     }
 
     if (text === '/rank') {
+      reconcileSchoolsAndStudents(false);
       recalculateSchoolRanks();
-      const topSchools = centralDb.schools.slice(0, 5);
+      const metrics = computeLiveMetrics();
+      const topSchools = getLiveSchoolsList(true).slice(0, 5);
       const schoolLines = topSchools
-        .map((s, i) => `${i + 1}. <b>${s.name}</b> — ${s.totalCoins} ECO`)
+        .map(
+          (s, i) =>
+            `${i + 1}. <b>${s.name}</b> — ${s.registeredStudentsCount || s.studentsCount || 0} o'quvchi · ${s.totalCoins || 0} ECO`
+        )
         .join('\n');
       await sendTelegramMessage(
         chatId,
-        `🏆 <b>TOP-5 EKOLOGIK MAKTABLAR REYTINGI:</b>\n\n${schoolLines}\n\n<i>Rolga mos kengaytirilgan reytinglarni Mini App ichida ko'ring.</i>`,
+        `🏆 <b>TOP-5 EKOLOGIK MAKTABLAR REYTINGI:</b>\n\n${schoolLines || "Hozircha maktablar yo'q"}\n\n📊 <b>Jami:</b> ${metrics.totalSchools} maktab · ${metrics.totalUsers} o'quvchi`,
         { reply_markup: { inline_keyboard: [[{ text: '📊 Barcha reytinglar', web_app: { url: APP_URL } }]] } }
       );
       return;
@@ -15078,6 +15205,14 @@ function validateAndLogServerEnv() {
       ),
       requiredInProd: false,
       detail: 'Public HTTPS URL used for Telegram Mini App buttons & webhooks',
+    },
+    {
+      name: 'DATA_DIR / RAILWAY_VOLUME_MOUNT_PATH',
+      ok:
+        process.env.NODE_ENV !== 'production' ||
+        Boolean(String(process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || '').trim()),
+      requiredInProd: false,
+      detail: 'Persistent disk mount (e.g. /data) so Railway container restarts keep local JSON DB alongside Firestore Cloud Vault',
     },
   ];
 
