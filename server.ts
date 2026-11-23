@@ -14734,6 +14734,17 @@ async function startServer() {
         },
       })
     );
+    app.use(
+      express.static(path.join(process.cwd(), 'public'), {
+        index: false,
+        maxAge: '7d',
+        setHeaders: (res, filePath) => {
+          if (filePath.endsWith('sw.js') || filePath.endsWith('manifest.json')) {
+            res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+          }
+        },
+      })
+    );
     app.get('*', (req, res, next) => {
       if (req.path.startsWith('/api') || req.path.startsWith('/cesium')) return next();
       try {

@@ -1,8 +1,11 @@
-const CACHE_NAME = 'ecohero-cache-v3';
+const CACHE_NAME = 'ecohero-cache-v4';
 const STATIC_ASSETS = [
   '/manifest.json',
-  '/icon.svg',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/icon-maskable-512.png',
   '/apple-touch-icon.png',
+  '/favicon.png',
 ];
 
 self.addEventListener('install', (event) => {
