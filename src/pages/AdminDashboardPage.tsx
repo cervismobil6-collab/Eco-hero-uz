@@ -48,6 +48,7 @@ import {
   Send,
   ExternalLink,
   Megaphone,
+  Download,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useEco } from '../context/EcoContext';
@@ -116,6 +117,7 @@ export const AdminDashboardPage: React.FC = () => {
     fetchDistrictUserGrowth,
     liveSyncVersion,
     liveMetrics,
+    refreshBootstrap,
   } = useEco();
 
   const [activeTab, setActiveTab] = useState<string>(() => getDefaultTabForRole(user.role));
@@ -306,6 +308,42 @@ export const AdminDashboardPage: React.FC = () => {
   } | null>(null);
   const activeMiniAppUrl = telegramStatusInfo?.miniAppUrl || window.location.origin;
 
+  const [botUsersReport, setBotUsersReport] = useState<{
+    users: {
+      key: string;
+      uid: string;
+      telegramId: string;
+      username: string;
+      fullName: string;
+      phoneNumber: string;
+      role: string;
+      schoolName: string;
+      region: string;
+      district: string;
+      ecoCoins: number;
+      isOnboarded: boolean;
+      hasTelegramBot: boolean;
+      sources: string[];
+      startedAt: string;
+      lastSeenAt: string;
+    }[];
+    summary: {
+      botUsersCount: number;
+      totalDetectedUsers: number;
+      registeredUsersCount: number;
+      onboardedUsersCount: number;
+      botOnlyVisitorsCount: number;
+      totalSchools: number;
+      persistentVolumeActive: boolean;
+      dataDir: string;
+      snapshotsCount: number;
+      lastUpdatedAt: string;
+    };
+  } | null>(null);
+  const [botUsersLoading, setBotUsersLoading] = useState(false);
+  const [botUsersSearch, setBotUsersSearch] = useState('');
+  const [backupBusy, setBackupBusy] = useState(false);
+
   const fetchTelegramStatus = async () => {
     try {
       const res = await apiFetch('/api/telegram/status');
@@ -316,9 +354,83 @@ export const AdminDashboardPage: React.FC = () => {
     }
   };
 
+  const fetchDetectedBotUsers = async () => {
+    setBotUsersLoading(true);
+    try {
+      const res = await apiFetch('/api/admin/bot-users');
+      const data = await res.json();
+      if (res.ok && data?.success) {
+        setBotUsersReport({ users: data.users || [], summary: data.summary });
+      }
+    } catch {
+      // ignore network error
+    } finally {
+      setBotUsersLoading(false);
+    }
+  };
+
+  const handleDownloadUltraBackup = async () => {
+    setBackupBusy(true);
+    try {
+      const res = await apiFetch('/api/admin/cloud-backup/export');
+      const data = await res.json();
+      if (!res.ok || !data?.snapshot) {
+        showNotification(data?.error || 'Zaxira faylini yaratib bo‘lmadi', 'warning');
+        return;
+      }
+      const dateTag = new Date().toISOString().slice(0, 10);
+      const blob = new Blob([JSON.stringify(data.snapshot, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ecohero-ultra-backup-${dateTag}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showNotification("To'liq JSON zaxira yuklab olindi!", 'success');
+    } catch (e: any) {
+      showNotification(e?.message || 'Yuklab olishda xatolik', 'warning');
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const handleRestoreUltraBackupFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setBackupBusy(true);
+    try {
+      const rawText = await file.text();
+      const parsed = JSON.parse(rawText);
+      const res = await apiFetch('/api/admin/cloud-backup/restore', {
+        method: 'POST',
+        body: JSON.stringify({ snapshot: parsed }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.success) {
+        showNotification(data?.error || 'Zaxiradan tiklashda xatolik', 'warning');
+        return;
+      }
+      await refreshBootstrap();
+      await fetchDetectedBotUsers();
+      await fetchTelegramStatus();
+      showNotification(
+        `Tiklandi: +${data.restoredUsers || 0} foydalanuvchi, +${data.restoredSchools || 0} maktab, +${data.restoredStarters || 0} bot foydalanuvchisi`,
+        'success'
+      );
+    } catch (err: any) {
+      showNotification(`JSON fayl xatosi: ${err?.message || "Noto'g'ri format"}`, 'warning');
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 'telegram') {
       fetchTelegramStatus();
+      fetchDetectedBotUsers();
     } else if (activeTab === 'district_growth_race') {
       setGrowthLoading(true);
       fetchDistrictUserGrowth()
@@ -1340,6 +1452,157 @@ export const AdminDashboardPage: React.FC = () => {
                       <p className="mt-3 text-xs font-bold text-center text-slate-200 bg-white/5 py-2 px-4 rounded-xl border border-white/10">
                         {syncStatus}
                       </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Detected Bot Users & Ultra Persistence Backup/Restore */}
+                <div className="p-6 sm:p-8 bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 space-y-5 shadow-sm">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-11 h-11 rounded-2xl bg-emerald-500/15 text-emerald-500 flex items-center justify-center shrink-0">
+                        <Users className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-black uppercase tracking-tight">
+                          Botdan Jami Foydalanganlar &amp; Ultra Xotira
+                        </h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Telegram Bot, Mini App va barcha arxivlardan aniqlangan foydalanuvchilar
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={fetchDetectedBotUsers}
+                        disabled={botUsersLoading}
+                        className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${botUsersLoading ? 'animate-spin' : ''}`} />
+                        <span>Yangilash</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDownloadUltraBackup}
+                        disabled={backupBusy}
+                        className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>.JSON Zaxira</span>
+                      </button>
+                      <label className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer">
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>Tiklash (.JSON)</span>
+                        <input
+                          type="file"
+                          accept=".json,application/json"
+                          className="hidden"
+                          disabled={backupBusy}
+                          onChange={handleRestoreUltraBackupFile}
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  {botUsersReport?.summary && !botUsersReport.summary.persistentVolumeActive && (
+                    <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3 text-xs text-amber-800 dark:text-amber-200">
+                      <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <p className="font-black uppercase tracking-wide text-[11px]">
+                          Diqqat: Serverda Doimiy Disk (Railway Volume) ulanmagan!
+                        </p>
+                        <p className="leading-relaxed">
+                          Hozirgi baza papkasi (<code>{botUsersReport.summary.dataDir}</code>) vaqtinchalik. Railway har qayta deploy bo‘lganda eski lokal JSON fayl tozalanadi va Telegram API avvalgi chatlar tarixini qaytadan bermaydi. Ma’lumotlar abadiy saqlanishi uchun Railway’da <b>Volume → /data</b> (<code>DATA_DIR=/data</code>) ulang yoki muntazam <b>/backup</b> / <b>.JSON Zaxira</b> olib saqlang.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Bot &amp; Mini App</div>
+                      <div className="text-xl font-black text-emerald-500 tabular-nums mt-0.5">
+                        {botUsersReport?.summary?.botUsersCount ?? liveMetrics.botUsersCount}
+                      </div>
+                    </div>
+                    <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Jami hisoblar</div>
+                      <div className="text-xl font-black tabular-nums mt-0.5">
+                        {botUsersReport?.summary?.registeredUsersCount ?? liveMetrics.totalUsers}
+                      </div>
+                    </div>
+                    <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Yagona Maktablar</div>
+                      <div className="text-xl font-black text-indigo-500 tabular-nums mt-0.5">
+                        {botUsersReport?.summary?.totalSchools ?? liveMetrics.totalSchools}
+                      </div>
+                    </div>
+                    <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Avto-Snapshotlar</div>
+                      <div className="text-xl font-black text-teal-500 tabular-nums mt-0.5">
+                        {botUsersReport?.summary?.snapshotsCount ?? 0}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={botUsersSearch}
+                      onChange={e => setBotUsersSearch(e.target.value)}
+                      placeholder="Ism, @username, Telegram ID yoki maktab bo'yicha qidirish..."
+                      className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs outline-none"
+                    />
+                  </div>
+
+                  <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/80 rounded-2xl border border-slate-200/80 dark:border-slate-800">
+                    {(botUsersReport?.users || [])
+                      .filter((u) => {
+                        const q = botUsersSearch.trim().toLowerCase();
+                        if (!q) return true;
+                        return `${u.fullName} ${u.username} ${u.telegramId} ${u.uid} ${u.schoolName}`
+                          .toLowerCase()
+                          .includes(q);
+                      })
+                      .map((u) => (
+                        <div key={u.key} className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                          <div className="min-w-0 space-y-0.5">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-black text-slate-900 dark:text-white truncate">{u.fullName}</span>
+                              {u.username && (
+                                <span className="text-[11px] font-mono text-sky-500">{u.username}</span>
+                              )}
+                              <span
+                                className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                                  u.isOnboarded
+                                    ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                                    : 'bg-amber-500/15 text-amber-600 dark:text-amber-300'
+                                }`}
+                              >
+                                {u.isOnboarded ? 'To‘liq Profil' : 'Faqat Bot / Mini App'}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-2">
+                              <span className="font-mono">ID: {u.telegramId || u.uid}</span>
+                              {u.schoolName && u.schoolName !== 'Maktab kiritilmagan' && (
+                                <span>· 🏫 {u.schoolName}</span>
+                              )}
+                              <span>· Manba: {u.sources.join(', ')}</span>
+                            </div>
+                          </div>
+                          <div className="shrink-0 flex items-center gap-3">
+                            <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-black tabular-nums">
+                              {u.ecoCoins} ECO
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    {(!botUsersReport || botUsersReport.users.length === 0) && (
+                      <div className="p-6 text-center text-xs text-slate-400">
+                        {botUsersLoading ? 'Aniqlanmoqda...' : 'Hozircha foydalanuvchilar topilmadi.'}
+                      </div>
                     )}
                   </div>
                 </div>

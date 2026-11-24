@@ -1535,11 +1535,12 @@ export function saveCentralDb(options?: { allowShrink?: boolean }) {
     // Zero-wipe safety shield: never let accidental empty state overwrite non-empty backups
     if (
       !options?.allowShrink &&
-      highWaterUserCount > 0 &&
-      curUsers === 0
+      ((highWaterUserCount > 0 && curUsers === 0) ||
+        (highWaterStarterCount > 0 && curStarters === 0) ||
+        (highWaterSchoolCount > 0 && curSchools === 0))
     ) {
       console.error(
-        `[CentralDB SAFETY SHIELD] Blocked accidental empty-users overwrite (had ${highWaterUserCount} users, attempted to save 0).`
+        `[CentralDB SAFETY SHIELD] Blocked accidental empty overwrite (users: ${highWaterUserCount}->${curUsers}, starters: ${highWaterStarterCount}->${curStarters}, schools: ${highWaterSchoolCount}->${curSchools}).`
       );
       return;
     }
@@ -1648,8 +1649,288 @@ export function getDistrictLiveParticipantCount(region?: string, district?: stri
   return seenUids.size;
 }
 
-export function reconcileSchoolsAndStudents(persistIfChanged = false): boolean {
+function extractNumericTelegramId(raw?: unknown): string {
+  if (raw === undefined || raw === null) return '';
+  const s = String(raw).trim();
+  if (!s) return '';
+  if (s.startsWith('user_tg_')) {
+    const sub = s.slice('user_tg_'.length).trim();
+    return /^-?\d{4,}$/.test(sub) ? sub : '';
+  }
+  return /^-?\d{4,}$/.test(s) ? s : '';
+}
+
+function ensureBotStarterRecord(
+  chatIdRaw: unknown,
+  username?: string,
+  firstName?: string,
+  seenAt?: string
+): boolean {
+  const key = extractNumericTelegramId(chatIdRaw);
+  if (!key) return false;
+  if (!centralDb.botStarters || typeof centralDb.botStarters !== 'object') {
+    centralDb.botStarters = {};
+  }
+  const existing = centralDb.botStarters[key];
+  const nowIso = seenAt || new Date().toISOString();
+  if (!existing) {
+    centralDb.botStarters[key] = {
+      chatId: key,
+      username: username || '',
+      firstName: firstName || '',
+      startedAt: nowIso,
+      lastSeenAt: nowIso,
+    };
+    return true;
+  }
+  let updated = false;
+  if (username && !existing.username) {
+    existing.username = username;
+    updated = true;
+  }
+  if (firstName && !existing.firstName) {
+    existing.firstName = firstName;
+    updated = true;
+  }
+  if (seenAt && (!existing.lastSeenAt || seenAt > existing.lastSeenAt)) {
+    existing.lastSeenAt = seenAt;
+    updated = true;
+  }
+  return updated;
+}
+
+export function reconcileAllUsersAndBotStarters(): boolean {
   let changed = false;
+  if (!centralDb.users || typeof centralDb.users !== 'object') {
+    centralDb.users = {};
+    changed = true;
+  }
+  if (!centralDb.botStarters || typeof centralDb.botStarters !== 'object') {
+    centralDb.botStarters = {};
+    changed = true;
+  }
+
+  // 1. Sync Telegram IDs from registered users -> botStarters
+  for (const u of Object.values(centralDb.users) as any[]) {
+    if (!u || typeof u !== 'object') continue;
+    const tgId =
+      extractNumericTelegramId(u.telegramId) ||
+      extractNumericTelegramId(u.telegramChatId) ||
+      extractNumericTelegramId(u.chatId) ||
+      extractNumericTelegramId(u.uid);
+    if (tgId) {
+      if (!u.telegramId) {
+        u.telegramId = Number(tgId) || tgId;
+        u.telegramChatId = tgId;
+        u.chatId = tgId;
+        changed = true;
+      }
+      if (
+        ensureBotStarterRecord(
+          tgId,
+          u.telegramUsername,
+          u.fullName,
+          u.lastUpdated || u.registrationDate || u.createdAt
+        )
+      ) {
+        changed = true;
+      }
+    }
+  }
+
+  // 2. Backfill botStarters from active/saved registration sessions
+  for (const [chatKey, sess] of Object.entries(centralDb.registrationSessions || {}) as [string, any][]) {
+    const sessTs = sess?.updatedAt ? new Date(Number(sess.updatedAt)).toISOString() : undefined;
+    if (ensureBotStarterRecord(chatKey, sess?.username, sess?.fullName, sessTs)) {
+      changed = true;
+    }
+  }
+
+  // 3. Reconstruct any missing users/starters from child collections
+  const ensureRecoveredUserFromChild = (params: {
+    uid?: string;
+    telegramId?: unknown;
+    fullName?: string;
+    username?: string;
+    phoneNumber?: string;
+    schoolId?: string;
+    schoolName?: string;
+    schoolNumber?: string;
+    region?: string;
+    district?: string;
+    role?: string;
+    createdAt?: string;
+  }) => {
+    const tgId = extractNumericTelegramId(params.telegramId) || extractNumericTelegramId(params.uid);
+    if (tgId) {
+      if (ensureBotStarterRecord(tgId, params.username, params.fullName, params.createdAt)) {
+        changed = true;
+      }
+    }
+    const rawUid = String(params.uid || (tgId ? `user_tg_${tgId}` : '')).trim();
+    if (!rawUid || rawUid === 'system' || rawUid === 'anonymous') return;
+    const existing = findUserByAnyIdentifier({
+      uid: rawUid,
+      telegramId: tgId || undefined,
+      phoneNumber: params.phoneNumber,
+    });
+    if (existing) {
+      if (tgId && !existing.telegramId) {
+        existing.telegramId = Number(tgId) || tgId;
+        existing.telegramChatId = tgId;
+        existing.chatId = tgId;
+        changed = true;
+      }
+      const existingIdent = extractSchoolIdentity(existing.schoolName);
+      const childIdent = extractSchoolIdentity(params.schoolName, params.schoolNumber);
+      if (existingIdent.isPlaceholder && !childIdent.isPlaceholder && params.schoolName) {
+        existing.schoolId = params.schoolId || existing.schoolId;
+        existing.schoolName = params.schoolName;
+        existing.schoolNumber = params.schoolNumber || childIdent.number || '';
+        existing.region = params.region || existing.region || 'Toshkent shahri';
+        existing.district = params.district || existing.district || 'Shayxontohur tumani';
+        changed = true;
+      }
+      return;
+    }
+    // Only materialize a user profile if child record carries a meaningful identity (name or school or telegram)
+    if (!params.fullName && !tgId && !params.schoolName) return;
+    const canonUid = resolveCanonicalUid(rawUid) || rawUid;
+    centralDb.users[canonUid] = syncUserStatsConsistency({
+      uid: canonUid,
+      userId: canonUid,
+      fullName: params.fullName || 'Eko-Qahramon',
+      email: tgId ? `${tgId}@telegram.ecohero.uz` : `${canonUid}@ecohero.uz`,
+      ...(tgId ? { telegramId: Number(tgId) || tgId, telegramChatId: tgId, chatId: tgId, telegramAuth: true } : {}),
+      ...(params.username ? { telegramUsername: params.username } : {}),
+      ...(params.phoneNumber ? { phoneNumber: params.phoneNumber } : {}),
+      schoolId: params.schoolId || 'school_new',
+      schoolName: params.schoolName || 'Maktab kiritilmagan',
+      schoolNumber: params.schoolNumber || '',
+      region: params.region || 'Toshkent shahri',
+      district: params.district || '',
+      role: params.role || 'student',
+      approvedRoles: [params.role || 'student'],
+      ecoCoins: 0,
+      ecoXP: 0,
+      level: 1,
+      isOnboarded: Boolean(params.schoolName && params.schoolName !== 'Maktab kiritilmagan'),
+      recoveredFromChildRecords: true,
+      registrationDate: params.createdAt || new Date().toISOString(),
+    });
+    changed = true;
+  };
+
+  for (const r of centralDb.reports || []) {
+    if (!r || typeof r !== 'object') continue;
+    ensureRecoveredUserFromChild({
+      uid: r.reporterUid || r.authorUid,
+      telegramId: r.authorTelegramId || r.telegramId,
+      fullName: r.reporterName || r.authorName,
+      schoolId: r.schoolId,
+      schoolName: r.schoolName || r.authorSchool,
+      region: r.region,
+      district: r.district,
+      createdAt: r.createdAt,
+    });
+  }
+  for (const m of centralDb.mediaSubmissions || []) {
+    if (!m || typeof m !== 'object') continue;
+    ensureRecoveredUserFromChild({
+      uid: m.userId,
+      telegramId: m.telegramId,
+      fullName: m.userName,
+      schoolId: m.schoolId,
+      schoolName: m.schoolName,
+      region: m.region,
+      district: m.district,
+      role: m.userRole,
+      createdAt: m.createdAt,
+    });
+  }
+  for (const app of centralDb.registrationApplications || []) {
+    if (!app || typeof app !== 'object') continue;
+    ensureRecoveredUserFromChild({
+      uid: app.userId,
+      telegramId: app.telegramId,
+      fullName: app.fullName,
+      username: app.telegramUsername,
+      phoneNumber: app.contactInfo,
+      schoolId: app.schoolId,
+      schoolName: app.officialSchoolName,
+      schoolNumber: app.schoolNumber,
+      region: app.region,
+      district: app.district,
+      createdAt: app.createdAt,
+    });
+  }
+  for (const rr of centralDb.roleRequests || []) {
+    if (!rr || typeof rr !== 'object') continue;
+    ensureRecoveredUserFromChild({
+      uid: rr.userId,
+      telegramId: rr.telegramId,
+      fullName: rr.fullName,
+      schoolId: rr.schoolId,
+      schoolName: rr.schoolName,
+      region: rr.region,
+      district: rr.district,
+      createdAt: rr.createdAt,
+    });
+  }
+  for (const amb of centralDb.ambassadors || []) {
+    if (!amb || typeof amb !== 'object') continue;
+    ensureRecoveredUserFromChild({
+      uid: amb.uid || amb.id,
+      telegramId: amb.telegramId,
+      fullName: amb.fullName,
+      schoolId: amb.schoolId,
+      schoolName: amb.schoolName,
+      region: amb.region,
+      district: amb.district,
+      role: 'ambassador',
+      createdAt: amb.joinedAt || amb.createdAt,
+    });
+  }
+  for (const ord of centralDb.shopOrders || []) {
+    if (!ord || typeof ord !== 'object') continue;
+    ensureRecoveredUserFromChild({
+      uid: ord.userId,
+      fullName: ord.userName,
+      schoolId: ord.schoolId,
+      schoolName: ord.schoolName,
+      createdAt: ord.createdAt,
+    });
+  }
+  for (const tok of Object.values(centralDb.telegramLoginTokens || {}) as any[]) {
+    if (tok?.telegramId && ensureBotStarterRecord(tok.telegramId, undefined, undefined, tok.createdAt)) {
+      changed = true;
+    }
+  }
+  for (const scan of centralDb.qrEcoScans || []) {
+    if (!scan || typeof scan !== 'object') continue;
+    ensureRecoveredUserFromChild({
+      uid: scan.studentUid,
+      fullName: scan.studentName,
+      schoolId: scan.schoolId,
+      schoolName: scan.schoolName,
+      createdAt: scan.createdAt,
+    });
+  }
+  for (const ref of centralDb.referrals || []) {
+    if (!ref || typeof ref !== 'object') continue;
+    if (ensureBotStarterRecord(ref.referrerUid, undefined, undefined, ref.createdAt)) changed = true;
+    if (ensureBotStarterRecord(ref.referredUid, undefined, ref.referredName, ref.createdAt)) changed = true;
+  }
+  for (const log of centralDb.auditLogs || []) {
+    if (!log || typeof log !== 'object') continue;
+    if (ensureBotStarterRecord(log.actorUid, undefined, log.actorName, log.timestamp)) changed = true;
+  }
+
+  return changed;
+}
+
+export function reconcileSchoolsAndStudents(persistIfChanged = false): boolean {
+  let changed = reconcileAllUsersAndBotStarters();
   if (!Array.isArray(centralDb.schools)) {
     centralDb.schools = [];
     changed = true;
@@ -1680,7 +1961,6 @@ export function reconcileSchoolsAndStudents(persistIfChanged = false): boolean {
       }
       if (!existing.adminEmail && school.adminEmail) existing.adminEmail = school.adminEmail;
       if (String(school.name || '').length > String(existing.name || '').length && /maktab|litsey|kollej/i.test(String(school.name))) {
-        // prefer informative name
         if (!/maktab|litsey|kollej/i.test(String(existing.name))) {
           existing.name = school.name;
         }
@@ -1738,6 +2018,59 @@ export function reconcileSchoolsAndStudents(persistIfChanged = false): boolean {
     }
   }
 
+  // 2b. Recover missing schools referenced by child records (reports, media, applications, ambassadors)
+  const schoolCandidates = [
+    ...(centralDb.reports || []).map((r: any) => ({
+      schoolId: r?.schoolId,
+      schoolName: r?.schoolName || r?.authorSchool,
+      region: r?.region,
+      district: r?.district,
+    })),
+    ...(centralDb.mediaSubmissions || []).map((m: any) => ({
+      schoolId: m?.schoolId,
+      schoolName: m?.schoolName,
+      region: m?.region,
+      district: m?.district,
+    })),
+    ...(centralDb.registrationApplications || []).map((a: any) => ({
+      schoolId: a?.schoolId,
+      schoolName: a?.officialSchoolName,
+      schoolNumber: a?.schoolNumber,
+      region: a?.region,
+      district: a?.district,
+    })),
+    ...(centralDb.ambassadors || []).map((amb: any) => ({
+      schoolId: amb?.schoolId,
+      schoolName: amb?.schoolName,
+      region: amb?.region,
+      district: amb?.district,
+      ambassadorName: amb?.fullName,
+    })),
+  ];
+  for (const cand of schoolCandidates) {
+    const sName = String(cand.schoolName || '').trim();
+    const ident = extractSchoolIdentity(sName, (cand as any).schoolNumber);
+    if (ident.isPlaceholder || normalizeUzText(sName).includes('markaziy boshqarma')) continue;
+    const sid = String(cand.schoolId || '').trim();
+    if (!sid || !schoolById.has(sid)) {
+      const linked = findOrCreateSchoolInternal(
+        {
+          schoolId: sid && sid !== 'school_new' && sid !== 'school_custom' ? sid : undefined,
+          schoolName: sName,
+          schoolNumber: (cand as any).schoolNumber,
+          region: cand.region || 'Toshkent shahri',
+          district: cand.district || 'Shayxontohur tumani',
+          ambassadorName: (cand as any).ambassadorName,
+        },
+        false
+      );
+      if (linked) {
+        schoolById.set(String(linked.id), linked);
+        changed = true;
+      }
+    }
+  }
+
   // 3. Re-point duplicate schoolIds in child records
   if (idRedirectMap.size > 0) {
     const collections = [
@@ -1778,6 +2111,218 @@ export function reconcileSchoolsAndStudents(persistIfChanged = false): boolean {
     saveCentralDb();
   }
   return changed;
+}
+
+export interface DetectedBotUserEntry {
+  key: string;
+  uid: string;
+  telegramId: string;
+  username: string;
+  fullName: string;
+  phoneNumber: string;
+  role: string;
+  schoolId: string;
+  schoolName: string;
+  region: string;
+  district: string;
+  ecoCoins: number;
+  isOnboarded: boolean;
+  hasTelegramBot: boolean;
+  sources: string[];
+  startedAt: string;
+  lastSeenAt: string;
+}
+
+export function getDetectedBotUsersReport() {
+  reconcileSchoolsAndStudents(false);
+  const metrics = computeLiveMetrics();
+
+  const byKey = new Map<string, DetectedBotUserEntry>();
+  const touchEntry = (
+    key: string,
+    patch: Partial<DetectedBotUserEntry>,
+    sourceLabel: string
+  ) => {
+    const cur = byKey.get(key) || {
+      key,
+      uid: patch.uid || '',
+      telegramId: patch.telegramId || '',
+      username: patch.username || '',
+      fullName: patch.fullName || 'Noma\'lum foydalanuvchi',
+      phoneNumber: patch.phoneNumber || '',
+      role: patch.role || 'student',
+      schoolId: patch.schoolId || '',
+      schoolName: patch.schoolName || '',
+      region: patch.region || '',
+      district: patch.district || '',
+      ecoCoins: Number(patch.ecoCoins || 0),
+      isOnboarded: Boolean(patch.isOnboarded),
+      hasTelegramBot: Boolean(patch.hasTelegramBot || patch.telegramId),
+      sources: [],
+      startedAt: patch.startedAt || '',
+      lastSeenAt: patch.lastSeenAt || '',
+    };
+
+    if (patch.uid && !cur.uid) cur.uid = patch.uid;
+    if (patch.telegramId && !cur.telegramId) cur.telegramId = patch.telegramId;
+    if (patch.username && !cur.username) cur.username = patch.username;
+    if (
+      patch.fullName &&
+      (!cur.fullName || cur.fullName === 'Noma\'lum foydalanuvchi' || cur.fullName === 'Eko-Qahramon')
+    ) {
+      cur.fullName = patch.fullName;
+    }
+    if (patch.phoneNumber && !cur.phoneNumber) cur.phoneNumber = patch.phoneNumber;
+    if (patch.role && cur.role === 'student') cur.role = patch.role;
+    if (patch.schoolId && (!cur.schoolId || cur.schoolId === 'school_new')) cur.schoolId = patch.schoolId;
+    if (
+      patch.schoolName &&
+      (!cur.schoolName || cur.schoolName === 'Maktab kiritilmagan')
+    ) {
+      cur.schoolName = patch.schoolName;
+    }
+    if (patch.region && !cur.region) cur.region = patch.region;
+    if (patch.district && !cur.district) cur.district = patch.district;
+    if (typeof patch.ecoCoins === 'number') {
+      cur.ecoCoins = Math.max(cur.ecoCoins, patch.ecoCoins);
+    }
+    if (patch.isOnboarded) cur.isOnboarded = true;
+    if (patch.hasTelegramBot || patch.telegramId) cur.hasTelegramBot = true;
+    if (patch.startedAt && (!cur.startedAt || patch.startedAt < cur.startedAt)) {
+      cur.startedAt = patch.startedAt;
+    }
+    if (patch.lastSeenAt && (!cur.lastSeenAt || patch.lastSeenAt > cur.lastSeenAt)) {
+      cur.lastSeenAt = patch.lastSeenAt;
+    }
+    if (!cur.sources.includes(sourceLabel)) {
+      cur.sources.push(sourceLabel);
+    }
+    byKey.set(key, cur);
+  };
+
+  for (const [chatId, st] of Object.entries(centralDb.botStarters || {}) as [string, any][]) {
+    if (!chatId) continue;
+    touchEntry(
+      `tg:${chatId}`,
+      {
+        telegramId: String(chatId),
+        username: st?.username || '',
+        fullName: st?.firstName || st?.username || `TG #${chatId}`,
+        hasTelegramBot: true,
+        startedAt: st?.startedAt || '',
+        lastSeenAt: st?.lastSeenAt || st?.startedAt || '',
+      },
+      'botStarters'
+    );
+  }
+
+  for (const u of Object.values(centralDb.users || {}) as any[]) {
+    if (!u || typeof u !== 'object') continue;
+    const tgId =
+      extractNumericTelegramId(u.telegramId) ||
+      extractNumericTelegramId(u.telegramChatId) ||
+      extractNumericTelegramId(u.chatId) ||
+      extractNumericTelegramId(u.uid);
+    const key = tgId ? `tg:${tgId}` : `uid:${u.uid}`;
+    touchEntry(
+      key,
+      {
+        uid: String(u.uid || ''),
+        telegramId: tgId,
+        username: u.telegramUsername || '',
+        fullName: u.fullName || '',
+        phoneNumber: u.phoneNumber || '',
+        role: u.role || 'student',
+        schoolId: u.schoolId || '',
+        schoolName: u.schoolName || '',
+        region: u.region || '',
+        district: u.district || '',
+        ecoCoins: Number(u.ecoCoins || 0),
+        isOnboarded: Boolean(u.isOnboarded),
+        hasTelegramBot: Boolean(tgId || u.telegramAuth || u.telegramUsername),
+        startedAt: u.registrationDate || u.createdAt || '',
+        lastSeenAt: u.lastUpdated || u.registrationDate || '',
+      },
+      'users'
+    );
+  }
+
+  for (const [chatKey, sess] of Object.entries(centralDb.registrationSessions || {}) as [string, any][]) {
+    const tgId = extractNumericTelegramId(chatKey);
+    if (!tgId) continue;
+    touchEntry(
+      `tg:${tgId}`,
+      {
+        telegramId: tgId,
+        fullName: sess?.fullName || '',
+        phoneNumber: sess?.phoneNumber || '',
+        schoolName: sess?.schoolName || '',
+        region: sess?.region || '',
+        district: sess?.district || '',
+        hasTelegramBot: true,
+        lastSeenAt: sess?.updatedAt ? new Date(Number(sess.updatedAt)).toISOString() : '',
+      },
+      'sessions'
+    );
+  }
+
+  const recordChildPresence = (uidRaw: unknown, tgRaw: unknown, nameRaw: unknown, schoolNameRaw: unknown, tsRaw: unknown, src: string) => {
+    const tgId = extractNumericTelegramId(tgRaw) || extractNumericTelegramId(uidRaw);
+    const uidStr = String(uidRaw || '').trim();
+    if (!tgId && !uidStr) return;
+    const key = tgId ? `tg:${tgId}` : `uid:${uidStr}`;
+    touchEntry(
+      key,
+      {
+        uid: uidStr,
+        telegramId: tgId,
+        fullName: nameRaw ? String(nameRaw) : '',
+        schoolName: schoolNameRaw ? String(schoolNameRaw) : '',
+        hasTelegramBot: Boolean(tgId),
+        lastSeenAt: tsRaw ? String(tsRaw) : '',
+      },
+      src
+    );
+  };
+
+  for (const r of centralDb.reports || []) {
+    recordChildPresence(r?.reporterUid, r?.authorTelegramId, r?.reporterName, r?.schoolName, r?.createdAt, 'reports');
+  }
+  for (const m of centralDb.mediaSubmissions || []) {
+    recordChildPresence(m?.userId, m?.telegramId, m?.userName, m?.schoolName, m?.createdAt, 'media');
+  }
+  for (const a of centralDb.registrationApplications || []) {
+    recordChildPresence(a?.userId, a?.telegramId, a?.fullName, a?.officialSchoolName, a?.createdAt, 'applications');
+  }
+  for (const o of centralDb.shopOrders || []) {
+    recordChildPresence(o?.userId, undefined, o?.userName, o?.schoolName, o?.createdAt, 'shopOrders');
+  }
+
+  const users = Array.from(byKey.values()).sort((a, b) => {
+    const tA = Date.parse(a.lastSeenAt || a.startedAt || '') || 0;
+    const tB = Date.parse(b.lastSeenAt || b.startedAt || '') || 0;
+    return tB - tA;
+  });
+
+  const persistentVolumeActive = Boolean(
+    String(process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || '').trim()
+  );
+
+  return {
+    users,
+    summary: {
+      botUsersCount: metrics.botUsersCount,
+      totalDetectedUsers: users.length,
+      registeredUsersCount: metrics.totalUsers,
+      onboardedUsersCount: users.filter((u) => u.isOnboarded).length,
+      botOnlyVisitorsCount: users.filter((u) => u.hasTelegramBot && !u.isOnboarded).length,
+      totalSchools: metrics.totalSchools,
+      persistentVolumeActive,
+      dataDir: DATA_ROOT_DIR,
+      snapshotsCount: listRecentSnapshotFiles().length,
+      lastUpdatedAt: centralDb.meta?.updatedAt || new Date().toISOString(),
+    },
+  };
 }
 
 export function getLiveSchoolsList(includeAdminEmail = false): any[] {
@@ -2070,15 +2615,43 @@ export function exportCompactBackupSnapshot() {
   };
 }
 
-export function mergeDatabaseSnapshotNonDestructive(snapshot: any): {
+export function mergeDatabaseSnapshotNonDestructive(rawSnapshot: any): {
   restoredUsers: number;
   restoredSchools: number;
   restoredStarters: number;
   changed: boolean;
 } {
-  if (!snapshot || typeof snapshot !== 'object') {
+  if (!rawSnapshot || typeof rawSnapshot !== 'object') {
     return { restoredUsers: 0, restoredSchools: 0, restoredStarters: 0, changed: false };
   }
+
+  // Support both compact UltraSnapshot format (usersMap/schoolsList/botStartersMap) and raw UnifiedDatabase JSON (users/schools/botStarters)
+  const snapshot = {
+    botStartersMap: rawSnapshot.botStartersMap || rawSnapshot.botStarters,
+    schoolsList: rawSnapshot.schoolsList || rawSnapshot.schools,
+    usersMap: rawSnapshot.usersMap || rawSnapshot.users,
+    reportsList: rawSnapshot.reportsList || rawSnapshot.reports,
+    mediaList: rawSnapshot.mediaList || rawSnapshot.mediaSubmissions,
+    transactionsList: rawSnapshot.transactionsList || rawSnapshot.transactions,
+    extraCollections: rawSnapshot.extraCollections || {
+      ambassadors: rawSnapshot.ambassadors,
+      ecoTasks: rawSnapshot.ecoTasks,
+      shopOrders: rawSnapshot.shopOrders,
+      roleRequests: rawSnapshot.roleRequests,
+      registrationApplications: rawSnapshot.registrationApplications,
+      referrals: rawSnapshot.referrals,
+      certificates: rawSnapshot.certificates,
+      schoolDuels: rawSnapshot.schoolDuels,
+      qrEcoScans: rawSnapshot.qrEcoScans,
+      missionSubmissions: rawSnapshot.missionSubmissions,
+      monthlyAwards: rawSnapshot.monthlyAwards,
+      studentMonthlyAwards: rawSnapshot.studentMonthlyAwards,
+      adRewardClaims: rawSnapshot.adRewardClaims,
+      uidAliases: rawSnapshot.uidAliases,
+      dailyQuizClaims: rawSnapshot.dailyQuizClaims,
+      missionCompletions: rawSnapshot.missionCompletions,
+    },
+  };
 
   let changed = false;
   let restoredUsers = 0;

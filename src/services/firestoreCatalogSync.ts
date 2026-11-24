@@ -12,7 +12,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
-import { EcoAd, EcoMission, HomePost, LiveMetrics, RewardSettings, ShopItem } from '../types/eco';
+import { EcoAd, EcoMission, HomePost, LiveMetrics, RewardSettings, School, ShopItem } from '../types/eco';
 
 type CatalogCollectionName = 'eco_missions' | 'shopItems' | 'eco_ads' | 'home_posts';
 
@@ -468,6 +468,71 @@ export async function loadUltraBackupFromFirestore(): Promise<Record<string, any
     handleFirestoreError(err, OperationType.GET, 'ultra_backups/primary_v1');
     return null;
   }
+}
+
+export async function syncSchoolsToFirestore(schools: School[]): Promise<number> {
+  if (!db || !auth?.currentUser || !Array.isArray(schools) || schools.length === 0) return 0;
+  let synced = 0;
+
+  for (const s of schools.slice(0, 200)) {
+    const id = String(s?.id || '').trim();
+    if (!id || id === 'school_new' || id === 'school_custom' || id === 'central_hq' || !isValidFirestoreDocId(id)) {
+      continue;
+    }
+    const name = String(s?.name || '').trim().slice(0, 200);
+    const region = String(s?.region || 'Toshkent shahri').trim().slice(0, 100);
+    const district = String(s?.district || 'Markaziy tumani').trim().slice(0, 100);
+    const numStr = String(s?.number || '1').trim().slice(0, 40) || '1';
+    if (name.length < 2 || region.length < 2 || district.length < 2) continue;
+
+    const rawLat = Number(s?.lat);
+    const rawLng = Number(s?.lng);
+    const lat = Number.isFinite(rawLat) && rawLat >= 36 && rawLat <= 47 ? rawLat : 41.2995;
+    const lng = Number.isFinite(rawLng) && rawLng >= 54 && rawLng <= 75 ? rawLng : 69.2401;
+
+    try {
+      const ref = doc(db, 'schools', id);
+      const snap = await getDoc(ref);
+      const createdAtValue = snap.exists() && snap.data()?.createdAt ? snap.data().createdAt : serverTimestamp();
+
+      const payload: Record<string, any> = {
+        id,
+        name,
+        number: numStr,
+        region,
+        district,
+        address: String(s?.address || `${district}, ${region}`).slice(0, 300),
+        lat,
+        lng,
+        totalCoins: Math.max(0, Math.round(Number(s?.totalCoins || 0))),
+        registeredStudentsCount: Math.max(
+          0,
+          Math.round(Number(s?.registeredStudentsCount ?? s?.studentsCount ?? 0))
+        ),
+        treesPlanted: Math.max(0, Math.round(Number(s?.treesPlanted || 0))),
+        cleanupsCompleted: Math.max(0, Math.round(Number(s?.cleanupsCompleted || 0))),
+        ratingRank: Math.max(1, Math.round(Number(s?.ratingRank || 1))),
+        status: ['active', 'pending', 'verified'].includes(String(s?.status || ''))
+          ? s.status
+          : 'active',
+        createdAt: createdAtValue,
+        updatedAt: serverTimestamp(),
+      };
+
+      if (s?.logoUrl && typeof s.logoUrl === 'string' && s.logoUrl.length <= 1024 && !s.logoUrl.startsWith('data:')) {
+        payload.logoUrl = s.logoUrl;
+      }
+      if (s?.ambassadorName && typeof s.ambassadorName === 'string') {
+        payload.ambassadorName = s.ambassadorName.slice(0, 120);
+      }
+
+      await setDoc(ref, payload);
+      synced += 1;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `schools/${id}`);
+    }
+  }
+  return synced;
 }
 
 

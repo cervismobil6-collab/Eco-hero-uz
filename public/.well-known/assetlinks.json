@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "uz.ecohero.app",
+    "sha256_cert_fingerprints": ["AD:34:51:69:59:CC:93:1F:C1:F5:EF:2D:F3:F1:C3:53:F8:B8:0F:18:0E:D8:0A:6C:3C:8E:29:10:93:21:B8:15"]
+  }
+}]

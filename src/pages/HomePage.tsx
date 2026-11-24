@@ -384,10 +384,10 @@ export const HomePage: React.FC = () => {
           <div className="min-w-0 flex-1 overflow-hidden whitespace-nowrap text-slate-300 text-[11px] sm:text-xs font-medium">
             <div className="animate-marquee">
               <span>
-                Jonli baza: <span className="font-bold text-emerald-400 font-mono tabular-nums">{liveMetrics.treesPlanted.toLocaleString()} tup daraxt</span> · <span className="font-bold text-amber-400 font-mono tabular-nums">{liveMetrics.resolvedReports.toLocaleString()} hal etilgan muammo</span> · <span className="text-white font-bold">{topSchoolName}</span> yetakchi · <span className="text-teal-300 font-bold font-mono tabular-nums">{liveMetrics.totalUsers.toLocaleString()}</span> ro&apos;yxatdan o&apos;tgan foydalanuvchi
+                Jonli baza: <span className="font-bold text-emerald-400 font-mono tabular-nums">{liveMetrics.treesPlanted.toLocaleString()} tup daraxt</span> · <span className="font-bold text-amber-400 font-mono tabular-nums">{liveMetrics.resolvedReports.toLocaleString()} hal etilgan muammo</span> · <span className="text-white font-bold">{topSchoolName}</span> yetakchi · <span className="text-teal-300 font-bold font-mono tabular-nums">{liveMetrics.totalUsers.toLocaleString()}</span> o&apos;quvchi · <span className="text-sky-300 font-bold font-mono tabular-nums">{liveMetrics.botUsersCount.toLocaleString()}</span> bot foydalanuvchisi
               </span>
               <span aria-hidden="true">
-                Jonli baza: <span className="font-bold text-emerald-400 font-mono tabular-nums">{liveMetrics.treesPlanted.toLocaleString()} tup daraxt</span> · <span className="font-bold text-amber-400 font-mono tabular-nums">{liveMetrics.resolvedReports.toLocaleString()} hal etilgan muammo</span> · <span className="text-white font-bold">{topSchoolName}</span> yetakchi · <span className="text-teal-300 font-bold font-mono tabular-nums">{liveMetrics.totalUsers.toLocaleString()}</span> ro&apos;yxatdan o&apos;tgan foydalanuvchi
+                Jonli baza: <span className="font-bold text-emerald-400 font-mono tabular-nums">{liveMetrics.treesPlanted.toLocaleString()} tup daraxt</span> · <span className="font-bold text-amber-400 font-mono tabular-nums">{liveMetrics.resolvedReports.toLocaleString()} hal etilgan muammo</span> · <span className="text-white font-bold">{topSchoolName}</span> yetakchi · <span className="text-teal-300 font-bold font-mono tabular-nums">{liveMetrics.totalUsers.toLocaleString()}</span> o&apos;quvchi · <span className="text-sky-300 font-bold font-mono tabular-nums">{liveMetrics.botUsersCount.toLocaleString()}</span> bot foydalanuvchisi
               </span>
             </div>
           </div>
@@ -1026,10 +1026,10 @@ export const HomePage: React.FC = () => {
       <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
         <motion.div variants={itemVariants} className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-5">
           {[
-            { label: "Ro'yxatdan o'tgan Maktablar", val: liveMetrics.totalSchools.toLocaleString(), icon: School, color: 'text-indigo-500 dark:text-indigo-400' },
-            { label: "Ro'yxatdagi O'quvchilar", val: liveMetrics.totalUsers.toLocaleString(), icon: Users, color: 'text-emerald-600 dark:text-emerald-400' },
-            { label: 'Hal Qilingan Muammolar', val: liveMetrics.resolvedReports.toLocaleString(), icon: Target, color: 'text-teal-600 dark:text-teal-400' },
-            { label: 'Ekilgan Daraxtlar', val: liveMetrics.treesPlanted.toLocaleString(), icon: TreePine, color: 'text-amber-500 dark:text-amber-400' },
+            { label: "Ro'yxatdan o'tgan Maktablar", val: liveMetrics.totalSchools.toLocaleString(), sub: undefined, icon: School, color: 'text-indigo-500 dark:text-indigo-400' },
+            { label: "Ro'yxatdagi O'quvchilar", val: liveMetrics.totalUsers.toLocaleString(), sub: `Botdan: ${liveMetrics.botUsersCount.toLocaleString()} ta`, icon: Users, color: 'text-emerald-600 dark:text-emerald-400' },
+            { label: 'Hal Qilingan Muammolar', val: liveMetrics.resolvedReports.toLocaleString(), sub: undefined, icon: Target, color: 'text-teal-600 dark:text-teal-400' },
+            { label: 'Ekilgan Daraxtlar', val: liveMetrics.treesPlanted.toLocaleString(), sub: undefined, icon: TreePine, color: 'text-amber-500 dark:text-amber-400' },
           ].map((m) => (
             <div key={m.label} className="group p-5 sm:p-6 eco-surface rounded-3xl shadow-sm hover:border-emerald-500/45 transition-all text-center space-y-1">
               <div className={`w-10 h-10 rounded-2xl bg-slate-100 dark:bg-[#040D0A] border border-slate-200/80 dark:border-emerald-500/20 ${m.color} flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform`}>
@@ -1037,6 +1037,11 @@ export const HomePage: React.FC = () => {
               </div>
               <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white font-mono tracking-tight tabular-nums">{m.val}</div>
               <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">{m.label}</div>
+              {m.sub && (
+                <div className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 tabular-nums pt-0.5">
+                  {m.sub}
+                </div>
+              )}
             </div>
           ))}
         </motion.div>

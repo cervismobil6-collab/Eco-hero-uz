@@ -89,6 +89,7 @@ import {
   subscribeLiveMetricsFromFirestore,
   saveUltraBackupToFirestore,
   loadUltraBackupFromFirestore,
+  syncSchoolsToFirestore,
 } from '../services/firestoreCatalogSync';
 
 // One-time cleanup of legacy cached demo records in browser storage
@@ -618,6 +619,7 @@ interface EcoContextType {
     region?: string;
     district?: string;
   }) => Promise<ChampionshipLiveResponse | null>;
+  refreshBootstrap: () => Promise<void>;
 }
 
 const EcoContext = createContext<EcoContextType | undefined>(undefined);
@@ -936,6 +938,7 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const lastSyncedMetricsKeyRef = useRef<string>('');
   const cloudVaultCheckedUidRef = useRef<string | null>(null);
   const lastCloudVaultSigRef = useRef<string>('');
+  const lastSyncedSchoolsSigRef = useRef<string>('');
   const [firebaseAuthUid, setFirebaseAuthUid] = useState<string | null>(null);
 
   const saveSessionToken = useCallback((token: string | null) => {
@@ -1657,7 +1660,19 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           syncLiveMetricsToFirestore(liveMetrics).catch(() => {});
         }
 
-        // 3. Export compact server snapshot and back it up to ultra_backups/primary_v1
+        // 3. Sync canonical schools list to public Firestore collection
+        if (schools.length > 0) {
+          const schoolsSig = schools
+            .slice(0, 200)
+            .map((s) => `${s.id}:${s.totalCoins || 0}:${s.registeredStudentsCount ?? s.studentsCount ?? 0}`)
+            .join('|');
+          if (schoolsSig !== lastSyncedSchoolsSigRef.current) {
+            lastSyncedSchoolsSigRef.current = schoolsSig;
+            syncSchoolsToFirestore(schools).catch(() => {});
+          }
+        }
+
+        // 4. Export compact server snapshot and back it up to ultra_backups/primary_v1
         const vaultSig = `${liveMetrics.totalUsers}:${liveMetrics.totalSchools}:${liveMetrics.botUsersCount}:${liveMetrics.totalReports}:${liveMetrics.treesPlanted}`;
         if (vaultSig !== lastCloudVaultSigRef.current && (liveMetrics.totalUsers > 0 || liveMetrics.totalSchools > 0 || liveMetrics.botUsersCount > 0)) {
           const exportRes = await apiFetch('/api/admin/cloud-backup/export');
@@ -1678,7 +1693,7 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       cancelled = true;
       window.clearTimeout(syncTimer);
     };
-  }, [firebaseAuthUid, isServerConnected, user.role, user.approvedRoles, liveMetrics, apiFetch, syncBootstrap]);
+  }, [firebaseAuthUid, isServerConnected, user.role, user.approvedRoles, liveMetrics, schools, apiFetch, syncBootstrap]);
 
   // Telegram WebApp detection & auto-authentication
   useEffect(() => {
@@ -4622,6 +4637,7 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         joinWeeklyChallenge,
         claimWeeklyChallenge,
         fetchChampionshipLive,
+        refreshBootstrap: () => syncBootstrap(),
       }}
     >
       {children}

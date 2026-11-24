@@ -47,6 +47,7 @@ import {
   reconcileSchoolsAndStudents,
   mergeDatabaseSnapshotNonDestructive,
   exportCompactBackupSnapshot,
+  getDetectedBotUsersReport,
 } from './server-db';
 import {
   fetchAllCatalogFromFirestoreRest,
@@ -253,6 +254,27 @@ app.use(
   '/cesium',
   express.static(path.resolve(__dirname, 'node_modules/cesium/Build/Cesium'), {
     maxAge: '7d',
+  })
+);
+app.get('/.well-known/assetlinks.json', (_req, res) => {
+  const assetLinksPath = path.join(process.cwd(), 'public', '.well-known', 'assetlinks.json');
+  const distAssetLinksPath = path.resolve(__dirname, 'dist', '.well-known', 'assetlinks.json');
+  const targetPath = fs.existsSync(assetLinksPath)
+    ? assetLinksPath
+    : fs.existsSync(distAssetLinksPath)
+    ? distAssetLinksPath
+    : null;
+  if (!targetPath) {
+    return res.status(404).type('application/json').send('[]');
+  }
+  res.setHeader('Cache-Control', 'public, max-age=300');
+  return res.status(200).type('application/json').send(fs.readFileSync(targetPath, 'utf-8'));
+});
+app.use(
+  '/.well-known',
+  express.static(path.join(process.cwd(), 'public', '.well-known'), {
+    dotfiles: 'allow',
+    index: false,
   })
 );
 
@@ -514,6 +536,20 @@ app.get('/api/metrics/live', (_req, res) => {
       success: true,
       liveMetrics: computeLiveMetrics(),
       serverNow: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/bot-users', requireRoles('super_admin'), (_req: AuthenticatedRequest, res) => {
+  try {
+    reconcileSchoolsAndStudents(true);
+    const report = getDetectedBotUsersReport();
+    res.json({
+      success: true,
+      ...report,
+      liveMetrics: computeLiveMetrics(),
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -835,9 +871,14 @@ async function hydrateCatalogFromFirestoreOnBoot(): Promise<void> {
   }
 }
 
-function recordBotStarter(chatId: string | number, username?: string, firstName?: string) {
+function recordBotStarter(
+  chatId: string | number,
+  username?: string,
+  firstName?: string,
+  deferSave = false
+) {
   const key = String(chatId || '').trim();
-  if (!key) return;
+  if (!key) return { isNew: false };
   if (!centralDb.botStarters || typeof centralDb.botStarters !== 'object') {
     centralDb.botStarters = {};
   }
@@ -850,10 +891,13 @@ function recordBotStarter(chatId: string | number, username?: string, firstName?
     startedAt: centralDb.botStarters[key]?.startedAt || nowIso,
     lastSeenAt: nowIso,
   };
-  saveCentralDb();
-  if (isNew) {
-    broadcastRealtimeEvent('db:updated', { scope: 'metrics' });
+  if (!deferSave) {
+    saveCentralDb();
+    if (isNew) {
+      broadcastRealtimeEvent('db:updated', { scope: 'metrics' });
+    }
   }
+  return { isNew };
 }
 
 function ensureCurrentWeeklyChallenge() {
@@ -11907,6 +11951,10 @@ app.post('/api/telegram/auth-webapp', (req, res) => {
     }
 
     const chatId = String(tgUser.id);
+    const tgUsernameTag = tgUser.username ? `@${tgUser.username}` : undefined;
+    const tgDisplayName = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ').trim() || undefined;
+    recordBotStarter(chatId, tgUsernameTag, tgDisplayName, true);
+
     const isVerifiedSuper =
       !isDevBypass &&
       checkIsSuperAdmin({
@@ -11962,7 +12010,7 @@ app.post('/api/telegram/auth-webapp', (req, res) => {
       });
     }
 
-    const autoName = `${tgUser.first_name || ''} ${tgUser.last_name || ''}`.trim() || tgUser.username || 'Eko-Qahramon';
+    const autoName = tgDisplayName || tgUser.username || 'Eko-Qahramon';
     const createdUser = upsertUser({
       uid: `user_tg_${tgUser.id}`,
       fullName: autoName,
@@ -12693,9 +12741,21 @@ async function handleTelegramUpdateSerialized(update: any) {
       return;
     }
 
-    // Handle Messages
-    if (!update.message) return;
-    const msg = update.message;
+    // Handle my_chat_member (bot started / blocked / unblocked)
+    if (update.my_chat_member) {
+      const mcm = update.my_chat_member;
+      const mChatId = mcm.chat?.id || mcm.from?.id;
+      if (mChatId) {
+        const mUsername = mcm.from?.username ? `@${mcm.from.username}` : undefined;
+        const mFirstName = [mcm.from?.first_name, mcm.from?.last_name].filter(Boolean).join(' ') || undefined;
+        recordBotStarter(String(mChatId), mUsername, mFirstName);
+      }
+      return;
+    }
+
+    // Handle Messages & Edited Messages
+    const msg = update.message || update.edited_message;
+    if (!msg) return;
     const chatId = msg.chat?.id;
     if (!chatId) return;
 
@@ -12707,14 +12767,63 @@ async function handleTelegramUpdateSerialized(update: any) {
     let session = getRegistrationSession(chatKey);
     const regUser = findUserByAnyIdentifier({ telegramId: chatKey, chatId: chatKey });
     const isRegistered = Boolean(regUser && regUser.isOnboarded);
+    const isBotSuperAdmin =
+      checkIsSuperAdmin({ telegramId: chatId, verifiedTelegram: true }) ||
+      Boolean(regUser && checkIsSuperAdmin(regUser));
+
+    // Super Admin JSON Backup Restore via Telegram Document upload
+    if (
+      msg.document &&
+      isBotSuperAdmin &&
+      (msg.document.mime_type === 'application/json' ||
+        String(msg.document.file_name || '').toLowerCase().endsWith('.json'))
+    ) {
+      try {
+        if (!activeBotToken) return;
+        const gfRes = await fetch(
+          `https://api.telegram.org/bot${activeBotToken}/getFile?file_id=${encodeURIComponent(msg.document.file_id)}`
+        );
+        const gfData: any = await gfRes.json().catch(() => null);
+        const filePath = gfData?.result?.file_path;
+        if (!filePath) {
+          await sendTelegramMessage(chatId, "❌ Zaxira faylini Telegramdan yuklab bo'lmadi.");
+          return;
+        }
+        const dlRes = await fetch(`https://api.telegram.org/file/bot${activeBotToken}/${filePath}`);
+        const rawJsonText = await dlRes.text();
+        const parsedBackup = JSON.parse(rawJsonText);
+        const mergedRes = mergeDatabaseSnapshotNonDestructive(parsedBackup);
+        reconcileSchoolsAndStudents(true);
+        const liveNow = computeLiveMetrics();
+        if (mergedRes.changed) {
+          broadcastRealtimeEvent('db:updated', { scope: 'cloud_restore' });
+        }
+        await sendTelegramMessage(
+          chatId,
+          `✅ <b>ZAXIRA BAZADAN TIKLANDI!</b>\n\n` +
+            `👥 Tiklangan foydalanuvchilar: +${mergedRes.restoredUsers}\n` +
+            `🏫 Tiklangan maktablar: +${mergedRes.restoredSchools}\n` +
+            `🤖 Tiklangan bot obunachilari: +${mergedRes.restoredStarters}\n\n` +
+            `📊 <b>Joriy jonli holat:</b>\n` +
+            `• Maktablar: ${liveNow.totalSchools}\n` +
+            `• O'quvchilar: ${liveNow.totalUsers}\n` +
+            `• Bot foydalanuvchilari: ${liveNow.botUsersCount}`,
+          {
+            reply_markup: {
+              inline_keyboard: [[{ text: '🌍 Ilovada tekshirish', web_app: { url: APP_URL } }]],
+            },
+          }
+        );
+      } catch (err: any) {
+        await sendTelegramMessage(chatId, `⚠️ JSON zaxira faylini o'qishda xatolik: ${err?.message || 'Noto‘g‘ri JSON'}`);
+      }
+      return;
+    }
 
     // Admin Token Switch Command (in-memory only; use TELEGRAM_BOT_TOKEN env for persistence)
     if (text.startsWith('/token ') || text.startsWith('/settoken ')) {
       const newToken = text.split(/\s+/)[1]?.trim();
-      const isTokenAdmin =
-        checkIsSuperAdmin({ telegramId: chatId, verifiedTelegram: true }) ||
-        Boolean(regUser && checkIsSuperAdmin(regUser));
-      if (!isTokenAdmin) {
+      if (!isBotSuperAdmin) {
         await sendTelegramMessage(chatId, '⛔️ Ushbu buyruq faqat Super Admin uchun.');
         return;
       }
@@ -13235,6 +13344,74 @@ async function handleTelegramUpdateSerialized(update: any) {
       return;
     }
 
+    if (text === '/botusers' || text === '/foydalanuvchilar' || text.startsWith('/botusers@')) {
+      if (!isBotSuperAdmin) {
+        await sendTelegramMessage(chatId, '⛔️ Ushbu buyruq faqat Super Admin uchun.');
+        return;
+      }
+      reconcileSchoolsAndStudents(true);
+      const report = getDetectedBotUsersReport();
+      const { users: detectedUsers, summary } = report;
+      const topLines = detectedUsers
+        .slice(0, 20)
+        .map((u, idx) => {
+          const uname = u.username ? ` (${u.username})` : '';
+          const schoolLabel = u.schoolName && u.schoolName !== 'Maktab kiritilmagan' ? ` · ${u.schoolName}` : '';
+          return `${idx + 1}. <b>${u.fullName}</b>${uname}\n    🆔 <code>${u.telegramId || u.uid}</code>${schoolLabel} · ${u.ecoCoins} ECO`;
+        })
+        .join('\n');
+      const diskWarn = !summary.persistentVolumeActive
+        ? `\n\n⚠️ <b>MUHIM OGOHLANTIRISH (Railway Volume yo'q!):</b>\nServerda <code>DATA_DIR</code> / Volume ulanmagan (<code>${summary.dataDir}</code>). Har safar Railway qayta yuklanganda eski lokal JSON o'chib ketadi. Telegram API o'chib ketgan eski tarixni qayta bermaydi.\n💡 Doimiy saqlash uchun Railway'da <code>/data</code> Volume + <code>DATA_DIR=/data</code> ulang va muntazam /backup olib turing (yoki .json zaxirani shu chatga tashlang).`
+        : `\n\n✅ <b>Doimiy Disk (Volume) faol:</b> <code>${summary.dataDir}</code> (${summary.snapshotsCount} snapshot)`;
+      await sendTelegramMessage(
+        chatId,
+        `🤖 <b>BOTDAN JAMI FOYDALANGANLAR HISOBOTI</b>\n\n` +
+          `🤖 <b>Bot / Mini App foydalanuvchilari:</b> ${summary.botUsersCount}\n` +
+          `👥 <b>Bazadagi jami hisoblar:</b> ${summary.registeredUsersCount} (To'liq: ${summary.onboardedUsersCount})\n` +
+          `🏫 <b>Yagona maktablar:</b> ${summary.totalSchools}\n\n` +
+          `📋 <b>Oxirgi aniqlanganlar (Top 20):</b>\n${topLines || "Hozircha ma'lumot yo'q."}` +
+          diskWarn +
+          `\n\n💾 /backup — Hozirgi bazani .json fayl qilib yuklab olish (tiklash uchun .json faylni shu chatga yuboring)`,
+        {
+          reply_markup: {
+            inline_keyboard: [[{ text: '🌍 Admin Panelda ko‘rish', web_app: { url: APP_URL } }]],
+          },
+        }
+      );
+      return;
+    }
+
+    if (text === '/backup' || text === '/zaxira' || text.startsWith('/backup@')) {
+      if (!isBotSuperAdmin) {
+        await sendTelegramMessage(chatId, '⛔️ Ushbu buyruq faqat Super Admin uchun.');
+        return;
+      }
+      try {
+        reconcileSchoolsAndStudents(true);
+        const snapshot = exportCompactBackupSnapshot();
+        const jsonStr = JSON.stringify(snapshot, null, 2);
+        const dateTag = new Date().toISOString().slice(0, 10);
+        const form = new FormData();
+        form.append('chat_id', String(chatId));
+        form.append(
+          'caption',
+          `💾 ECO HERO Ultra Zaxira (${dateTag})\n👥 O'quvchilar: ${snapshot.totalUsers} · 🤖 Bot: ${snapshot.botUsersCount} · 🏫 Maktablar: ${snapshot.totalSchools}\n\nTiklash uchun shu .json faylni botga qayta yuboring.`
+        );
+        form.append('document', new Blob([jsonStr], { type: 'application/json' }), `ecohero-backup-${dateTag}.json`);
+        const docRes = await fetch(`https://api.telegram.org/bot${activeBotToken}/sendDocument`, {
+          method: 'POST',
+          body: form,
+        });
+        const docData: any = await docRes.json().catch(() => null);
+        if (!docData?.ok) {
+          await sendTelegramMessage(chatId, `⚠️ Fayl yuborilmadi: ${docData?.description || 'Xatolik'}`);
+        }
+      } catch (err: any) {
+        await sendTelegramMessage(chatId, `⚠️ Zaxira yaratishda xatolik: ${err?.message || 'Noma‘lum xato'}`);
+      }
+      return;
+    }
+
     if (text === '/admin') {
       if (!checkIsSuperAdmin({ telegramId: chatId, verifiedTelegram: true }) && !(regUser && checkIsSuperAdmin(regUser))) {
         await sendTelegramMessage(chatId, '⛔️ Ushbu buyruq faqat Super Admin uchun.');
@@ -13255,7 +13432,8 @@ async function handleTelegramUpdateSerialized(update: any) {
           `🎬 <b>Kutilayotgan media:</b> ${pendingMed}\n` +
           `🛡 <b>Kutilayotgan arizalar:</b> ${pendingApps}\n` +
           `🌐 <b>Mini App URL:</b> <code>${APP_URL}</code>\n` +
-          `📡 <b>Rejim:</b> ${isWebhookMode ? 'Webhook (24/7)' : 'Long-Polling'}`,
+          `📡 <b>Rejim:</b> ${isWebhookMode ? 'Webhook (24/7)' : 'Long-Polling'}\n\n` +
+          `🛠 <b>Super Admin:</b> /botusers · /backup · /stats`,
         {
           reply_markup: {
             inline_keyboard: [[{ text: '🌍 Boshqaruv Panelini ochish', web_app: { url: APP_URL } }]],
@@ -13884,6 +14062,7 @@ async function syncTelegramBotProfile(token: string, targetUrl?: string, forcePr
           { command: 'activity', description: 'Eko-faoliyat (foto/video) yuklash' },
           { command: 'tasks', description: 'Vazifalarim' },
           { command: 'rank', description: 'Maktablar va ishtirokchilar reytingi' },
+          { command: 'stats', description: 'Jonli statistika (maktab va o‘quvchilar)' },
           { command: 'coins', description: "ECO COIN balansi va sovg'alar" },
           { command: 'invite', description: "Do'stni taklif qilib bonus olish" },
           { command: 'apply', description: 'Sardor / Eko-Elchi lavozimiga ariza' },
@@ -14171,7 +14350,8 @@ app.post('/api/telegram/broadcast', requireRoles('super_admin'), async (req: Aut
 });
 
 app.get('/api/telegram/status', (_req, res) => {
-  const tgUsersCount = Object.values(centralDb.users).filter((u: any) => u.telegramId || u.chatId).length;
+  reconcileSchoolsAndStudents(false);
+  const live = computeLiveMetrics();
   const isTemporaryTunnel = APP_URL.includes('trycloudflare.com');
   const isPublicHttps = APP_URL.startsWith('https://') && !isPrivateAiStudioOrLocalUrl(APP_URL);
   res.json({
@@ -14187,7 +14367,7 @@ app.get('/api/telegram/status', (_req, res) => {
     isTemporaryTunnel,
     isPublicHttps,
     isProduction247: isPublicHttps && !isTemporaryTunnel,
-    totalSubscribers: tgUsersCount,
+    totalSubscribers: live.botUsersCount,
     broadcastsCount: centralDb.broadcasts.length,
     recentBroadcasts: centralDb.broadcasts.slice(0, 5),
   });
