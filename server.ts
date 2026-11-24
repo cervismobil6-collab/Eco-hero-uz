@@ -94,15 +94,30 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const PERSISTENT_DATA_DIR = getPersistentDataDir();
+const HAS_EXTERNAL_DATA_DIR = Boolean(
+  String(process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || '').trim()
+);
 const LEGACY_PUBLIC_UPLOADS_DIR = path.join(process.cwd(), 'public', 'uploads');
-const UPLOADS_DIR =
-  PERSISTENT_DATA_DIR !== process.cwd()
-    ? path.join(PERSISTENT_DATA_DIR, 'uploads')
-    : LEGACY_PUBLIC_UPLOADS_DIR;
+const UPLOADS_DIR = HAS_EXTERNAL_DATA_DIR
+  ? path.join(PERSISTENT_DATA_DIR, 'uploads')
+  : LEGACY_PUBLIC_UPLOADS_DIR;
 try {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-} catch {
-  // Ignore if exists
+  if (UPLOADS_DIR !== LEGACY_PUBLIC_UPLOADS_DIR && fs.existsSync(LEGACY_PUBLIC_UPLOADS_DIR)) {
+    for (const entry of fs.readdirSync(LEGACY_PUBLIC_UPLOADS_DIR, { withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      const src = path.join(LEGACY_PUBLIC_UPLOADS_DIR, entry.name);
+      const dst = path.join(UPLOADS_DIR, entry.name);
+      if (!fs.existsSync(dst)) {
+        try {
+          fs.copyFileSync(src, dst);
+        } catch {}
+      }
+    }
+  }
+  console.log(`[Storage] Uploads directory active: ${UPLOADS_DIR}`);
+} catch (dirErr: any) {
+  console.error(`[Storage] Failed to initialize uploads directory (${UPLOADS_DIR}):`, dirErr?.message || dirErr);
 }
 
 export function isPrivateAiStudioOrLocalUrl(url?: string): boolean {
@@ -1931,8 +1946,19 @@ async function resolveImageInputToInlineData(rawInput?: string): Promise<{ mimeT
   }
 
   if (trimmed.startsWith('/uploads/') || trimmed.startsWith('/assets/')) {
-    const localPath = path.join(process.cwd(), 'public', trimmed.replace(/^\/+/, ''));
-    if (fs.existsSync(localPath)) {
+    const rel = trimmed.replace(/^\/+/, '');
+    const candidates = trimmed.startsWith('/uploads/')
+      ? [
+          path.resolve(UPLOADS_DIR, path.basename(rel)),
+          path.resolve(process.cwd(), 'public', rel),
+        ]
+      : [path.resolve(process.cwd(), 'public', rel)];
+    const localPath = candidates.find((p) => {
+      const withinUploads = p.startsWith(path.resolve(UPLOADS_DIR) + path.sep);
+      const withinPublic = p.startsWith(path.resolve(process.cwd(), 'public') + path.sep);
+      return (withinUploads || withinPublic) && fs.existsSync(p);
+    });
+    if (localPath) {
       const buf = fs.readFileSync(localPath);
       const ext = path.extname(localPath).toLowerCase();
       const mimeType =
@@ -5249,6 +5275,7 @@ app.post('/api/storage/upload', requireAuth, (req: AuthenticatedRequest, res) =>
 
     const fileHash = crypto.createHash('sha256').update(buffer).digest('hex');
     const safeName = `${Date.now()}_${crypto.randomBytes(4).toString('hex')}.${ext}`;
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
     const destPath = path.join(UPLOADS_DIR, safeName);
     fs.writeFileSync(destPath, buffer);
 
@@ -5318,6 +5345,7 @@ app.post(
 
       const fileHash = crypto.createHash('sha256').update(buffer).digest('hex');
       const safeName = `${Date.now()}_${crypto.randomBytes(4).toString('hex')}.${ext}`;
+      fs.mkdirSync(UPLOADS_DIR, { recursive: true });
       const destPath = path.join(UPLOADS_DIR, safeName);
       fs.writeFileSync(destPath, buffer);
 
@@ -11705,6 +11733,7 @@ async function downloadTelegramFileToUploads(
     const ext = path.extname(filePath).replace('.', '') || (kind === 'video' ? 'mp4' : 'jpg');
     const fileHash = crypto.createHash('sha256').update(buffer).digest('hex');
     const safeName = `tg_${Date.now()}_${crypto.randomBytes(4).toString('hex')}.${ext}`;
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
     fs.writeFileSync(path.join(UPLOADS_DIR, safeName), buffer);
     return {
       url: `/uploads/${safeName}`,
