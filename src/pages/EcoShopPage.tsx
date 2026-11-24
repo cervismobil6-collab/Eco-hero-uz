@@ -42,6 +42,7 @@ import { EcoAdBanner } from '../components/EcoAdBanner';
 import { AdPlayerModal } from '../components/AdPlayerModal';
 import { GiftGateConfigEditor } from '../components/shop/GiftGateConfigEditor';
 import { isInsideTelegramWebApp, normalizeAdTargetUrl, resolveMediaUrl, openAdTargetUrl } from '../utils/api';
+import heroEcoForestImg from '../assets/images/hero_eco_forest_1795179384249.jpg';
 
 function isAdLogoImage(val?: string): boolean {
   if (!val) return false;
@@ -131,9 +132,7 @@ export const EcoShopPage: React.FC = () => {
   const [adSponsorLogoInput, setAdSponsorLogoInput] = useState('');
   const [adHeadlineInput, setAdHeadlineInput] = useState('');
   const [adSubheadlineInput, setAdSubheadlineInput] = useState('');
-  const [adImageInput, setAdImageInput] = useState(
-    'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=1000&q=80'
-  );
+  const [adImageInput, setAdImageInput] = useState('/assets/schools/eco_courtyard.jpg');
   const [adVideoInput, setAdVideoInput] = useState('');
   const [adCtaTextInput, setAdCtaTextInput] = useState("Batafsil ko'rish");
   const [adCtaInput, setAdCtaInput] = useState('https://t.me/Ecoheros_bot');
@@ -356,7 +355,7 @@ export const EcoShopPage: React.FC = () => {
     setAdSponsorLogoInput('');
     setAdHeadlineInput('');
     setAdSubheadlineInput('');
-    setAdImageInput('https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=1000&q=80');
+    setAdImageInput('/assets/schools/eco_courtyard.jpg');
     setAdVideoInput('');
     setAdCtaTextInput("Batafsil ko'rish");
     setAdCtaInput('https://t.me/Ecoheros_bot');
@@ -408,9 +407,7 @@ export const EcoShopPage: React.FC = () => {
         placement: adPlacementChoice,
         headline: adHeadlineInput.trim() || adTitleInput.trim(),
         subheadline: adSubheadlineInput.trim(),
-        imageUrl:
-          adImageInput.trim() ||
-          'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=1000&q=80',
+        imageUrl: adImageInput.trim() || '/assets/schools/eco_courtyard.jpg',
         videoUrl: adVideoInput.trim() || undefined,
         ctaText: adCtaTextInput.trim() || "Batafsil ko'rish",
         ctaUrl: adCtaInput.trim() || 'https://t.me/Ecoheros_bot',
@@ -439,9 +436,7 @@ export const EcoShopPage: React.FC = () => {
         (adPlacementChoice === 'earn_coins'
           ? `${cleanSkip} soniya reklama ko‘rib avtomatik +${cleanReward} EcoCoin oling!`
           : 'Sovg‘a vaucheringiz tayyorlanmoqda'),
-      imageUrl:
-        adImageInput.trim() ||
-        'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=1000&q=80',
+      imageUrl: adImageInput.trim() || '/assets/schools/eco_courtyard.jpg',
       videoUrl: adVideoInput.trim() || undefined,
       ctaText: adCtaTextInput.trim() || "Batafsil ko'rish",
       ctaUrl: adCtaInput.trim() || 'https://t.me/Ecoheros_bot',
@@ -747,9 +742,12 @@ export const EcoShopPage: React.FC = () => {
                     >
                       <div className="relative h-44 bg-slate-900 overflow-hidden">
                         <img
-                          src={resolveMediaUrl(ad.imageUrl)}
+                          src={resolveMediaUrl(ad.imageUrl) || heroEcoForestImg}
                           alt={ad.title}
                           loading="lazy"
+                          onError={e => {
+                            e.currentTarget.src = heroEcoForestImg;
+                          }}
                           className="w-full h-full object-cover"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
@@ -1689,8 +1687,8 @@ export const EcoShopPage: React.FC = () => {
 
       {/* Super Admin Quick Ad Create / Edit Modal */}
       {showShopAdModal && (
-        <div className="fixed inset-0 z-[120] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-[#0f172a] w-full max-w-lg rounded-3xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 shadow-2xl my-8">
+        <div className="fixed inset-0 z-[120] bg-slate-950/80 backdrop-blur-sm flex items-start sm:items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-[#0f172a] w-full max-w-lg max-h-[92dvh] overflow-y-auto rounded-3xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-4 shadow-2xl my-3 sm:my-6">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-black uppercase">
                 {editingAd ? 'Reklamani Tahrirlash' : "Super Admin Reklama Qo'shish"}
@@ -1748,29 +1746,91 @@ export const EcoShopPage: React.FC = () => {
                 onChange={e => setAdSubheadlineInput(e.target.value)}
                 className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
               />
-              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2.5">
-                <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
-                  Reklama profil rasmi (Avatar / Logotip)
+              {/* Primary Ad Cover / Screen Image (Visible outside before pressing Watch Video) */}
+              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-emerald-500/30 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-extrabold text-emerald-700 dark:text-emerald-300">
+                    Reklama ekran rasmi (Videodan oldin tashqaridan ko&apos;rinadi)
+                  </span>
+                  {adImageInput && (
+                    <button
+                      type="button"
+                      onClick={() => setAdImageInput('/assets/schools/eco_courtyard.jpg')}
+                      className="text-[10px] font-bold text-slate-400 hover:text-emerald-500 cursor-pointer"
+                    >
+                      Standart rasm
+                    </button>
+                  )}
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-full overflow-hidden bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-slate-950 border border-slate-200 dark:border-slate-800">
+                  <img
+                    src={resolveMediaUrl(adImageInput) || heroEcoForestImg}
+                    onError={e => {
+                      e.currentTarget.src = heroEcoForestImg;
+                    }}
+                    alt="Reklama ekran rasmi"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <label className="px-3 py-2.5 rounded-xl bg-sky-500/15 border border-dashed border-sky-500/50 text-sky-600 dark:text-sky-300 text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer">
+                    <ImageIcon className="w-4 h-4 shrink-0" />
+                    <span>{uploadingAdImg ? 'Yuklanmoqda...' : 'Ekran rasmini yuklash'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={e => handleShopMediaUpload(e, 'ad_img')}
+                      className="hidden"
+                    />
+                  </label>
+                  <label className="px-3 py-2.5 rounded-xl bg-emerald-500/10 border border-dashed border-emerald-500/40 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer">
+                    <Film className="w-4 h-4 shrink-0" />
+                    <span>{uploadingAdVideo ? 'Yuklanmoqda...' : adVideoInput ? 'Video almashtirish' : 'Video yuklash'}</span>
+                    <input
+                      type="file"
+                      accept="video/*"
+                      onChange={e => handleShopMediaUpload(e, 'ad_video')}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+                {adVideoInput && (
+                  <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-[11px] font-bold">
+                    <span className="truncate text-emerald-600 dark:text-emerald-400">
+                      Video biriktirildi: {adVideoInput}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setAdVideoInput('')}
+                      className="text-rose-500 cursor-pointer shrink-0"
+                    >
+                      O&apos;chirish
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Secondary Optional Small Sponsor Logo */}
+              <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-full overflow-hidden bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0">
                     {isAdLogoImage(adSponsorLogoInput) ? (
                       <img
                         src={resolveMediaUrl(adSponsorLogoInput)}
-                        alt="Avatar"
+                        alt="Homiy belgisi"
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <span className="text-base font-black text-emerald-500">
+                      <span className="text-xs font-black text-emerald-500">
                         {adSponsorLogoInput && adSponsorLogoInput.trim().length <= 3
                           ? adSponsorLogoInput
                           : (adSponsorInput || adTitleInput || 'E').slice(0, 1).toUpperCase()}
                       </span>
                     )}
                   </div>
-                  <label className="flex-1 px-3 py-2.5 rounded-xl bg-emerald-500/10 border border-dashed border-emerald-500/40 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer">
-                    <ImageIcon className="w-4 h-4 shrink-0" />
-                    <span>{uploadingAdLogo ? 'Yuklanmoqda...' : 'Profil rasmi yuklash'}</span>
+                  <label className="flex-1 px-3 py-2 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer">
+                    <ImageIcon className="w-3.5 h-3.5 shrink-0" />
+                    <span>{uploadingAdLogo ? 'Yuklanmoqda...' : 'Kichik homiy belgisi (ixtiyoriy)'}</span>
                     <input
                       type="file"
                       accept="image/*"
@@ -1788,62 +1848,7 @@ export const EcoShopPage: React.FC = () => {
                     </button>
                   )}
                 </div>
-                <input
-                  type="text"
-                  placeholder="Yoki profil rasmi URL manzili (ixtiyoriy)"
-                  value={adSponsorLogoInput}
-                  onChange={e => setAdSponsorLogoInput(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-[11px] font-bold outline-none"
-                />
               </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <label className="px-3 py-3 rounded-2xl bg-sky-500/10 border border-dashed border-sky-500/40 text-sky-600 dark:text-sky-400 text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer">
-                  <ImageIcon className="w-4 h-4 shrink-0" />
-                  <span>{uploadingAdImg ? 'Yuklanmoqda...' : 'Rasm yuklash'}</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={e => handleShopMediaUpload(e, 'ad_img')}
-                    className="hidden"
-                  />
-                </label>
-                <label className="px-3 py-3 rounded-2xl bg-emerald-500/10 border border-dashed border-emerald-500/40 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer">
-                  <Film className="w-4 h-4 shrink-0" />
-                  <span>{uploadingAdVideo ? 'Yuklanmoqda...' : adVideoInput ? 'Video almashtirish' : 'Video yuklash'}</span>
-                  <input
-                    type="file"
-                    accept="video/*"
-                    onChange={e => handleShopMediaUpload(e, 'ad_video')}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-              {(adImageInput || adVideoInput) && (
-                <div className="flex items-center gap-3 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                  {adImageInput && (
-                    <img
-                      src={resolveMediaUrl(adImageInput)}
-                      alt="Ad preview"
-                      className="w-11 h-11 rounded-xl object-cover shrink-0"
-                    />
-                  )}
-                  <div className="min-w-0 flex-1 text-[11px] font-bold">
-                    <div className="truncate text-emerald-500">
-                      {adVideoInput ? `Video: ${adVideoInput}` : `Rasm: ${adImageInput}`}
-                    </div>
-                    {adVideoInput && (
-                      <button
-                        type="button"
-                        onClick={() => setAdVideoInput('')}
-                        className="text-rose-500 cursor-pointer"
-                      >
-                        Videoni o'chirish
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
 
               {/* Duration Presets (15s, 30s, 60s, 90s, 120s + custom) */}
               <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">

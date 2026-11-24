@@ -15,10 +15,12 @@ import {
   Send,
   Clock,
   Sparkles,
+  PlayCircle,
 } from 'lucide-react';
 import { useEco } from '../context/EcoContext';
 import { EcoAd, EcoAdPlacement } from '../types/eco';
 import { openAdTargetUrl, resolveMediaUrl } from '../utils/api';
+import heroEcoForestImg from '../assets/images/hero_eco_forest_1795179384249.jpg';
 
 interface EcoAdBannerProps {
   placement: 'home_top' | 'home_middle' | 'shop_top' | 'map_banner' | 'media_sidebar';
@@ -53,6 +55,8 @@ export const EcoAdBanner: React.FC<EcoAdBannerProps> = ({ placement, className =
 
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [isVideoMuted, setIsVideoMuted] = useState(true);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [coverImgFailed, setCoverImgFailed] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const [uploadingImg, setUploadingImg] = useState(false);
@@ -76,10 +80,12 @@ export const EcoAdBanner: React.FC<EcoAdBannerProps> = ({ placement, className =
   const activeAd = customAd || ecoAds.find(a => a.placement === placement && a.status === 'active');
 
   useEffect(() => {
+    setIsVideoPlaying(false);
+    setCoverImgFailed(false);
     if (activeAd?.id) {
       recordAdImpression(activeAd.id);
     }
-  }, [activeAd?.id]);
+  }, [activeAd?.id, activeAd?.imageUrl, activeAd?.videoUrl]);
 
   if (!activeAd) {
     return null;
@@ -146,7 +152,7 @@ export const EcoAdBanner: React.FC<EcoAdBannerProps> = ({ placement, className =
       const res = await updateEcoAd(activeAd.id, {
         title: editTitle.trim() || activeAd.title,
         sponsorName: editSponsor.trim() || activeAd.sponsorName,
-        sponsorLogo: editSponsorLogo.trim() || activeAd.sponsorLogo,
+        sponsorLogo: editSponsorLogo.trim(),
         headline: editHeadline.trim() || editTitle.trim() || activeAd.headline,
         subheadline: editSubheadline.trim(),
         imageUrl: editImageUrl.trim() || activeAd.imageUrl,
@@ -186,6 +192,7 @@ export const EcoAdBanner: React.FC<EcoAdBannerProps> = ({ placement, className =
   };
 
   const resolvedImage = resolveMediaUrl(activeAd.imageUrl);
+  const displayCoverImage = !coverImgFailed && resolvedImage ? resolvedImage : heroEcoForestImg;
   const resolvedVideo = activeAd.videoUrl ? resolveMediaUrl(activeAd.videoUrl) : '';
 
   const CtaTypeIcon = ctaKind === 'telegram_bot' ? Bot : ctaKind === 'telegram_channel' ? Send : Globe;
@@ -211,27 +218,24 @@ export const EcoAdBanner: React.FC<EcoAdBannerProps> = ({ placement, className =
           {/* Commercial Media Stage */}
           <div
             onClick={e => {
-              if (!resolvedVideo && activeAd.clickOpensLink !== false) {
+              if (resolvedVideo && !isVideoPlaying) {
+                e.stopPropagation();
+                setIsVideoPlaying(true);
+              } else if (!resolvedVideo && activeAd.clickOpensLink !== false) {
                 handleOpenAdDestination(e);
               } else {
                 e.stopPropagation();
               }
             }}
-            className="w-full md:w-[44%] h-48 sm:h-52 rounded-2xl overflow-hidden relative bg-slate-950 border border-white/10 shrink-0 shadow-lg"
+            className="w-full md:w-[44%] h-48 sm:h-52 rounded-2xl overflow-hidden relative bg-[#030B08] border border-white/10 shrink-0 shadow-lg"
           >
-            {resolvedVideo ? (
+            {resolvedVideo && isVideoPlaying ? (
               <>
-                {resolvedImage && (
-                  <img
-                    src={resolvedImage}
-                    alt={activeAd.title}
-                    className="absolute inset-0 w-full h-full object-cover"
-                  />
-                )}
                 <video
                   src={resolvedVideo}
-                  poster={resolvedImage || undefined}
-                  preload="metadata"
+                  poster={displayCoverImage}
+                  autoPlay
+                  preload="auto"
                   loop
                   playsInline
                   muted={isVideoMuted}
@@ -254,16 +258,37 @@ export const EcoAdBanner: React.FC<EcoAdBannerProps> = ({ placement, className =
                 </div>
               </>
             ) : (
-              <img
-                src={resolvedImage}
-                alt={activeAd.title}
-                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-              />
+              <>
+                <img
+                  src={displayCoverImage}
+                  alt={activeAd.title}
+                  onError={() => setCoverImgFailed(true)}
+                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                />
+                {resolvedVideo && (
+                  <button
+                    type="button"
+                    onClick={e => {
+                      e.stopPropagation();
+                      setIsVideoPlaying(true);
+                    }}
+                    aria-label="Videoni ko'rish"
+                    className="absolute inset-0 z-[4] flex flex-col items-center justify-center gap-1.5 bg-black/30 hover:bg-black/20 transition-colors cursor-pointer"
+                  >
+                    <span className="w-12 h-12 rounded-full bg-emerald-500/95 text-[#040D0A] flex items-center justify-center shadow-xl shadow-emerald-500/30 transition-transform hover:scale-105">
+                      <PlayCircle className="w-7 h-7 fill-current/15" />
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-black/75 border border-white/20 text-[10px] font-black uppercase tracking-wider text-white">
+                      Videoni ko&apos;rish
+                    </span>
+                  </button>
+                )}
+              </>
             )}
 
             <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/30 pointer-events-none z-[2]" />
 
-            <div className="absolute top-2.5 left-2.5 pr-2.5 pl-1 py-1 rounded-full bg-black/80 border border-white/15 text-[10px] font-bold text-emerald-300 flex items-center gap-1.5 pointer-events-none z-[3]">
+            <div className="absolute top-2.5 left-2.5 pr-2.5 pl-1.5 py-1 rounded-full bg-black/75 border border-white/15 text-[10px] font-bold text-emerald-300 flex items-center gap-1.5 pointer-events-none z-[3]">
               {isSponsorLogoImg ? (
                 <img
                   src={resolveMediaUrl(activeAd.sponsorLogo!)}
@@ -271,13 +296,13 @@ export const EcoAdBanner: React.FC<EcoAdBannerProps> = ({ placement, className =
                   className="w-5 h-5 rounded-full object-cover border border-emerald-400/50 shrink-0"
                 />
               ) : (
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 ml-1 shrink-0" />
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 ml-0.5 shrink-0" />
               )}
               <span className="truncate max-w-[140px]">{activeAd.sponsorName}</span>
             </div>
 
             {!resolvedVideo && activeAd.clickOpensLink !== false && (
-              <div className="absolute bottom-2.5 right-2.5 px-2.5 py-1 rounded-full bg-emerald-500/90 text-slate-950 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-md pointer-events-none">
+              <div className="absolute bottom-2.5 right-2.5 px-2.5 py-1 rounded-full bg-emerald-500/90 text-slate-950 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-md pointer-events-none z-[3]">
                 <CtaTypeIcon className="w-3 h-3" />
                 <span>{ctaTypeLabel}</span>
               </div>
@@ -367,8 +392,8 @@ export const EcoAdBanner: React.FC<EcoAdBannerProps> = ({ placement, className =
 
       {/* Inline Super Admin Ad Edit Modal */}
       {showEditModal && (
-        <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
-          <div className="w-full max-w-lg rounded-3xl bg-[#071812] border border-emerald-500/25 text-white p-6 space-y-4 shadow-2xl my-8">
+        <div className="fixed inset-0 z-[130] flex items-start sm:items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-lg max-h-[92dvh] overflow-y-auto rounded-3xl bg-[#071812] border border-emerald-500/25 text-white p-5 sm:p-6 space-y-4 shadow-2xl my-3 sm:my-6">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-black uppercase tracking-tight">Reklamani O'zgartirish</h3>
               <button
@@ -415,22 +440,87 @@ export const EcoAdBanner: React.FC<EcoAdBannerProps> = ({ placement, className =
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 font-semibold outline-none focus:border-emerald-500 resize-none"
               />
 
-              {/* Direct File Uploads for Profile Avatar, Video and Cover Image */}
-              <div className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+              {/* Primary Ad Cover / Screen Image (Visible outside & before pressing Watch Video) */}
+              <div className="p-3 rounded-2xl bg-slate-950 border border-emerald-500/25 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-extrabold text-emerald-300">
+                    Reklama ekran rasmi (Tashqaridan ko&apos;rinadigan muqova)
+                  </span>
+                  {editImageUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setEditImageUrl('/assets/schools/eco_courtyard.jpg')}
+                      className="text-[10px] font-bold text-slate-400 hover:text-emerald-300 cursor-pointer"
+                    >
+                      Standart rasm
+                    </button>
+                  )}
+                </div>
+                <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-[#030A07] border border-white/10">
+                  <img
+                    src={resolveMediaUrl(editImageUrl || '') || heroEcoForestImg}
+                    onError={e => {
+                      e.currentTarget.src = heroEcoForestImg;
+                    }}
+                    alt="Reklama ekran rasmi"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <label className="flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-sky-600/20 border border-sky-500/40 hover:bg-sky-600/30 text-sky-300 font-bold cursor-pointer">
+                    <ImageIcon className="w-4 h-4 shrink-0" />
+                    <span>{uploadingImg ? 'Rasm yuklanmoqda...' : 'Ekran rasmini yuklash'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={e => handleUploadMedia(e, 'image')}
+                      className="hidden"
+                    />
+                  </label>
+
+                  <label className="flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-emerald-600/20 border border-emerald-500/40 hover:bg-emerald-600/30 text-emerald-300 font-bold cursor-pointer">
+                    <Film className="w-4 h-4 shrink-0" />
+                    <span>{uploadingVid ? 'Video yuklanmoqda...' : editVideoUrl ? 'Video almashtirish' : 'Video fayl yuklash'}</span>
+                    <input
+                      type="file"
+                      accept="video/*"
+                      onChange={e => handleUploadMedia(e, 'video')}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+                {editVideoUrl && (
+                  <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/25">
+                    <span className="text-[11px] font-bold text-emerald-300 truncate">
+                      Video biriktirilgan: {editVideoUrl}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setEditVideoUrl('')}
+                      className="text-[11px] text-rose-400 font-bold cursor-pointer shrink-0"
+                    >
+                      Olib tashlash
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Optional Small Sponsor Corner Logo */}
+              <div className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-950/70 border border-slate-800/80">
                 {/^(https?:\/\/|\/uploads\/|\/assets\/|data:image\/)/i.test(editSponsorLogo.trim()) ? (
                   <img
                     src={resolveMediaUrl(editSponsorLogo)}
-                    alt="Profil rasmi"
-                    className="w-10 h-10 rounded-full object-cover border border-emerald-500/40 shrink-0"
+                    alt="Homiy belgisi"
+                    className="w-8 h-8 rounded-full object-cover border border-emerald-500/40 shrink-0"
                   />
                 ) : (
-                  <div className="w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-300 font-black text-xs shrink-0">
+                  <div className="w-8 h-8 rounded-full bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-emerald-300 font-black text-[11px] shrink-0">
                     {(editSponsor || 'E').trim().charAt(0).toUpperCase()}
                   </div>
                 )}
-                <label className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-amber-500/15 border border-amber-500/40 hover:bg-amber-500/25 text-amber-300 font-bold cursor-pointer">
-                  <ImageIcon className="w-4 h-4 shrink-0" />
-                  <span>{uploadingLogo ? 'Yuklanmoqda...' : 'Reklama profil rasmi (Avatar)'}</span>
+                <label className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-slate-300 font-semibold cursor-pointer text-[11px]">
+                  <ImageIcon className="w-3.5 h-3.5 shrink-0" />
+                  <span>{uploadingLogo ? 'Yuklanmoqda...' : 'Kichik homiy belgisi (ixtiyoriy)'}</span>
                   <input
                     type="file"
                     accept="image/*"
@@ -438,57 +528,16 @@ export const EcoAdBanner: React.FC<EcoAdBannerProps> = ({ placement, className =
                     className="hidden"
                   />
                 </label>
+                {/^(https?:\/\/|\/uploads\/|\/assets\/|data:image\/)/i.test(editSponsorLogo.trim()) && (
+                  <button
+                    type="button"
+                    onClick={() => setEditSponsorLogo('')}
+                    className="px-2.5 py-2 rounded-xl bg-rose-500/15 text-rose-400 text-[10px] font-bold cursor-pointer shrink-0"
+                  >
+                    O&apos;chirish
+                  </button>
+                )}
               </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                <label className="flex items-center justify-center gap-2 px-3.5 py-3 rounded-xl bg-emerald-600/20 border border-emerald-500/40 hover:bg-emerald-600/30 text-emerald-300 font-bold cursor-pointer">
-                  <Film className="w-4 h-4 shrink-0" />
-                  <span>{uploadingVid ? 'Video yuklanmoqda...' : editVideoUrl ? 'Video almashtirish' : 'Video fayl yuklash'}</span>
-                  <input
-                    type="file"
-                    accept="video/*"
-                    onChange={e => handleUploadMedia(e, 'video')}
-                    className="hidden"
-                  />
-                </label>
-
-                <label className="flex items-center justify-center gap-2 px-3.5 py-3 rounded-xl bg-sky-600/20 border border-sky-500/40 hover:bg-sky-600/30 text-sky-300 font-bold cursor-pointer">
-                  <ImageIcon className="w-4 h-4 shrink-0" />
-                  <span>{uploadingImg ? 'Rasm yuklanmoqda...' : 'Muqova rasm yuklash'}</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={e => handleUploadMedia(e, 'image')}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-
-              {(editImageUrl || editVideoUrl) && (
-                <div className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-950 border border-slate-800">
-                  {editImageUrl && (
-                    <img
-                      src={resolveMediaUrl(editImageUrl)}
-                      alt="Preview"
-                      className="w-12 h-12 rounded-lg object-cover border border-white/10 shrink-0"
-                    />
-                  )}
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="text-[11px] font-bold text-emerald-400 truncate">
-                      {editVideoUrl ? `Video: ${editVideoUrl}` : `Rasm: ${editImageUrl}`}
-                    </div>
-                    {editVideoUrl && (
-                      <button
-                        type="button"
-                        onClick={() => setEditVideoUrl('')}
-                        className="text-[11px] text-rose-400 font-bold cursor-pointer"
-                      >
-                        Videoni olib tashlash
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
 
               {/* Duration presets + custom seconds */}
               <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">

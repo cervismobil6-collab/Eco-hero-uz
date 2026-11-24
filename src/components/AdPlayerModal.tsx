@@ -21,6 +21,7 @@ import { motion } from 'framer-motion';
 import { EcoAd } from '../types/eco';
 import { useEco } from '../context/EcoContext';
 import { openAdTargetUrl, resolveMediaUrl } from '../utils/api';
+import heroEcoForestImg from '../assets/images/hero_eco_forest_1795179384249.jpg';
 
 interface AdPlayerModalProps {
   ad: EcoAd;
@@ -54,6 +55,7 @@ export const AdPlayerModal: React.FC<AdPlayerModalProps> = ({ ad, mode, onComple
   const [muted, setMuted] = useState(true);
   const [videoReady, setVideoReady] = useState(false);
   const [videoFailed, setVideoFailed] = useState(false);
+  const [posterFailed, setPosterFailed] = useState(false);
   const autoClaimTriggeredRef = useRef(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -65,6 +67,7 @@ export const AdPlayerModal: React.FC<AdPlayerModalProps> = ({ ad, mode, onComple
     setCooldownBlocked(false);
     setVideoReady(false);
     setVideoFailed(false);
+    setPosterFailed(false);
     autoClaimTriggeredRef.current = false;
 
     recordAdImpression(ad.id);
@@ -147,7 +150,8 @@ export const AdPlayerModal: React.FC<AdPlayerModalProps> = ({ ad, mode, onComple
   };
 
   const hasSponsorAvatar = isLogoImage(ad.sponsorLogo);
-  const posterUrl = resolveMediaUrl(ad.imageUrl);
+  const rawPosterUrl = resolveMediaUrl(ad.imageUrl);
+  const posterUrl = !posterFailed && rawPosterUrl ? rawPosterUrl : heroEcoForestImg;
   const videoUrl = ad.videoUrl ? resolveMediaUrl(ad.videoUrl) : '';
 
   return (
@@ -183,6 +187,7 @@ export const AdPlayerModal: React.FC<AdPlayerModalProps> = ({ ad, mode, onComple
               src={posterUrl}
               alt=""
               aria-hidden="true"
+              onError={() => setPosterFailed(true)}
               className={`absolute inset-0 w-full h-full object-cover ${
                 videoUrl && !videoFailed ? 'opacity-25 scale-105' : 'opacity-100'
               }`}
@@ -238,6 +243,7 @@ export const AdPlayerModal: React.FC<AdPlayerModalProps> = ({ ad, mode, onComple
             <img
               src={posterUrl}
               alt={ad.title}
+              onError={() => setPosterFailed(true)}
               className="relative z-[1] w-full h-full object-cover"
             />
           )}
