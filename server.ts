@@ -737,6 +737,7 @@ app.get('/api/bootstrap', (req: AuthenticatedRequest, res) => {
         }),
       monthlyAwards: centralDb.monthlyAwards || [],
       serverNow: new Date().toISOString(),
+      serverDateKey: getUzbekistanDateKey(),
       liveMetrics: computeLiveMetrics(),
       ecoMissions: visibleMissions,
       missionSubmissions: visibleMissionSubmissions,
@@ -3661,7 +3662,24 @@ app.post('/api/quiz/claim', requireAuth, (req: AuthenticatedRequest, res) => {
   }
 });
 
-// Server-Authoritative Progressive Daily Eco-Streak (50 -> 100 -> 300 -> ... -> 1000; resets to 50 if a day is missed)
+// Server-Authoritative Progressive Daily Eco-Streak Status & Claim (Asia/Tashkent)
+app.get('/api/streak/status', (req: AuthenticatedRequest, res) => {
+  const caller = req.authUser || null;
+  const serverDateKey = getUzbekistanDateKey();
+  const state = computeUserStreakState(
+    {
+      lastStreakClaimDate: caller?.lastStreakClaimDate || null,
+      storedStreakDays: caller?.streakDays ?? caller?.activityStats?.streakDays ?? 0,
+    },
+    serverDateKey
+  );
+  res.json({
+    success: true,
+    serverDateKey,
+    streakState: state,
+  });
+});
+
 app.post('/api/streak/claim', requireAuth, (req: AuthenticatedRequest, res) => {
   try {
     const caller = req.authUser;

@@ -304,53 +304,53 @@ export const EcoProfilePage: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div className="lg:col-span-8 space-y-6">
             {/* Achievement Collection Grid */}
-            <div className="eco-surface rounded-[28px] overflow-hidden shadow-xl">
-              <div className="p-6 border-b border-slate-200/80 dark:border-emerald-500/15 flex items-center justify-between">
-                <div>
-                  <h3 className="font-display text-lg font-black uppercase tracking-tight">
+            <div className="eco-surface rounded-3xl overflow-hidden shadow-xl">
+              <div className="px-4 py-3.5 sm:px-5 sm:py-4 border-b border-slate-200/80 dark:border-emerald-500/15 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="font-display text-sm sm:text-base font-black uppercase tracking-tight truncate">
                     EcoPassport Nishonlari
                   </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Haqiqiy ekologik yutuqlaringiz asosida ochiladigan kolleksiya
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                    Ekologik yutuqlar kolleksiyasi
                   </p>
                 </div>
-                <span className="font-mono tabular-nums text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                <span className="font-mono tabular-nums text-xs font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap shrink-0">
                   {achievements.filter(a => a.unlocked).length} / {achievements.length}
                 </span>
               </div>
-              <div className="p-5 sm:p-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
+              <div className="p-3 sm:p-4 grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                 {achievements.map(badge => {
                   const Icon = badge.icon;
                   return (
                     <div
                       key={badge.id}
-                      className={`p-4 rounded-2xl border flex flex-col justify-between gap-3 transition-all ${
+                      className={`p-3 rounded-2xl border flex flex-col justify-between gap-2 transition-all min-w-0 ${
                         badge.unlocked
                           ? 'bg-white/90 dark:bg-[#040D0A]/80 border-emerald-500/35 shadow-sm'
                           : 'bg-slate-100/70 dark:bg-[#040D0A]/45 border-slate-200 dark:border-slate-800/80 opacity-75'
                       }`}
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className={`w-11 h-11 rounded-2xl border flex items-center justify-center shrink-0 ${badge.tone}`}>
-                          <Icon className="w-5 h-5" />
+                      <div className="flex items-center justify-between gap-1.5">
+                        <div className={`w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 ${badge.tone}`}>
+                          <Icon className="w-4 h-4" />
                         </div>
                         {badge.unlocked ? (
-                          <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                          <span className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider whitespace-nowrap">
                             Ochilgan
                           </span>
                         ) : (
-                          <Lock className="w-3.5 h-3.5 text-slate-400" />
+                          <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                         )}
                       </div>
-                      <div className="space-y-0.5">
-                        <div className="text-xs font-extrabold text-slate-900 dark:text-white">
+                      <div className="space-y-0.5 min-w-0">
+                        <div className="text-xs font-extrabold text-slate-900 dark:text-white truncate">
                           {badge.title}
                         </div>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                        <div className="text-[10px] leading-snug text-slate-500 dark:text-slate-400 line-clamp-2">
                           {badge.desc}
                         </div>
                       </div>
-                      <div className="text-[11px] font-mono tabular-nums font-bold text-slate-600 dark:text-emerald-300">
+                      <div className="text-[10px] font-mono tabular-nums font-bold text-slate-600 dark:text-emerald-300">
                         {badge.progressLabel}
                       </div>
                     </div>

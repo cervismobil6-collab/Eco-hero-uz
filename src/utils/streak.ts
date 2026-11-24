@@ -11,9 +11,22 @@ export interface UserStreakState {
 }
 
 /**
- * Uzbekistan calendar date key (UTC+5 permanently, no DST) in YYYY-MM-DD format.
+ * Uzbekistan calendar date key (Asia/Tashkent, UTC+5 permanently) in YYYY-MM-DD format.
  */
 export function getUzbekistanDateKey(now: Date = new Date()): string {
+  try {
+    const formatted = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Tashkent',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(now);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(formatted)) {
+      return formatted;
+    }
+  } catch {
+    // Fallback to fixed UTC+5 offset if Intl timezone data is unavailable
+  }
   const uzTime = new Date(now.getTime() + 5 * 60 * 60 * 1000);
   return uzTime.toISOString().slice(0, 10);
 }

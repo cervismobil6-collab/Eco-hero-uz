@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import confetti from 'canvas-confetti';
-import { computeUserStreakState } from '../utils/streak';
+import { computeUserStreakState, getUzbekistanDateKey } from '../utils/streak';
 import {
   UserProfile,
   EcoReport,
@@ -290,6 +290,10 @@ interface EcoContextType {
     wasReset?: boolean;
     alreadyClaimed?: boolean;
   }>;
+  serverDateKey: string;
+  dailyStreakModalOpen: boolean;
+  openDailyStreakModal: () => void;
+  closeDailyStreakModal: () => void;
   syncBootstrap: (overrideUid?: string, overrideTelegramId?: number | string | null) => Promise<void>;
   updateShopItemPriceAndStock: (itemId: string, newPriceCoins: number, newStock: number) => Promise<boolean>;
   updateShopItem: (itemId: string, updates: Partial<ShopItem>) => Promise<boolean>;
@@ -747,6 +751,14 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [onboardingModalOpen, setOnboardingModalOpen] = useState(false);
   const [editProfileModalOpen, setEditProfileModalOpen] = useState(false);
+  const [dailyStreakModalOpen, setDailyStreakModalOpen] = useState(false);
+  const [serverDateKey, setServerDateKey] = useState<string>(() => getUzbekistanDateKey());
+  const [bootstrapReady, setBootstrapReady] = useState(false);
+  const [telegramAuthReady, setTelegramAuthReady] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    const tg = (window as any).Telegram?.WebApp;
+    return !Boolean(tg && (tg.initData || tg.initDataUnsafe?.user));
+  });
 
   const [transactions, setTransactions] = useState<CoinTransaction[]>(() => {
     try {
@@ -1268,6 +1280,9 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const parsedNow = Date.parse(String(data.serverNow));
           if (Number.isFinite(parsedNow)) lastBootstrapServerMsRef.current = parsedNow;
         }
+        if (data.serverDateKey && /^\d{4}-\d{2}-\d{2}$/.test(String(data.serverDateKey))) {
+          setServerDateKey(String(data.serverDateKey));
+        }
         if (data.liveMetrics) {
           hasServerMetricsRef.current = true;
           setLiveMetrics(data.liveMetrics);
@@ -1335,6 +1350,8 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       } catch (err) {
         console.warn('[EcoContext] Bootstrap sync skipped:', err);
+      } finally {
+        setBootstrapReady(true);
       }
     },
     [apiFetch, saveSessionToken, refreshSessionToken]
@@ -1531,6 +1548,80 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return () => window.clearTimeout(timer);
     }
   }, [user.isOnboarded, user.isVerified]);
+
+  // Ensure daily popup check never stalls forever if offline/slow network
+  useEffect(() => {
+    if (bootstrapReady) return;
+    const fallbackTimer = window.setTimeout(() => {
+      setBootstrapReady(true);
+      setTelegramAuthReady(true);
+    }, 1500);
+    return () => window.clearTimeout(fallbackTimer);
+  }, [bootstrapReady]);
+
+  const openDailyStreakModal = useCallback(() => {
+    setDailyStreakModalOpen(true);
+  }, []);
+
+  const closeDailyStreakModal = useCallback(() => {
+    setDailyStreakModalOpen(false);
+    try {
+      const current = userRef.current;
+      const state = computeUserStreakState(
+        {
+          lastStreakClaimDate: current.lastStreakClaimDate,
+          storedStreakDays: current.streakDays ?? current.activityStats?.streakDays ?? 0,
+        },
+        serverDateKey
+      );
+      const dismissKey = `ecohero_daily_modal_dismissed_${current.uid || 'guest'}_${state.todayKey}`;
+      sessionStorage.setItem(dismissKey, '1');
+    } catch {
+      // ignore storage errors
+    }
+  }, [serverDateKey]);
+
+  // Automatically open Daily Login Gift modal on first visit each day (Asia/Tashkent)
+  useEffect(() => {
+    if (!bootstrapReady || !telegramAuthReady) return;
+    if (activeTab !== 'home') return;
+    if (onboardingModalOpen || editProfileModalOpen || authModalOpen || roleRequestModalOpen) return;
+
+    const state = computeUserStreakState(
+      {
+        lastStreakClaimDate: user.lastStreakClaimDate,
+        storedStreakDays: user.streakDays ?? user.activityStats?.streakDays ?? 0,
+      },
+      serverDateKey
+    );
+
+    if (state.claimedToday) return;
+
+    try {
+      const dismissKey = `ecohero_daily_modal_dismissed_${user.uid || 'guest'}_${state.todayKey}`;
+      if (sessionStorage.getItem(dismissKey) === '1') return;
+    } catch {
+      // ignore storage errors
+    }
+
+    const timer = window.setTimeout(() => {
+      setDailyStreakModalOpen(true);
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [
+    bootstrapReady,
+    telegramAuthReady,
+    activeTab,
+    onboardingModalOpen,
+    editProfileModalOpen,
+    authModalOpen,
+    roleRequestModalOpen,
+    user.uid,
+    user.lastStreakClaimDate,
+    user.streakDays,
+    user.activityStats?.streakDays,
+    serverDateKey,
+  ]);
 
   // Sync theme
   useEffect(() => {
@@ -1747,7 +1838,12 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         })
         .catch(err => {
           console.error('Telegram WebApp auth error:', err);
+        })
+        .finally(() => {
+          setTelegramAuthReady(true);
         });
+    } else {
+      setTelegramAuthReady(true);
     }
   }, [syncBootstrap, showNotification, triggerHaptic, saveSessionToken]);
 
@@ -2273,12 +2369,16 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     alreadyClaimed?: boolean;
   }> => {
     try {
-      if (sessionToken) {
+      let activeTok = sessionTokenRef.current;
+      if (!activeTok) {
+        activeTok = await refreshSessionToken();
+      }
+      if (activeTok) {
         const res = await apiFetch('/api/streak/claim', {
           method: 'POST',
           body: JSON.stringify({}),
         });
-        const data = await res.json();
+        const data = await parseApiJson<any>(res);
         if (data.alreadyClaimed) {
           if (data.user) {
             setUser(prev => {
@@ -2287,11 +2387,12 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               return updated;
             });
           }
+          setDailyStreakModalOpen(false);
           showNotification(data.message || 'Bugungi kunlik streak mukofoti allaqachon olingan', 'info');
           return { success: false, alreadyClaimed: true, streakDays: data.streakDays };
         }
 
-        if (data.success) {
+        if (res.ok && data.success) {
           const earned = Number(data.rewardCoins || 50);
           const nextDays = Number(data.streakDays || 1);
           setUser(prev => {
@@ -2320,6 +2421,7 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             localStorage.setItem('ecohero_user', JSON.stringify(updated));
             return updated;
           });
+          setDailyStreakModalOpen(false);
           await syncBootstrap();
           triggerConfetti();
           triggerHaptic('success');
@@ -2341,18 +2443,31 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             wasReset: Boolean(data.wasResetDueToInactivity),
           };
         }
+
+        if (!res.ok) {
+          showNotification(data?.error || 'Mukofotni olishda server xatoligi yuz berdi', 'warning');
+          return { success: false };
+        }
       }
     } catch (e) {
       console.warn('Server streak claim error, checking guest state:', e);
+      if (sessionTokenRef.current || user.isOnboarded) {
+        showNotification('Server bilan ulanishda xatolik. Qayta urinib ko‘ring.', 'warning');
+        return { success: false };
+      }
     }
 
     // Guest / pre-auth fallback using exact same calendar-day escalating logic
-    const computed = computeUserStreakState({
-      lastStreakClaimDate: user.lastStreakClaimDate,
-      storedStreakDays: user.streakDays ?? user.activityStats?.streakDays ?? 0,
-    });
+    const computed = computeUserStreakState(
+      {
+        lastStreakClaimDate: user.lastStreakClaimDate,
+        storedStreakDays: user.streakDays ?? user.activityStats?.streakDays ?? 0,
+      },
+      serverDateKey
+    );
 
     if (computed.claimedToday) {
+      setDailyStreakModalOpen(false);
       showNotification('Bugungi kunlik streak mukofoti allaqachon olingan', 'info');
       return { success: false, alreadyClaimed: true, streakDays: computed.currentStreakDays };
     }
@@ -2381,6 +2496,7 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem('ecohero_user', JSON.stringify(updated));
       return updated;
     });
+    setDailyStreakModalOpen(false);
     triggerConfetti();
     triggerHaptic('success');
     showNotification(
@@ -4548,6 +4664,10 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateUserProfile,
         claimDailyQuizReward,
         claimDailyStreakReward,
+        serverDateKey,
+        dailyStreakModalOpen,
+        openDailyStreakModal,
+        closeDailyStreakModal,
         syncBootstrap,
         updateShopItemPriceAndStock,
         updateShopItem,

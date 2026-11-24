@@ -24,11 +24,14 @@ import {
   Video,
   Award,
   Target,
+  Flame,
+  ChevronRight,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useEco } from '../../context/EcoContext';
 import { UserRole } from '../../types/eco';
 import { PWAInstallButton } from '../common/PWAInstallButton';
+import { computeUserStreakState } from '../../utils/streak';
 
 export const Navbar: React.FC = () => {
   const {
@@ -45,6 +48,8 @@ export const Navbar: React.FC = () => {
     logoutUser,
     notifications,
     markNotificationRead,
+    serverDateKey,
+    openDailyStreakModal,
   } = useEco();
 
   const [roleMenuOpen, setRoleMenuOpen] = useState(false);
@@ -59,6 +64,13 @@ export const Navbar: React.FC = () => {
   }, []);
 
   const unreadNotifs = notifications.filter(n => !n.read).length;
+  const streakState = computeUserStreakState(
+    {
+      lastStreakClaimDate: user.lastStreakClaimDate,
+      storedStreakDays: user.streakDays ?? user.activityStats?.streakDays ?? 0,
+    },
+    serverDateKey
+  );
 
   const navLinks = [
     { id: 'home', label: 'Bosh sahifa', icon: Leaf },
@@ -371,6 +383,38 @@ export const Navbar: React.FC = () => {
               {mobileMenuOpen ? <X className="w-4 h-4 sm:w-5 sm:h-5" /> : <Menu className="w-4 h-4 sm:w-5 sm:h-5" />}
             </button>
           </div>
+        </div>
+
+        {/* Compact Top Navigation Streak Indicator */}
+        <div className="pb-2 pt-0.5 flex items-center justify-center sm:justify-end">
+          <button
+            type="button"
+            onClick={openDailyStreakModal}
+            aria-label="Kunlik Eko-Streak kalendarini ochish"
+            className={`group inline-flex max-w-full items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-bold transition-all cursor-pointer whitespace-nowrap ${
+              streakState.claimedToday
+                ? 'bg-emerald-500/10 dark:bg-[#071D15]/90 border-emerald-500/30 text-slate-700 dark:text-emerald-200 hover:border-emerald-400/60'
+                : 'bg-amber-500/15 dark:bg-amber-500/15 border-amber-400/50 text-amber-700 dark:text-amber-200 hover:border-amber-300 shadow-sm shadow-amber-500/10'
+            }`}
+          >
+            <Flame className="w-3.5 h-3.5 text-amber-500 fill-amber-500 shrink-0" />
+            <span className="truncate font-mono tabular-nums">
+              {streakState.claimedToday ? (
+                <>
+                  {streakState.currentStreakDays} kun <span className="opacity-50">|</span> Ertaga +{streakState.nextTomorrowReward} EcoCoin
+                </>
+              ) : streakState.currentStreakDays > 0 ? (
+                <>
+                  {streakState.currentStreakDays} kun <span className="opacity-50">|</span> Bugun +{streakState.todayReward} EcoCoin
+                </>
+              ) : (
+                <>
+                  Bugun +{streakState.todayReward} EcoCoin <span className="opacity-50">|</span> Sovg&apos;ani olish
+                </>
+              )}
+            </span>
+            <ChevronRight className="w-3 h-3 opacity-70 group-hover:translate-x-0.5 transition-transform shrink-0" />
+          </button>
         </div>
 
         {/* Mobile Sidebar/Menu overlay */}

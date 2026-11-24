@@ -31,6 +31,7 @@ const VoucherPublicPage = lazy(() => import('./pages/VoucherPublicPage').then(m 
 
 import { GlobalErrorBoundary } from './components/common/GlobalErrorBoundary';
 import { OfflineSyncBanner } from './components/common/OfflineSyncBanner';
+import { DailyStreakModal } from './components/common/DailyStreakModal';
 import { CheckCircle2, AlertTriangle, X, Loader2, Sparkles, WifiOff, RotateCw } from 'lucide-react';
 
 function getVoucherCodeFromLocation(): string | null {
@@ -106,6 +107,8 @@ const AppContent: React.FC = () => {
     roleRequestModalOpen,
     closeRoleRequestModal,
     targetRequestedRole,
+    dailyStreakModalOpen,
+    closeDailyStreakModal,
     isOnline,
     isServerConnected,
     isCheckingConnection,
@@ -392,6 +395,12 @@ const AppContent: React.FC = () => {
         isOpen={roleRequestModalOpen}
         onClose={closeRoleRequestModal}
         targetRole={targetRequestedRole}
+      />
+
+      {/* Daily Login Gift & 7-Day Reward Calendar Modal */}
+      <DailyStreakModal
+        isOpen={dailyStreakModalOpen}
+        onClose={closeDailyStreakModal}
       />
     </div>
   );

@@ -5,17 +5,14 @@ import {
   Coins,
   ShieldCheck,
   TreePine,
-  Users,
   ArrowRight,
   School,
   ExternalLink,
   ChevronRight,
   Target,
-  Flame,
   Camera,
   Trophy,
   Gift,
-  Check,
   Radio,
   Share2,
   Edit2,
@@ -24,18 +21,15 @@ import {
   Image as ImageIcon,
   X,
   Compass,
-  Award,
-  CheckCircle2,
   TrendingUp,
 } from 'lucide-react';
 import { motion, Variants } from 'framer-motion';
 import { useEco } from '../context/EcoContext';
 import { EcoAdBanner } from '../components/EcoAdBanner';
-import { computeUserStreakState, DAILY_STREAK_REWARDS } from '../utils/streak';
+import { computeUserStreakState } from '../utils/streak';
 import { resolveMediaUrl, openAdTargetUrl } from '../utils/api';
 import { EcoReport, HomePost, HomePostCategory, ProblemStatus } from '../types/eco';
 import heroEcoForestImg from '../assets/images/hero_eco_forest_1795179384249.jpg';
-import dailyQuestChestImg from '../assets/images/daily_quest_chest_1795179383259.jpg';
 
 export const HomePage: React.FC = () => {
   const {
@@ -47,8 +41,8 @@ export const HomePage: React.FC = () => {
     homePosts,
     ecoMissions,
     missionCompletions,
-    transactions,
-    claimDailyStreakReward,
+    serverDateKey,
+    openDailyStreakModal,
     triggerHaptic,
     editReport,
     deleteReport,
@@ -58,8 +52,6 @@ export const HomePage: React.FC = () => {
     uploadMediaFile,
     showNotification,
   } = useEco();
-
-  const [isClaimingStreak, setIsClaimingStreak] = useState(false);
 
   // Super Admin inline report editor state
   const [editingReport, setEditingReport] = useState<EcoReport | null>(null);
@@ -89,10 +81,13 @@ export const HomePage: React.FC = () => {
     schools.slice().sort((a, b) => (b.totalCoins || 0) - (a.totalCoins || 0))[0]?.name ||
     'O‘zbekiston maktablari';
 
-  const streakState = computeUserStreakState({
-    lastStreakClaimDate: user.lastStreakClaimDate,
-    storedStreakDays: user.streakDays ?? user.activityStats?.streakDays ?? 0,
-  });
+  const streakState = computeUserStreakState(
+    {
+      lastStreakClaimDate: user.lastStreakClaimDate,
+      storedStreakDays: user.streakDays ?? user.activityStats?.streakDays ?? 0,
+    },
+    serverDateKey
+  );
 
   // Deterministic XP & Next Level Progress from real EcoContext data
   const userXP = user.ecoXP || (user.totalCoinsEarned || user.ecoCoins || 0) * 4;
@@ -113,59 +108,6 @@ export const HomePage: React.FC = () => {
       null,
     [activeMissions, missionCompletions]
   );
-
-  // Real 7-day weekly activity computed from transactions + user reports
-  const weeklyActivity = useMemo(() => {
-    const dayLabels = ['Ya', 'Du', 'Se', 'Ch', 'Pa', 'Ju', 'Sh'];
-    const today = new Date();
-    const days: { key: string; label: string; coins: number; actions: number; isToday: boolean }[] = [];
-
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(today);
-      d.setDate(today.getDate() - i);
-      const iso = d.toISOString().slice(0, 10);
-      days.push({
-        key: iso,
-        label: dayLabels[d.getDay()],
-        coins: 0,
-        actions: 0,
-        isToday: i === 0,
-      });
-    }
-
-    const dayMap = new Map(days.map(d => [d.key, d]));
-    for (const tx of transactions) {
-      if (!tx.createdAt) continue;
-      const iso = String(tx.createdAt).slice(0, 10);
-      const slot = dayMap.get(iso);
-      if (slot) {
-        slot.actions += 1;
-        if (tx.amount > 0) slot.coins += tx.amount;
-      }
-    }
-    for (const rep of reports) {
-      if (rep.reporterUid !== user.uid || !rep.createdAt) continue;
-      const iso = String(rep.createdAt).slice(0, 10);
-      const slot = dayMap.get(iso);
-      if (slot) slot.actions += 1;
-    }
-
-    const maxScore = Math.max(1, ...days.map(d => d.coins > 0 ? d.coins : d.actions * 50));
-    const totalWeekCoins = days.reduce((s, d) => s + d.coins, 0);
-    const totalWeekActions = days.reduce((s, d) => s + d.actions, 0);
-
-    return {
-      days: days.map(d => {
-        const val = d.coins > 0 ? d.coins : d.actions * 50;
-        return {
-          ...d,
-          pct: val > 0 ? Math.max(18, Math.round((val / maxScore) * 100)) : 8,
-        };
-      }),
-      totalWeekCoins,
-      totalWeekActions,
-    };
-  }, [transactions, reports, user.uid]);
 
   // Interactive Uzbekistan Map Preview pins from real schools & reports
   const mapPreviewData = useMemo(() => {
@@ -335,16 +277,6 @@ export const HomePage: React.FC = () => {
     }
   };
 
-  const handleClaimStreak = async () => {
-    if (streakState.claimedToday || isClaimingStreak) return;
-    setIsClaimingStreak(true);
-    try {
-      await claimDailyStreakReward();
-    } finally {
-      setIsClaimingStreak(false);
-    }
-  };
-
   const containerVariants: Variants = {
     hidden: { opacity: 0 },
     visible: {
@@ -365,7 +297,7 @@ export const HomePage: React.FC = () => {
       initial="hidden"
       animate="visible"
       variants={containerVariants}
-      className="w-full max-w-full overflow-x-clip space-y-8 sm:space-y-12 pb-28 pt-2"
+      className="w-full max-w-full overflow-x-clip space-y-6 sm:space-y-9 pb-28 pt-2"
     >
       {/* 0. Live Eco-Radar Uzbekistan Ticker */}
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
@@ -552,12 +484,16 @@ export const HomePage: React.FC = () => {
                       {user.treesPlanted || 0}
                     </div>
                   </div>
-                  <div className="p-3 rounded-2xl bg-white/80 dark:bg-[#05130E] border border-slate-200/70 dark:border-emerald-500/15">
+                  <button
+                    type="button"
+                    onClick={openDailyStreakModal}
+                    className="p-3 rounded-2xl bg-white/80 dark:bg-[#05130E] border border-slate-200/70 dark:border-emerald-500/15 hover:border-amber-400/50 transition-colors cursor-pointer"
+                  >
                     <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Streak</div>
                     <div className="text-base font-black text-amber-500 dark:text-amber-400 font-mono tabular-nums mt-0.5">
                       {streakState.currentStreakDays} kun
                     </div>
-                  </div>
+                  </button>
                 </div>
 
                 {/* Quick Navigation Buttons */}
@@ -587,174 +523,9 @@ export const HomePage: React.FC = () => {
         </div>
       </section>
 
-      {/* 2. Daily Streak Reward Ladder & Featured Daily Mission */}
+      {/* 2. Interactive Environmental Map Preview + Featured Daily Mission */}
       <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-          {/* 7-Day Daily Streak Reward Box */}
-          <motion.div
-            variants={itemVariants}
-            className="lg:col-span-7 eco-surface rounded-[28px] p-5 sm:p-6 shadow-xl border-amber-500/25 space-y-4 flex flex-col justify-between"
-          >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-3.5 min-w-0">
-                <div className="w-16 h-16 rounded-2xl overflow-hidden border border-amber-400/40 bg-[#06130E] shrink-0 shadow-lg">
-                  <img
-                    src={dailyQuestChestImg}
-                    alt="Kunlik Eko-Mukofot"
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-display font-black text-slate-900 dark:text-white text-base sm:text-lg tabular-nums flex items-center gap-1.5">
-                      <Flame className="w-4 h-4 text-amber-500 fill-amber-500 shrink-0" />
-                      {streakState.currentStreakDays > 0
-                        ? `${streakState.currentStreakDays} Kunlik Eko-Streak`
-                        : 'Kunlik Eko-Streak'}
-                    </span>
-                    <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400">
-                      {streakState.claimedToday
-                        ? '· Bugun faol'
-                        : streakState.wasResetDueToInactivity
-                        ? '· Qayta boshlash'
-                        : `· ${streakState.claimDayNumber}-kun tayyor`}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-snug">
-                    {streakState.claimedToday
-                      ? `Bugun +${streakState.todayReward} EcoCoin olindi · Ertaga +${streakState.nextTomorrowReward} EcoCoin`
-                      : streakState.wasResetDueToInactivity
-                      ? 'Kecha kirmaganingiz uchun mukofot 1-kundan (+50 EcoCoin) boshlanadi'
-                      : `Bugun kiring va +${streakState.todayReward} EcoCoin oling · Ertaga +${streakState.nextTomorrowReward}`}
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                disabled={streakState.claimedToday || isClaimingStreak}
-                onClick={handleClaimStreak}
-                className={`w-full sm:w-auto px-5 min-h-[44px] rounded-2xl font-black text-xs transition-all flex items-center justify-center gap-2 whitespace-nowrap shrink-0 cursor-pointer ${
-                  streakState.claimedToday
-                    ? 'bg-slate-100 dark:bg-[#05130E] text-slate-500 dark:text-emerald-400/80 cursor-not-allowed border border-slate-200 dark:border-emerald-500/20'
-                    : 'bg-gradient-to-r from-amber-500 to-amber-400 hover:brightness-105 text-[#040D0A] shadow-lg shadow-amber-500/25'
-                }`}
-              >
-                {streakState.claimedToday ? (
-                  <>
-                    <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                    <span>Bugun olindi</span>
-                  </>
-                ) : (
-                  <>
-                    <Gift className="w-4 h-4 shrink-0" />
-                    <span className="tabular-nums">
-                      {isClaimingStreak ? 'Yuklanmoqda...' : `+${streakState.todayReward} EcoCoin Olish`}
-                    </span>
-                  </>
-                )}
-              </button>
-            </div>
-
-            {/* 7-Day Escalating Reward Ladder */}
-            <div className="grid grid-cols-7 gap-1.5 sm:gap-2 pt-3 border-t border-slate-200/70 dark:border-emerald-500/15">
-              {DAILY_STREAK_REWARDS.map((coins, idx) => {
-                const dayNum = idx + 1;
-                const effectiveCycleDay =
-                  streakState.currentStreakDays > 7 && streakState.claimedToday
-                    ? 7
-                    : streakState.currentStreakDays;
-                const isDone =
-                  streakState.claimedToday
-                    ? dayNum <= effectiveCycleDay
-                    : dayNum < streakState.claimDayNumber && streakState.currentStreakDays > 0;
-                const isTodayTarget = !streakState.claimedToday && dayNum === Math.min(7, streakState.claimDayNumber);
-
-                return (
-                  <div
-                    key={dayNum}
-                    className={`rounded-2xl py-2 px-1 text-center border text-[10px] tabular-nums transition-colors ${
-                      isDone
-                        ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-600 dark:text-emerald-300 font-bold'
-                        : isTodayTarget
-                        ? 'bg-amber-500/20 border-amber-400/60 text-amber-600 dark:text-amber-300 font-black shadow-sm shadow-amber-500/15'
-                        : 'bg-slate-50 dark:bg-[#040D0A] border-slate-200 dark:border-emerald-500/15 text-slate-500 dark:text-slate-400'
-                    }`}
-                  >
-                    <div className="text-[9px] opacity-80">{dayNum}-kun</div>
-                    <div className="font-mono font-bold mt-0.5">+{coins}</div>
-                  </div>
-                );
-              })}
-            </div>
-          </motion.div>
-
-          {/* Featured Daily Mission Spotlight Card */}
-          <motion.div
-            variants={itemVariants}
-            className="lg:col-span-5 relative overflow-hidden rounded-[28px] bg-gradient-to-br from-[#0A261B] via-[#071912] to-[#040D0A] border border-emerald-500/30 p-5 sm:p-6 text-white shadow-xl flex flex-col justify-between gap-4"
-          >
-            <div className="pointer-events-none absolute -right-12 -top-12 w-40 h-40 rounded-full bg-emerald-400/15 blur-2xl" />
-            <div className="space-y-2.5 relative z-10">
-              <div className="flex items-center justify-between gap-2 text-xs">
-                <span className="inline-flex items-center gap-1.5 text-emerald-400 font-black uppercase tracking-wider text-[11px]">
-                  <Target className="w-4 h-4" />
-                  <span>Kunlik Tanlangan Missiya</span>
-                </span>
-                <span className="font-mono tabular-nums text-[11px] font-bold text-slate-300">
-                  {missionCompletions.length} / {activeMissions.length} bajarildi
-                </span>
-              </div>
-
-              {featuredMission ? (
-                <>
-                  <h3 className="font-display text-lg sm:text-xl font-extrabold text-white leading-snug">
-                    {featuredMission.title}
-                  </h3>
-                  <p className="text-xs text-slate-300 leading-relaxed line-clamp-2">
-                    {featuredMission.description}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <h3 className="font-display text-lg sm:text-xl font-extrabold text-white leading-snug">
-                    Yangi ekologik missiyalar bilan ball to&apos;plang
-                  </h3>
-                  <p className="text-xs text-slate-300 leading-relaxed">
-                    Eko-viktorinalar, Telegram kanallar va amaliy topshiriqlarni bajarib EcoCoin yuting.
-                  </p>
-                </>
-              )}
-            </div>
-
-            <div className="flex items-center justify-between gap-3 pt-3 border-t border-emerald-500/20 relative z-10">
-              <div>
-                <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Mukofot</div>
-                <div className="text-lg font-black font-mono tabular-nums text-amber-400 flex items-center gap-1">
-                  <Coins className="w-4 h-4" />
-                  <span>+{featuredMission?.rewardCoins || 100} EC</span>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  triggerHaptic('medium');
-                  setActiveTab('missions');
-                }}
-                className="min-h-[42px] px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-400 to-teal-300 hover:brightness-105 text-[#040D0A] font-black text-xs uppercase tracking-wider inline-flex items-center gap-1.5 shadow-lg shadow-emerald-500/25 cursor-pointer"
-              >
-                <span>Bajarish</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* 3. Interactive Environmental Map Preview + Weekly Progress & Achievements */}
-      <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
           {/* Interactive Map Preview */}
           <motion.div
             variants={itemVariants}
@@ -869,82 +640,64 @@ export const HomePage: React.FC = () => {
             </div>
           </motion.div>
 
-          {/* Weekly Progress & Achievements Card */}
+          {/* Featured Daily Mission Spotlight Card */}
           <motion.div
             variants={itemVariants}
-            className="lg:col-span-5 eco-surface rounded-[28px] p-5 sm:p-6 shadow-xl space-y-5 flex flex-col justify-between"
+            className="lg:col-span-5 relative overflow-hidden rounded-[28px] bg-gradient-to-br from-[#0A261B] via-[#071912] to-[#040D0A] border border-emerald-500/30 p-5 sm:p-6 text-white shadow-xl flex flex-col justify-between gap-4"
           >
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <div className="text-[11px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
-                  <Award className="w-4 h-4" />
-                  <span>Haftalik Faollik & Yutuqlar</span>
-                </div>
-                <h3 className="font-display text-lg font-extrabold text-slate-900 dark:text-white mt-0.5 tabular-nums">
-                  +{weeklyActivity.totalWeekCoins.toLocaleString()} EC · {weeklyActivity.totalWeekActions} harakat
-                </h3>
+            <div className="pointer-events-none absolute -right-12 -top-12 w-40 h-40 rounded-full bg-emerald-400/15 blur-2xl" />
+            <div className="space-y-2.5 relative z-10">
+              <div className="flex items-center justify-between gap-2 text-xs">
+                <span className="inline-flex items-center gap-1.5 text-emerald-400 font-black uppercase tracking-wider text-[11px]">
+                  <Target className="w-4 h-4" />
+                  <span>Kunlik Tanlangan Missiya</span>
+                </span>
+                <span className="font-mono tabular-nums text-[11px] font-bold text-slate-300">
+                  {missionCompletions.length} / {activeMissions.length} bajarildi
+                </span>
               </div>
+
+              {featuredMission ? (
+                <>
+                  <h3 className="font-display text-lg sm:text-xl font-extrabold text-white leading-snug">
+                    {featuredMission.title}
+                  </h3>
+                  <p className="text-xs text-slate-300 leading-relaxed line-clamp-3">
+                    {featuredMission.description}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h3 className="font-display text-lg sm:text-xl font-extrabold text-white leading-snug">
+                    Yangi ekologik missiyalar bilan ball to&apos;plang
+                  </h3>
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    Eko-viktorinalar, Telegram kanallar va amaliy topshiriqlarni bajarib EcoCoin yuting.
+                  </p>
+                </>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between gap-3 pt-3 border-t border-emerald-500/20 relative z-10">
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Mukofot</div>
+                <div className="text-lg font-black font-mono tabular-nums text-amber-400 flex items-center gap-1">
+                  <Coins className="w-4 h-4" />
+                  <span>+{featuredMission?.rewardCoins || 100} EC</span>
+                </div>
+              </div>
+
               <button
                 type="button"
-                onClick={() => setActiveTab('profile')}
-                className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer shrink-0"
+                onClick={() => {
+                  triggerHaptic('medium');
+                  setActiveTab('missions');
+                }}
+                className="min-h-[42px] px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-400 to-teal-300 hover:brightness-105 text-[#040D0A] font-black text-xs uppercase tracking-wider inline-flex items-center gap-1.5 shadow-lg shadow-emerald-500/25 cursor-pointer"
               >
-                EcoPassport →
+                <span>Bajarish</span>
+                <ArrowRight className="w-4 h-4" />
               </button>
-            </div>
-
-            {/* Lightweight 7-day SVG/CSS Bar Chart driven by real transactions */}
-            <div className="grid grid-cols-7 gap-2 items-end h-28 px-2 py-3 rounded-2xl bg-slate-100/80 dark:bg-[#040D0A]/80 border border-slate-200/70 dark:border-emerald-500/15">
-              {weeklyActivity.days.map(day => (
-                <div key={day.key} className="flex flex-col items-center justify-end h-full gap-1.5">
-                  <div className="w-full flex-1 flex items-end justify-center">
-                    <div
-                      title={`${day.label}: +${day.coins} EC (${day.actions} harakat)`}
-                      style={{ height: `${day.pct}%` }}
-                      className={`w-full max-w-[20px] rounded-t-lg transition-all ${
-                        day.isToday
-                          ? 'bg-gradient-to-t from-emerald-500 to-teal-300 shadow-[0_0_10px_rgba(52,211,153,0.45)]'
-                          : day.actions > 0 || day.coins > 0
-                          ? 'bg-emerald-500/60 dark:bg-emerald-500/50'
-                          : 'bg-slate-300/70 dark:bg-emerald-950'
-                      }`}
-                    />
-                  </div>
-                  <span
-                    className={`text-[10px] font-mono ${
-                      day.isToday
-                        ? 'font-black text-emerald-600 dark:text-emerald-400'
-                        : 'text-slate-500 dark:text-slate-400'
-                    }`}
-                  >
-                    {day.label}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            {/* Achievements Badges Summary */}
-            <div className="grid grid-cols-2 gap-2.5">
-              <div className="p-3 rounded-2xl bg-white/80 dark:bg-[#05130E] border border-slate-200/70 dark:border-emerald-500/15 flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-amber-500/15 text-amber-500 flex items-center justify-center shrink-0">
-                  <Trophy className="w-4 h-4" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold">Unvon</div>
-                  <div className="text-xs font-black text-slate-900 dark:text-white truncate">{user.badge || 'Eko-Lochin'}</div>
-                </div>
-              </div>
-              <div className="p-3 rounded-2xl bg-white/80 dark:bg-[#05130E] border border-slate-200/70 dark:border-emerald-500/15 flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-emerald-500/15 text-emerald-500 flex items-center justify-center shrink-0">
-                  <CheckCircle2 className="w-4 h-4" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold">Missiyalar</div>
-                  <div className="text-xs font-black text-slate-900 dark:text-white font-mono tabular-nums">
-                    {missionCompletions.length} bajarildi
-                  </div>
-                </div>
-              </div>
             </div>
           </motion.div>
         </div>
@@ -1020,31 +773,6 @@ export const HomePage: React.FC = () => {
             );
           })}
         </div>
-      </section>
-
-      {/* 5. Key Metrics: 100% Real Live Database Totals */}
-      <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-        <motion.div variants={itemVariants} className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-5">
-          {[
-            { label: "Ro'yxatdan o'tgan Maktablar", val: liveMetrics.totalSchools.toLocaleString(), sub: undefined, icon: School, color: 'text-indigo-500 dark:text-indigo-400' },
-            { label: "Ro'yxatdagi O'quvchilar", val: liveMetrics.totalUsers.toLocaleString(), sub: `Botdan: ${liveMetrics.botUsersCount.toLocaleString()} ta`, icon: Users, color: 'text-emerald-600 dark:text-emerald-400' },
-            { label: 'Hal Qilingan Muammolar', val: liveMetrics.resolvedReports.toLocaleString(), sub: undefined, icon: Target, color: 'text-teal-600 dark:text-teal-400' },
-            { label: 'Ekilgan Daraxtlar', val: liveMetrics.treesPlanted.toLocaleString(), sub: undefined, icon: TreePine, color: 'text-amber-500 dark:text-amber-400' },
-          ].map((m) => (
-            <div key={m.label} className="group p-5 sm:p-6 eco-surface rounded-3xl shadow-sm hover:border-emerald-500/45 transition-all text-center space-y-1">
-              <div className={`w-10 h-10 rounded-2xl bg-slate-100 dark:bg-[#040D0A] border border-slate-200/80 dark:border-emerald-500/20 ${m.color} flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform`}>
-                <m.icon className="w-5 h-5" />
-              </div>
-              <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white font-mono tracking-tight tabular-nums">{m.val}</div>
-              <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">{m.label}</div>
-              {m.sub && (
-                <div className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 tabular-nums pt-0.5">
-                  {m.sub}
-                </div>
-              )}
-            </div>
-          ))}
-        </motion.div>
       </section>
 
       {/* 6. Ad Placement: Premium Banner */}
