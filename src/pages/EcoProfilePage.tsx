@@ -29,6 +29,7 @@ import {
 import { motion } from 'framer-motion';
 import { useEco } from '../context/EcoContext';
 import { computeUserStreakState } from '../utils/streak';
+import { calculateLevelProgress } from '../utils/level';
 import { StudentCabinetRatingsPanel } from '../components/ratings/StudentCabinetRatingsPanel';
 import ecopassportBannerImg from '../assets/images/ecopassport_banner_1795179383722.jpg';
 
@@ -109,9 +110,12 @@ export const EcoProfilePage: React.FC = () => {
   const rankDisplay = userRankIdx >= 0 ? `#${userRankIdx + 1}` : schoolObj ? `#${schoolObj.ratingRank}` : '—';
 
   const userXP = user.ecoXP || (user.totalCoinsEarned || user.ecoCoins || 0) * 4;
-  const computedLevel = user.level || Math.max(1, Math.floor(userXP / 500) + 1);
-  const xpIntoLevel = userXP % 500;
-  const xpProgressPct = Math.min(100, Math.max(4, Math.round((xpIntoLevel / 500) * 100)));
+  const levelProgress = calculateLevelProgress(userXP);
+  const computedLevel = levelProgress.level;
+  const xpIntoLevel = levelProgress.xpIntoLevel;
+  const xpRequiredForNextLevel = levelProgress.xpRequiredForNextLevel;
+  const xpRemainingForNextLevel = levelProgress.xpRemainingForNextLevel;
+  const xpProgressPct = levelProgress.progressPct;
 
   const streakDays = computeUserStreakState({
     lastStreakClaimDate: user.lastStreakClaimDate,
@@ -264,7 +268,7 @@ export const EcoProfilePage: React.FC = () => {
               <span>Daraja {computedLevel} · {user.badge || 'Eko-Lochin'}</span>
             </div>
             <span className="font-mono tabular-nums text-emerald-600 dark:text-emerald-400 font-bold">
-              {xpIntoLevel} / 500 XP · Keyingi darajagacha {500 - xpIntoLevel} XP
+              {xpIntoLevel.toLocaleString()} / {xpRequiredForNextLevel.toLocaleString()} XP · Keyingi darajagacha {xpRemainingForNextLevel.toLocaleString()} XP
             </span>
           </div>
           <div className="w-full h-2.5 rounded-full bg-slate-200 dark:bg-[#040D0A] overflow-hidden border border-slate-200 dark:border-emerald-500/20">

@@ -1508,8 +1508,12 @@ export const EcoMapPage: React.FC = () => {
           </div>
         </aside>
 
-        {/* Top-Right Basemap Switcher: Satellite, Hybrid, Normal Map */}
-        <div className="absolute top-2.5 right-2.5 sm:top-3 sm:right-3 z-20 flex items-center gap-1 p-1 rounded-2xl eco-glass shadow-xl max-w-[calc(100vw-1.5rem)] overflow-x-auto no-scrollbar">
+        {/* 1. Top Map Controls: Compact Segmented Basemap Switcher */}
+        <div
+          role="group"
+          aria-label="Xarita ko‘rinish rejimi"
+          className="absolute top-2.5 right-2.5 sm:top-3 sm:right-3 z-20 inline-flex items-center gap-0.5 p-[3px] rounded-xl bg-[#041610]/82 backdrop-blur-md border border-emerald-400/20 shadow-[0_6px_20px_-4px_rgba(0,0,0,0.45)] max-w-[calc(100%-1.25rem)] overflow-x-auto no-scrollbar"
+        >
           {(useGoogleMap
             ? ([
                 { id: 'hybrid', label: 'Hybrid', icon: Satellite },
@@ -1529,52 +1533,57 @@ export const EcoMapPage: React.FC = () => {
               <button
                 key={styleBtn.id}
                 type="button"
+                aria-pressed={active}
                 onClick={() => {
                   triggerHaptic('light');
                   setTileNotice(null);
                   setBaseStyle(styleBtn.id);
                 }}
-                className={`min-h-[34px] sm:min-h-[38px] px-2.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 ${
+                className={`h-7 sm:h-8 px-2 sm:px-2.5 rounded-lg text-[10px] sm:text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer shrink-0 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
                   active
-                    ? 'bg-emerald-500 text-slate-950 font-bold shadow-sm'
-                    : 'text-slate-700 dark:text-emerald-100/80 hover:bg-slate-100 dark:hover:bg-emerald-500/10'
+                    ? 'bg-emerald-500 text-slate-950 font-bold shadow-[0_2px_10px_rgba(16,185,129,0.35)]'
+                    : 'text-emerald-100/80 hover:text-white hover:bg-emerald-500/15'
                 }`}
               >
-                <styleBtn.icon className="w-3.5 h-3.5 shrink-0" />
+                <styleBtn.icon className="w-3 h-3 shrink-0" />
                 <span>{styleBtn.label}</span>
               </button>
             );
           })}
         </div>
 
-        {/* Right Floating Navigation & Zoom Controls */}
-        <div className="absolute right-2.5 sm:right-3 top-14 sm:top-16 z-20 flex flex-col gap-1.5">
+        {/* 2. Right Control Panel: Unified Compact Vertical Dock */}
+        <div
+          role="group"
+          aria-label="Xarita navigatsiyasi"
+          className="absolute right-2.5 sm:right-3 top-12 sm:top-[52px] z-20 flex flex-col gap-0.5 p-1 rounded-xl bg-[#041610]/82 backdrop-blur-md border border-emerald-400/20 shadow-[0_8px_24px_-6px_rgba(0,0,0,0.5)]"
+        >
           <button
             type="button"
             onClick={() => setZoomAction({ type: 'in', ts: Date.now() })}
             aria-label="Yaqinlashtirish"
             title="Zoom +"
-            className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl eco-glass shadow-lg flex items-center justify-center text-slate-700 dark:text-emerald-100 hover:text-emerald-500 cursor-pointer"
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center text-emerald-100/90 hover:text-white hover:bg-emerald-500/20 active:scale-95 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
           >
-            <Plus className="w-5 h-5" />
+            <Plus className="w-4 h-4" />
           </button>
           <button
             type="button"
             onClick={() => setZoomAction({ type: 'out', ts: Date.now() })}
             aria-label="Uzoqlashtirish"
             title="Zoom -"
-            className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl eco-glass shadow-lg flex items-center justify-center text-slate-700 dark:text-emerald-100 hover:text-emerald-500 cursor-pointer"
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center text-emerald-100/90 hover:text-white hover:bg-emerald-500/20 active:scale-95 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
           >
-            <Minus className="w-5 h-5" />
+            <Minus className="w-4 h-4" />
           </button>
           <button
             type="button"
             onClick={() => setZoomAction({ type: 'reset', ts: Date.now() })}
             aria-label="O‘zbekiston ko‘rinishiga qaytish"
             title="O‘zbekiston ko‘rinishi"
-            className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl eco-glass shadow-lg flex items-center justify-center text-slate-700 dark:text-emerald-100 hover:text-emerald-500 cursor-pointer"
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center text-emerald-100/90 hover:text-white hover:bg-emerald-500/20 active:scale-95 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
           >
-            <RotateCcw className="w-4 h-4" />
+            <RotateCcw className="w-3.5 h-3.5" />
           </button>
           <button
             type="button"
@@ -1585,13 +1594,13 @@ export const EcoMapPage: React.FC = () => {
                 ? 'Jonli GPS faol — markazlashtirish'
                 : 'Mening joylashuvim (Jonli GPS)'
             }
-            className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl shadow-lg flex items-center justify-center transition-colors cursor-pointer ${
+            className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center active:scale-95 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
               gpsWatchEnabled && userLocation
-                ? 'bg-sky-500 text-white border border-sky-300 ring-2 ring-sky-400/40'
-                : 'eco-glass text-sky-600 dark:text-emerald-400 hover:bg-sky-50 dark:hover:bg-emerald-500/15'
+                ? 'bg-sky-500 text-white shadow-[0_2px_10px_rgba(14,165,233,0.45)]'
+                : 'text-emerald-300 hover:text-white hover:bg-emerald-500/20'
             }`}
           >
-            <Navigation className="w-4 h-4" />
+            <Navigation className="w-3.5 h-3.5" />
           </button>
           {gpsWatchEnabled && (
             <button
@@ -1599,24 +1608,25 @@ export const EcoMapPage: React.FC = () => {
               onClick={handleStopGpsTracking}
               aria-label="GPS kuzatuvini o‘chirish"
               title="GPS kuzatuvini to‘xtatish"
-              className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl eco-glass border border-rose-500/40 shadow-lg flex items-center justify-center text-rose-500 hover:bg-rose-500/15 cursor-pointer"
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center text-rose-400 hover:text-rose-300 hover:bg-rose-500/20 active:scale-95 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
             >
-              <Power className="w-4 h-4" />
+              <Power className="w-3.5 h-3.5" />
             </button>
           )}
           {mapMode === '2d' && (
             <button
               type="button"
+              aria-pressed={isTilted25D}
               onClick={() => {
                 triggerHaptic('light');
                 setIsTilted25D((v) => !v);
               }}
               aria-label="2.5D shahar binolari burchagi"
               title="2.5D burchak"
-              className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl border shadow-lg flex items-center justify-center text-[11px] font-bold transition-colors cursor-pointer ${
+              className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center text-[10px] font-bold tracking-tight active:scale-95 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
                 isTilted25D
-                  ? 'bg-emerald-500 border-emerald-400 text-slate-950'
-                  : 'eco-glass text-slate-700 dark:text-emerald-100 hover:text-emerald-400'
+                  ? 'bg-emerald-500 text-slate-950 shadow-[0_2px_10px_rgba(16,185,129,0.35)]'
+                  : 'text-emerald-100/90 hover:text-white hover:bg-emerald-500/20'
               }`}
             >
               2.5D
@@ -1650,7 +1660,7 @@ export const EcoMapPage: React.FC = () => {
 
         {/* Clicked Target Coordinate Action Bar */}
         {clickedCoords && !selectedSchool && !activeReportMatch && (
-          <div className="absolute bottom-20 lg:bottom-4 left-1/2 -translate-x-1/2 z-20 w-[92%] max-w-md eco-glass border-emerald-400/50 rounded-2xl p-3 shadow-2xl flex items-center justify-between gap-3">
+          <div className="absolute bottom-14 lg:bottom-4 left-1/2 -translate-x-1/2 z-20 w-[92%] max-w-md eco-glass border-emerald-400/50 rounded-2xl p-3 shadow-2xl flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
                 Tanlangan nuqta
@@ -1679,40 +1689,71 @@ export const EcoMapPage: React.FC = () => {
           </div>
         )}
 
-        {/* Mobile Bottom Ergonomic Dock */}
-        <div className="lg:hidden absolute bottom-3 left-3 right-3 z-20 flex items-center justify-between gap-2">
+        {/* 3. Bottom Map Controls: Compact Unified 3-Button Horizontal Bar (Mobile) */}
+        <div
+          role="group"
+          aria-label="Xarita panellari"
+          className="lg:hidden absolute bottom-2.5 left-1/2 -translate-x-1/2 z-20 w-[calc(100%-1.5rem)] max-w-[336px] p-1 rounded-xl bg-[#041610]/85 backdrop-blur-md border border-emerald-400/20 shadow-[0_10px_28px_-6px_rgba(0,0,0,0.55)] grid grid-cols-3 gap-1"
+        >
           <button
             type="button"
             onClick={() => {
+              triggerHaptic('light');
               setMobileSheetTab('layers');
               setMobileSheetOpen(true);
             }}
-            className="flex-1 min-h-[46px] px-3 rounded-2xl eco-glass shadow-xl text-xs font-semibold text-slate-900 dark:text-white flex items-center justify-center gap-2 cursor-pointer"
+            className={`h-9 px-2 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
+              mobileSheetOpen && mobileSheetTab === 'layers'
+                ? 'bg-emerald-500 text-slate-950 font-bold shadow-sm'
+                : 'text-emerald-100/90 hover:text-white hover:bg-emerald-500/15'
+            }`}
           >
-            <Layers className="w-4 h-4 text-emerald-400" />
-            Qatlamlar
+            <Layers
+              className={`w-3.5 h-3.5 shrink-0 ${
+                mobileSheetOpen && mobileSheetTab === 'layers' ? 'text-slate-950' : 'text-emerald-400'
+              }`}
+            />
+            <span className="truncate">Qatlamlar</span>
           </button>
           <button
             type="button"
             onClick={() => {
+              triggerHaptic('light');
               setMobileSheetTab('filters');
               setMobileSheetOpen(true);
             }}
-            className="flex-1 min-h-[46px] px-3 rounded-2xl eco-glass shadow-xl text-xs font-semibold text-slate-900 dark:text-white flex items-center justify-center gap-2 cursor-pointer"
+            className={`h-9 px-2 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
+              mobileSheetOpen && mobileSheetTab === 'filters'
+                ? 'bg-emerald-500 text-slate-950 font-bold shadow-sm'
+                : 'text-emerald-100/90 hover:text-white hover:bg-emerald-500/15'
+            }`}
           >
-            <SlidersHorizontal className="w-4 h-4 text-sky-400" />
-            Filtrlar
+            <SlidersHorizontal
+              className={`w-3.5 h-3.5 shrink-0 ${
+                mobileSheetOpen && mobileSheetTab === 'filters' ? 'text-slate-950' : 'text-sky-400'
+              }`}
+            />
+            <span className="truncate">Filtrlar</span>
           </button>
           <button
             type="button"
             onClick={() => {
+              triggerHaptic('light');
               setMobileSheetTab('results');
               setMobileSheetOpen(true);
             }}
-            className="flex-1 min-h-[46px] px-3 rounded-2xl eco-glass shadow-xl text-xs font-semibold text-slate-900 dark:text-white flex items-center justify-center gap-2 cursor-pointer"
+            className={`h-9 px-2 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
+              mobileSheetOpen && mobileSheetTab === 'results'
+                ? 'bg-emerald-500 text-slate-950 font-bold shadow-sm'
+                : 'text-emerald-100/90 hover:text-white hover:bg-emerald-500/15'
+            }`}
           >
-            <MapPin className="w-4 h-4 text-rose-400" />
-            Ro‘yxat
+            <MapPin
+              className={`w-3.5 h-3.5 shrink-0 ${
+                mobileSheetOpen && mobileSheetTab === 'results' ? 'text-slate-950' : 'text-rose-400'
+              }`}
+            />
+            <span className="truncate">Ro‘yxat</span>
           </button>
         </div>
       </div>

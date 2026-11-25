@@ -1090,6 +1090,8 @@ export interface EcoMission {
   proofType?: 'image' | 'video' | 'text' | 'any';
   difficulty?: 'easy' | 'medium' | 'hard';
   durationMinutes?: number;
+  durationLabel?: string;
+  imageUrl?: string;
   createdAt: string;
   createdByUid?: string;
   createdByName?: string;

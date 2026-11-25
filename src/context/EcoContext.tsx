@@ -242,6 +242,9 @@ interface EcoContextType {
   toggleTheme: () => void;
   activeTab: string;
   setActiveTab: (tab: string) => void;
+  ratingIntent: { tier: LeaderboardTier; filterToMyDistrict?: boolean; ts: number } | null;
+  openRatingTier: (tier: LeaderboardTier, options?: { filterToMyDistrict?: boolean }) => void;
+  clearRatingIntent: () => void;
   isTelegramMiniApp: boolean;
   triggerHaptic: (style?: 'light' | 'medium' | 'heavy' | 'success' | 'warning' | 'error') => void;
   referrals: ReferralRecord[];
@@ -1104,6 +1107,7 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const [activeTab, setActiveTabState] = useState<string>(getTabFromPath);
+  const [ratingIntent, setRatingIntent] = useState<{ tier: LeaderboardTier; filterToMyDistrict?: boolean; ts: number } | null>(null);
   const [isTelegramMiniApp, setIsTelegramMiniApp] = useState(false);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'info' | 'warning' } | null>(null);
   const notificationTimerRef = useRef<number | null>(null);
@@ -1412,6 +1416,19 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
   };
+
+  const openRatingTier = useCallback((tier: LeaderboardTier, options?: { filterToMyDistrict?: boolean }) => {
+    setRatingIntent({
+      tier,
+      filterToMyDistrict: Boolean(options?.filterToMyDistrict),
+      ts: Date.now(),
+    });
+    setActiveTab('rating');
+  }, []);
+
+  const clearRatingIntent = useCallback(() => {
+    setRatingIntent(null);
+  }, []);
 
   useEffect(() => {
     const handlePopState = () => setActiveTabState(getTabFromPath());
@@ -4643,6 +4660,9 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         toggleTheme,
         activeTab,
         setActiveTab,
+        ratingIntent,
+        openRatingTier,
+        clearRatingIntent,
         isTelegramMiniApp,
         triggerHaptic,
         referrals,

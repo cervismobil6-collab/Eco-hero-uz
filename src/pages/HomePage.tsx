@@ -6,7 +6,6 @@ import {
   ExternalLink,
   ChevronRight,
   Camera,
-  Trophy,
   BarChart3,
   Flame,
   ShoppingCart,
@@ -18,6 +17,7 @@ import {
   Image as ImageIcon,
   X,
   TrendingUp,
+  School,
 } from 'lucide-react';
 import { motion, Variants } from 'framer-motion';
 import { useEco } from '../context/EcoContext';
@@ -29,6 +29,7 @@ import {
   EcoTargetArt,
 } from '../components/home/HomeHubArtworks';
 import { computeUserStreakState } from '../utils/streak';
+import { calculateLevelProgress } from '../utils/level';
 import { resolveMediaUrl, openAdTargetUrl } from '../utils/api';
 import { HomePost, HomePostCategory } from '../types/eco';
 import heroEcoForestImg from '../assets/images/hero_eco_forest_1795179384249.jpg';
@@ -36,6 +37,7 @@ import heroEcoForestImg from '../assets/images/hero_eco_forest_1795179384249.jpg
 export const HomePage: React.FC = () => {
   const {
     setActiveTab,
+    openRatingTier,
     user,
     homePosts,
     ecoMissions,
@@ -80,12 +82,12 @@ export const HomePage: React.FC = () => {
     serverDateKey
   );
 
-  // Deterministic XP & Next Level Progress from real EcoContext data
+  // Progressive XP & Next Level Progress from real EcoContext data
   const userXP = user.ecoXP || (user.totalCoinsEarned || user.ecoCoins || 0) * 4;
-  const computedLevel = user.level || Math.max(1, Math.floor(userXP / 500) + 1);
-  const xpIntoLevel = userXP % 500;
-  const xpToNextLevel = 500 - xpIntoLevel;
-  const xpProgressPct = Math.min(100, Math.max(4, Math.round((xpIntoLevel / 500) * 100)));
+  const levelProgress = calculateLevelProgress(userXP);
+  const computedLevel = levelProgress.level;
+  const xpToNextLevel = levelProgress.xpRemainingForNextLevel;
+  const xpProgressPct = levelProgress.progressPct;
 
   // Featured Daily Mission reward hint for Missiyalar banner
   const activeMissions = useMemo(
@@ -330,7 +332,7 @@ export const HomePage: React.FC = () => {
                       <span className="font-mono tabular-nums">{userXP.toLocaleString()} XP</span>
                     </span>
                     <span className="text-slate-600 dark:text-slate-300 font-mono tabular-nums">
-                      Lv. {computedLevel + 1} gacha {xpToNextLevel} XP
+                      Lv. {computedLevel + 1} gacha {xpToNextLevel.toLocaleString()} XP
                     </span>
                   </div>
                   <div className="relative w-full h-2.5 rounded-full bg-slate-200 dark:bg-emerald-950/90 overflow-visible">
@@ -351,13 +353,17 @@ export const HomePage: React.FC = () => {
                     type="button"
                     onClick={() => {
                       triggerHaptic('light');
-                      setActiveTab('championship');
+                      if (user.role === 'ambassador') {
+                        openRatingTier('ambassador', { filterToMyDistrict: true });
+                      } else {
+                        openRatingTier('student');
+                      }
                     }}
-                    className="p-2.5 rounded-2xl bg-white dark:bg-[#05140E]/90 border border-slate-200 dark:border-emerald-400/20 hover:border-amber-400/50 transition-all flex flex-col items-center justify-center gap-1 text-center cursor-pointer"
+                    className="p-2.5 rounded-2xl bg-white dark:bg-[#05140E]/90 border border-slate-200 dark:border-emerald-400/20 hover:border-emerald-400/55 transition-all flex flex-col items-center justify-center gap-1 text-center cursor-pointer"
                   >
-                    <Trophy className="w-5 h-5 text-amber-400" />
-                    <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200">
-                      Chempionat
+                    <School className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span className="text-[10.5px] leading-tight font-bold text-slate-700 dark:text-slate-200">
+                      Maktabdagi reytingim
                     </span>
                   </button>
 
@@ -427,8 +433,8 @@ export const HomePage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5 shrink-0 relative z-10">
-                <EcoGiftLeavesArt className="w-16 h-13 -my-1" />
+              <div className="flex items-center gap-2 shrink-0 relative z-10">
+                <EcoGiftLeavesArt className="w-14 h-14 sm:w-16 sm:h-16" />
                 <ArrowRight className="w-5 h-5 text-emerald-500 dark:text-[#00F5A0] group-hover:translate-x-1 transition-transform" />
               </div>
             </motion.button>
@@ -452,7 +458,7 @@ export const HomePage: React.FC = () => {
               <div className="pointer-events-none absolute right-0 top-0 w-44 h-full bg-gradient-to-l from-teal-400/10 to-transparent" />
 
               <div className="shrink-0 relative z-10">
-                <EcoChampionshipTrophyArt className="w-24 h-20 sm:w-28 sm:h-24" />
+                <EcoChampionshipTrophyArt className="w-24 h-24 sm:w-28 sm:h-28" />
               </div>
 
               <div className="flex-1 min-w-0 space-y-1.5 relative z-10">
@@ -486,7 +492,7 @@ export const HomePage: React.FC = () => {
               className="w-full relative overflow-hidden rounded-2xl bg-white/95 dark:bg-gradient-to-r dark:from-[#071D14] dark:to-[#05150F] border border-emerald-500/30 hover:border-emerald-400/70 px-3.5 sm:px-4 py-3 flex items-center justify-between gap-3 text-left shadow-md group cursor-pointer"
             >
               <div className="flex items-center gap-3 min-w-0">
-                <EcoTargetArt className="w-11 h-11 shrink-0" />
+                <EcoTargetArt className="w-12 h-12 shrink-0" />
                 <div className="min-w-0">
                   <div className="font-display text-sm sm:text-base font-extrabold text-slate-900 dark:text-white leading-tight truncate">
                     Missiyalar
@@ -532,7 +538,7 @@ export const HomePage: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
-                <EcoMiniGiftArt className="w-9 h-9" />
+                <EcoMiniGiftArt className="w-11 h-11 shrink-0" />
                 <ChevronRight className="w-4 h-4 text-emerald-500 dark:text-[#00F5A0] group-hover:translate-x-0.5 transition-transform" />
               </div>
             </motion.button>

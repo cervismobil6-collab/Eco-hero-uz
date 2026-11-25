@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useEco } from '../../context/EcoContext';
 import { EcoTelegramChatPanel } from '../chat/EcoTelegramChatPanel';
+import { calculateLevelFromXp } from '../../utils/level';
 
 export const StudentDashboardView: React.FC = () => {
   const {
@@ -140,7 +141,7 @@ export const StudentDashboardView: React.FC = () => {
               <span aria-hidden="true">·</span>
               <span>{user.badge || 'Eko-Qahramon'}</span>
               <span aria-hidden="true">·</span>
-              <span>Daraja {user.level || 1}</span>
+              <span>Daraja {calculateLevelFromXp(Number(user.ecoXP || (user.totalCoinsEarned || user.ecoCoins || 0) * 4))}</span>
             </div>
             <h2 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white truncate">
               {user.fullName}

@@ -14,6 +14,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import QRCode from 'qrcode';
 import { computeUserStreakState, getUzbekistanDateKey } from './src/utils/streak';
+import { calculateLevelFromXp } from './src/utils/level';
 import {
   centralDb,
   saveCentralDb,
@@ -3763,6 +3764,7 @@ app.post('/api/streak/claim', requireAuth, (req: AuthenticatedRequest, res) => {
       },
     });
 
+    syncUserStatsConsistency(caller);
     saveCentralDb();
     broadcastRealtimeEvent('db:updated', { scope: 'users' });
 
@@ -3821,34 +3823,27 @@ app.get('/api/map/config', (_req, res) => {
         isPaid: Boolean(customSatUrl),
         isLiveImagery: false,
         licenseNote:
-          "Esri World Imagery tarixiy/arxiv tasvir (jonli emas). Yo'l va hudud nomlari CARTO/OSM bilan ko'rsatiladi.",
+          "Esri World Imagery tarixiy/arxiv tasvir (jonli emas). Yo'l va hudud nomlari Esri World Boundaries & Transportation bilan ko'rsatiladi.",
       },
       {
         id: 'street',
-        name: "HD Vektor / Ko'cha xaritasi",
-        tileUrls: [
-          'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
-          'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
-          'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        ],
-        attribution: '© OpenStreetMap contributors · OpenFreeMap',
+        name: 'Normal Map (OpenStreetMap)',
+        tileUrls: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+        attribution: '© OpenStreetMap contributors',
         maxZoom: 19,
         isPaid: false,
         isLiveImagery: false,
-        licenseNote: 'OpenStreetMap & OpenFreeMap bepul ochiq vektor/ko‘cha xaritasi.',
+        licenseNote: 'OpenStreetMap bepul ochiq ko‘cha xaritasi.',
       },
       {
         id: 'dark',
-        name: 'Tungi Eko-Xarita HD (CARTO @2x)',
-        tileUrls: [
-          'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png',
-          'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png',
-        ],
-        attribution: '© OpenStreetMap contributors © CARTO',
+        name: 'Tungi Eko-Xarita (OpenStreetMap)',
+        tileUrls: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+        attribution: '© OpenStreetMap contributors',
         maxZoom: 19,
         isPaid: false,
         isLiveImagery: false,
-        licenseNote: 'CARTO Dark @2x bepul yuqori aniqlikdagi ko‘rish rejimi.',
+        licenseNote: 'OpenStreetMap tungi rejim (CSS filtr bilan).',
       },
     ],
     cesium: {
@@ -11012,6 +11007,8 @@ app.post('/api/missions', requireRoles('super_admin', 'moderator', 'school_admin
       channelUrl,
       requiresProof,
       proofType,
+      imageUrl,
+      durationLabel,
     } = req.body || {};
 
     if (!title || !['quiz', 'channel_subscribe', 'custom_task'].includes(type)) {
@@ -11027,6 +11024,8 @@ app.post('/api/missions', requireRoles('super_admin', 'moderator', 'school_admin
       rewardCoins: Math.max(1, Number(rewardCoins) || 100),
       status: 'active',
       category: category || type,
+      ...(imageUrl ? { imageUrl: String(imageUrl).trim() } : {}),
+      ...(durationLabel ? { durationLabel: String(durationLabel).trim() } : {}),
       createdAt: nowIso,
       updatedAt: nowIso,
       createdByUid: caller.uid,
@@ -11092,11 +11091,17 @@ app.patch('/api/missions/:id', requireRoles('super_admin', 'moderator', 'school_
       channelUsername,
       channelUrl,
       requiresProof,
+      category,
+      imageUrl,
+      durationLabel,
     } = req.body || {};
     if (title !== undefined) mission.title = String(title).trim();
     if (description !== undefined) mission.description = String(description).trim();
     if (rewardCoins !== undefined) mission.rewardCoins = Math.max(1, Number(rewardCoins) || 50);
     if (status === 'active' || status === 'paused') mission.status = status;
+    if (category !== undefined) mission.category = String(category).trim() || mission.type;
+    if (imageUrl !== undefined) mission.imageUrl = String(imageUrl).trim();
+    if (durationLabel !== undefined) mission.durationLabel = String(durationLabel).trim();
     if (passingPercent !== undefined) mission.passingPercent = Math.max(10, Math.min(100, Number(passingPercent) || 70));
 
     if (Array.isArray(questions) && questions.length > 0) {
@@ -15064,7 +15069,7 @@ app.post('/api/certificates/issue', requireAuth, async (req: AuthenticatedReques
       type: 'student',
       tier,
       category: customTitle ? String(customTitle).trim() : tierTitleMap[tier] || tierTitleMap.eco_starter,
-      level: recipient.level || Math.max(1, Math.floor(Number(recipient.ecoXP || totalEarned * 4) / 500) + 1),
+      level: calculateLevelFromXp(Number(recipient.ecoXP || totalEarned * 4)),
       ecoCoinsSnapshot: Number(recipient.ecoCoins || 0),
       treesPlantedSnapshot: Number(recipient.treesPlanted || 0),
       periodName: new Date().toLocaleDateString('uz-UZ', { month: 'long', year: 'numeric' }),

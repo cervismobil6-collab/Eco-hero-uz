@@ -19,18 +19,35 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useEco } from '../context/EcoContext';
 import { UZBEKISTAN_REGIONS, UZBEKISTAN_DISTRICTS } from '../data/mockData';
-import { LeaderboardPeriod, LeaderboardTier } from '../types/eco';
+import {
+  DistrictLeaderboardDetailsResponse,
+  LeaderboardPeriod,
+  LeaderboardTier,
+} from '../types/eco';
 import { StudentCabinetRatingsPanel } from '../components/ratings/StudentCabinetRatingsPanel';
 import ecoTrophyCrestImg from '../assets/images/eco_trophy_crest_1795179383102.jpg';
 
 export const EcoRatingPage: React.FC = () => {
-  const { user, rewardSettings, fetchLeaderboard, setActiveTab, liveSyncVersion } = useEco();
+  const {
+    user,
+    rewardSettings,
+    fetchLeaderboard,
+    fetchDistrictLeaderboardDetails,
+    setActiveTab,
+    liveSyncVersion,
+    ratingIntent,
+    clearRatingIntent,
+  } = useEco();
 
-  const [tier, setTier] = useState<LeaderboardTier>('school');
+  const [tier, setTier] = useState<LeaderboardTier>(() => ratingIntent?.tier || 'school');
   const [period, setPeriod] = useState<LeaderboardPeriod>('monthly');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedRegion, setSelectedRegion] = useState<string>('all');
-  const [selectedDistrict, setSelectedDistrict] = useState<string>('all');
+  const [selectedRegion, setSelectedRegion] = useState<string>(() =>
+    ratingIntent?.filterToMyDistrict && user.region ? user.region : 'all'
+  );
+  const [selectedDistrict, setSelectedDistrict] = useState<string>(() =>
+    ratingIntent?.filterToMyDistrict && user.district ? user.district : 'all'
+  );
   const [page, setPage] = useState(1);
 
   const [items, setItems] = useState<any[]>([]);
@@ -38,9 +55,42 @@ export const EcoRatingPage: React.FC = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
   const [forbiddenMsg, setForbiddenMsg] = useState<string | null>(null);
+  const [districtAmbDetails, setDistrictAmbDetails] = useState<DistrictLeaderboardDetailsResponse | null>(null);
+  const [districtAmbLoading, setDistrictAmbLoading] = useState(false);
 
   const [showFormulaModal, setShowFormulaModal] = useState(false);
   const [selectedCertificateAmbassador, setSelectedCertificateAmbassador] = useState<any>(null);
+
+  useEffect(() => {
+    if (!ratingIntent) return;
+    setTier(ratingIntent.tier);
+    setPage(1);
+    if (ratingIntent.filterToMyDistrict) {
+      if (user.region) setSelectedRegion(user.region);
+      if (user.district) setSelectedDistrict(user.district);
+    }
+    clearRatingIntent();
+  }, [ratingIntent, user.region, user.district, clearRatingIntent]);
+
+  useEffect(() => {
+    if (tier !== 'ambassador' || !user?.uid) return;
+    let active = true;
+    setDistrictAmbLoading(true);
+    fetchDistrictLeaderboardDetails({
+      region: selectedRegion !== 'all' ? selectedRegion : user.region || undefined,
+      district: selectedDistrict !== 'all' ? selectedDistrict : user.district || undefined,
+    })
+      .then(res => {
+        if (!active) return;
+        setDistrictAmbDetails(res);
+      })
+      .finally(() => {
+        if (active) setDistrictAmbLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [tier, user?.uid, user?.region, user?.district, selectedRegion, selectedDistrict, fetchDistrictLeaderboardDetails, liveSyncVersion]);
 
   const availableDistricts = useMemo(() => {
     if (selectedRegion === 'all' || !UZBEKISTAN_DISTRICTS[selectedRegion]) return [];
@@ -188,6 +238,109 @@ export const EcoRatingPage: React.FC = () => {
 
       {/* Personal School & District Student Monthly Ratings (50+ school / 500+ district) */}
       {tier === 'student' && user?.uid && <StudentCabinetRatingsPanel />}
+
+      {/* Personal District Eco-Elchilar Monthly Ranking */}
+      {tier === 'ambassador' && user?.uid && !forbiddenMsg && (() => {
+        const ambList = districtAmbDetails?.ambassadorRatings || [];
+        const myAmb = districtAmbDetails?.myAmbassadorRating || null;
+        const totalAmb = districtAmbDetails?.totalAmbassadorsInDistrict || ambList.length;
+        const top3FloorScore = ambList.length >= 3 ? ambList[2]?.realScore || 0 : 0;
+        return (
+          <div className="rounded-3xl p-5 sm:p-6 bg-white dark:bg-[#071912] border border-emerald-500/25 shadow-xl space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                  <Award className="w-3.5 h-3.5" />
+                  <span>Tumandagi Eko-Elchilar Reytingi</span>
+                </div>
+                <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white">
+                  {districtAmbDetails?.district || user.district || 'Tumaningiz'} · Eko-Elchilar Jadvali
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Oy oxirigacha {districtAmbDetails?.daysRemainingInMonth ?? '—'} kun qoldi · TOP-3 g&apos;oliblar taqdirlanadi
+                </p>
+              </div>
+              {myAmb && (
+                <div className="px-4 py-2.5 rounded-2xl bg-emerald-500/15 border border-emerald-500/35 text-right shrink-0">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                    Sizning o&apos;rningiz
+                  </div>
+                  <div className="text-xl font-black font-mono tabular-nums text-emerald-600 dark:text-[#00F5A0]">
+                    #{myAmb.rank} <span className="text-xs font-bold text-slate-500 dark:text-slate-400">/ {totalAmb}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {myAmb && (
+              <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 flex flex-wrap items-center justify-between gap-3 text-xs">
+                <div className="space-y-0.5">
+                  <div className="font-bold text-slate-900 dark:text-white">
+                    {myAmb.isTop3
+                      ? 'Tabriklaymiz! Siz hozir tuman TOP-3 sovrinli zonasidasiz.'
+                      : `TOP-3 ga kirish uchun yana +${Math.max(1, top3FloorScore - myAmb.realScore)} ball kerak.`}
+                  </div>
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                    {myAmb.schoolName} · {myAmb.verifiedActivitiesCount} tasdiqlangan faoliyat · {myAmb.tasksCompletedCount} vazifa
+                  </div>
+                </div>
+                <div className="font-mono tabular-nums font-black text-amber-500 dark:text-amber-400 text-sm">
+                  {myAmb.realScore.toLocaleString()} ball
+                </div>
+              </div>
+            )}
+
+            {districtAmbLoading && ambList.length === 0 ? (
+              <div className="py-6 text-center text-xs text-slate-400">
+                Tumandagi Eko-Elchilar reytingi yuklanmoqda...
+              </div>
+            ) : ambList.length === 0 ? (
+              <div className="py-6 text-center text-xs text-slate-400">
+                {user.district
+                  ? `${user.district} tumani bo'yicha hozircha Eko-Elchilar topilmadi.`
+                  : "Profilingizda tuman tanlanmagan. Sozlamalardan tumaningizni kiriting."}
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-200/70 dark:divide-emerald-500/15 max-h-[320px] overflow-y-auto pr-1">
+                {ambList.map(amb => (
+                  <div
+                    key={amb.id}
+                    className={`py-2.5 px-3 rounded-xl flex items-center justify-between gap-3 text-xs ${
+                      amb.isMe ? 'bg-emerald-500/15 border border-emerald-500/30' : ''
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span
+                        className={`w-7 font-mono tabular-nums font-black shrink-0 ${
+                          amb.isTop3 ? 'text-amber-500 dark:text-amber-400' : 'text-slate-400'
+                        }`}
+                      >
+                        #{amb.rank}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="font-bold text-slate-900 dark:text-white truncate flex items-center gap-1.5">
+                          <span className="truncate">{amb.fullName}</span>
+                          {amb.isMe && (
+                            <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 text-[10px] font-bold shrink-0">
+                              Siz
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                          {amb.schoolName} · {amb.verifiedActivitiesCount} faoliyat · {amb.tasksCompletedCount} vazifa
+                        </div>
+                      </div>
+                    </div>
+                    <span className="font-mono tabular-nums font-black text-amber-500 dark:text-amber-400 shrink-0">
+                      {amb.realScore.toLocaleString()} ball
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Illuminated Top 3 Podium */}
       {top3.length >= 1 && (

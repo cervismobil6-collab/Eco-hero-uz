@@ -385,7 +385,7 @@ export const EcoCesium3D: React.FC<EcoCesium3DProps> = ({
     };
   }, [retryKey]);
 
-  // Sync ultra-crisp Imagery: Bing Maps Aerial with Labels via Cesium Ion when active, else Esri/OSM + CARTO @2x labels
+  // Sync ultra-crisp Imagery: Cesium Ion when active, else Esri World Imagery + Reference layers / OpenStreetMap keyless tiles
   useEffect(() => {
     const viewer = viewerRef.current;
     const Cesium = cesiumRef.current;
@@ -419,13 +419,19 @@ export const EcoCesium3D: React.FC<EcoCesium3DProps> = ({
 
       if (cancelled || viewer.isDestroyed()) return;
 
-      const tileUrl =
-        provider.tileUrls[0] ||
-        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+      const isOsmBase = baseStyle === 'street' || baseStyle === 'dark';
+      const tileUrl = isOsmBase
+        ? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
+        : provider.tileUrls[0] ||
+          'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+      const baseCreditText = isOsmBase
+        ? '© OpenStreetMap contributors'
+        : provider.attribution || 'Tiles © Esri';
+
       const baseProvider = new Cesium.UrlTemplateImageryProvider({
         url: tileUrl,
-        maximumLevel: Math.min(18, provider.maxZoom || 18),
-        credit: new Cesium.Credit(provider.attribution, false),
+        maximumLevel: Math.min(19, provider.maxZoom || 19),
+        credit: new Cesium.Credit(baseCreditText, false),
       });
 
       baseProvider.errorEvent.addEventListener(() => {
@@ -440,18 +446,26 @@ export const EcoCesium3D: React.FC<EcoCesium3DProps> = ({
       });
 
       const baseLayer = viewer.imageryLayers.addImageryProvider(baseProvider);
-      baseLayer.brightness = baseStyle === 'satellite' ? 1.06 : 1.02;
-      baseLayer.contrast = baseStyle === 'satellite' ? 1.08 : 1.04;
+      baseLayer.brightness = baseStyle === 'satellite' ? 1.06 : 1.0;
+      baseLayer.contrast = baseStyle === 'satellite' ? 1.08 : 1.02;
       baseLayer.saturation = baseStyle === 'satellite' ? 1.12 : 1.0;
 
       if (baseStyle === 'satellite') {
-        const labelProvider = new Cesium.UrlTemplateImageryProvider({
-          url: 'https://a.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}@2x.png',
+        const transportProvider = new Cesium.UrlTemplateImageryProvider({
+          url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
           maximumLevel: 19,
-          credit: new Cesium.Credit('© OpenStreetMap contributors © CARTO', false),
+          credit: new Cesium.Credit('Tiles © Esri', false),
         });
-        const labelLayer = viewer.imageryLayers.addImageryProvider(labelProvider);
-        labelLayer.alpha = 0.94;
+        const transportLayer = viewer.imageryLayers.addImageryProvider(transportProvider);
+        transportLayer.alpha = 0.88;
+
+        const placesProvider = new Cesium.UrlTemplateImageryProvider({
+          url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+          maximumLevel: 19,
+          credit: new Cesium.Credit('Tiles © Esri', false),
+        });
+        const placesLayer = viewer.imageryLayers.addImageryProvider(placesProvider);
+        placesLayer.alpha = 0.94;
       }
 
       viewer.scene.requestRender();
@@ -1094,9 +1108,19 @@ export const EcoCesium3D: React.FC<EcoCesium3DProps> = ({
     );
   }
 
+  const applyOsmDarkFilter =
+    baseStyle === 'dark' && !(hasIonSession && cesiumSession?.ionToken && activePreset !== 'free');
+
   return (
     <div className="w-full h-full relative bg-slate-950 select-none overflow-hidden">
-      <div ref={containerRef} className="w-full h-full" />
+      <div
+        ref={containerRef}
+        className={`w-full h-full ${
+          applyOsmDarkFilter
+            ? '[&_.cesium-widget_canvas]:[filter:invert(1)_hue-rotate(180deg)_brightness(0.9)_contrast(0.9)]'
+            : ''
+        }`}
+      />
 
       {loadingEngine && (
         <div className="absolute inset-0 z-20 bg-slate-950/85 backdrop-blur-sm flex flex-col items-center justify-center gap-3 text-white p-4 text-center">

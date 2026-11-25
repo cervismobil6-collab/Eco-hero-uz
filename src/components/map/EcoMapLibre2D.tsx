@@ -51,12 +51,17 @@ interface EcoMapLibre2DProps {
   onTileFallback: (failedStyle: MapBaseStyleId, reason: string) => void;
 }
 
-const OPENFREEMAP_LIBERTY_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';
 const OPENFREEMAP_PLANET_TILEJSON = 'https://tiles.openfreemap.org/planet';
-const CARTO_LABELS_2X_TILES = [
-  'https://a.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}@2x.png',
-  'https://b.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}@2x.png',
+const ESRI_WORLD_IMAGERY_TILES = [
+  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
 ];
+const ESRI_WORLD_TRANSPORTATION_TILES = [
+  'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
+];
+const ESRI_WORLD_BOUNDARIES_PLACES_TILES = [
+  'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+];
+const OSM_STANDARD_TILES = ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'];
 
 function checkWebGLSupport(): boolean {
   if (typeof window === 'undefined') return false;
@@ -77,13 +82,23 @@ function buildRasterStyle(
   styleId: MapBaseStyleId,
   provider: MapImageryProvider
 ): StyleSpecification {
+  const isOsmBase = styleId === 'street' || styleId === 'dark';
+  const baseTiles = isOsmBase
+    ? OSM_STANDARD_TILES
+    : provider.tileUrls?.length
+      ? provider.tileUrls
+      : ESRI_WORLD_IMAGERY_TILES;
+  const baseAttribution = isOsmBase
+    ? '© OpenStreetMap contributors'
+    : provider.attribution || 'Tiles © Esri';
+
   const sources: StyleSpecification['sources'] = {
     basemap: {
       type: 'raster',
-      tiles: provider.tileUrls,
+      tiles: baseTiles,
       tileSize: 256,
-      maxzoom: Math.min(18, provider.maxZoom || 18),
-      attribution: provider.attribution,
+      maxzoom: Math.min(19, provider.maxZoom || 19),
+      attribution: baseAttribution,
     },
     'openmaptiles-3d': {
       type: 'vector',
@@ -105,20 +120,34 @@ function buildRasterStyle(
     },
   ];
 
-  // Crisp Retina @2x road/district labels overlaid on Satellite imagery
+  // Keyless Esri road & place-name reference overlays on top of Satellite imagery
   if (styleId === 'satellite') {
-    sources['hybrid-labels'] = {
+    sources['esri-transportation'] = {
       type: 'raster',
-      tiles: CARTO_LABELS_2X_TILES,
+      tiles: ESRI_WORLD_TRANSPORTATION_TILES,
       tileSize: 256,
       maxzoom: 19,
-      attribution: '© OpenStreetMap contributors © CARTO',
+      attribution: 'Tiles © Esri',
     };
     layers.push({
-      id: 'hybrid-labels-layer',
+      id: 'esri-transportation-layer',
       type: 'raster',
-      source: 'hybrid-labels',
-      paint: { 'raster-opacity': 0.92 },
+      source: 'esri-transportation',
+      paint: { 'raster-opacity': 0.9 },
+    });
+
+    sources['esri-boundaries-places'] = {
+      type: 'raster',
+      tiles: ESRI_WORLD_BOUNDARIES_PLACES_TILES,
+      tileSize: 256,
+      maxzoom: 19,
+      attribution: 'Tiles © Esri',
+    };
+    layers.push({
+      id: 'esri-boundaries-places-layer',
+      type: 'raster',
+      source: 'esri-boundaries-places',
+      paint: { 'raster-opacity': 0.95 },
     });
   }
 
@@ -441,10 +470,7 @@ export const EcoMapLibre2D: React.FC<EcoMapLibre2DProps> = ({
       return;
     }
 
-    const startStyle =
-      baseStyle === 'street'
-        ? OPENFREEMAP_LIBERTY_STYLE_URL
-        : buildRasterStyle(baseStyle, provider);
+    const startStyle = buildRasterStyle(baseStyle, provider);
 
     const map = new MapLibreMap({
       container: containerRef.current,
@@ -658,13 +684,6 @@ export const EcoMapLibre2D: React.FC<EcoMapLibre2DProps> = ({
 
     map.on('error', (e) => {
       const errEvt = e as { sourceId?: string; error?: { message?: string } };
-      if (
-        activeStyleRef.current === 'street' &&
-        String(errEvt?.error?.message || '').toLowerCase().includes('liberty')
-      ) {
-        map.setStyle(buildRasterStyle('street', provider));
-        return;
-      }
       if (errEvt?.sourceId === 'basemap' && activeStyleRef.current !== 'street') {
         tileErrorCountRef.current += 1;
         if (tileErrorCountRef.current >= 4) {
@@ -692,7 +711,7 @@ export const EcoMapLibre2D: React.FC<EcoMapLibre2DProps> = ({
     };
   }, []);
 
-  // Switch between OpenFreeMap Vector Street, Satellite + @2x Labels, and CARTO Dark @2x
+  // Switch between Satellite (Esri + Transportation/Places), Normal Map (OSM), and Dark (OSM + CSS filter)
   const prevStyleRef = useRef<string>(`${baseStyle}_${provider.tileUrls[0] || ''}`);
   useEffect(() => {
     const map = mapRef.current;
@@ -702,11 +721,7 @@ export const EcoMapLibre2D: React.FC<EcoMapLibre2DProps> = ({
     prevStyleRef.current = sig;
     tileErrorCountRef.current = 0;
 
-    if (baseStyle === 'street') {
-      map.setStyle(OPENFREEMAP_LIBERTY_STYLE_URL);
-    } else {
-      map.setStyle(buildRasterStyle(baseStyle, provider));
-    }
+    map.setStyle(buildRasterStyle(baseStyle, provider));
   }, [baseStyle, provider]);
 
   // Sync GeoJSON sources & visibility whenever data or style updates
@@ -848,7 +863,11 @@ export const EcoMapLibre2D: React.FC<EcoMapLibre2DProps> = ({
   return (
     <div
       ref={containerRef}
-      className="w-full h-full bg-slate-200 dark:bg-slate-950 relative select-none"
+      className={`w-full h-full bg-slate-200 dark:bg-slate-950 relative select-none ${
+        baseStyle === 'dark'
+          ? '[&_.maplibregl-canvas]:[filter:invert(1)_hue-rotate(180deg)_brightness(0.9)_contrast(0.9)]'
+          : ''
+      }`}
     />
   );
 };
