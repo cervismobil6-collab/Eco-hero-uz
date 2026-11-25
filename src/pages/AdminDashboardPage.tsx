@@ -65,6 +65,7 @@ import { ModeratorDashboardView } from '../components/dashboard/ModeratorDashboa
 import { VoucherVerifierPanel } from '../components/shop/VoucherVerifierPanel';
 import { GiftGateConfigEditor } from '../components/shop/GiftGateConfigEditor';
 import { HomePostsManagerPanel } from '../components/dashboard/HomePostsManagerPanel';
+import { DailyMissionsManagerPanel } from '../components/dashboard/DailyMissionsManagerPanel';
 import heroEcoForestImg from '../assets/images/hero_eco_forest_1795179384249.jpg';
 
 function getDefaultTabForRole(role: string): string {
@@ -119,6 +120,8 @@ export const AdminDashboardPage: React.FC = () => {
     liveSyncVersion,
     liveMetrics,
     refreshBootstrap,
+    dailyMissions,
+    adminIntent,
   } = useEco();
 
   const [activeTab, setActiveTab] = useState<string>(() => getDefaultTabForRole(user.role));
@@ -538,6 +541,7 @@ export const AdminDashboardPage: React.FC = () => {
     { id: 'voucher_verifier', label: 'Vaucher Tekshirgich', icon: QrCode, roles: ['super_admin', 'moderator', 'school_admin', 'district_coordinator', 'regional_coordinator'] },
     { id: 'shop_orders', label: 'Buyurtmalar', icon: Clock, roles: ['super_admin', 'sponsor', 'school_admin'] },
     { id: 'ads', label: 'Reklama (ADS)', icon: Sparkles, roles: ['super_admin', 'sponsor'] },
+    { id: 'daily_missions', label: 'Bugungi Missiyalar', icon: Sparkles, roles: ['super_admin'], badge: dailyMissions.length },
     { id: 'home_posts', label: 'Bosh Sahifa Postlari', icon: Megaphone, roles: ['super_admin'] },
     { id: 'telegram', label: 'Telegram Bot', icon: Bot, roles: ['super_admin'] },
     { id: 'audit', label: 'Audit Log', icon: History, roles: ['super_admin'] },
@@ -551,6 +555,12 @@ export const AdminDashboardPage: React.FC = () => {
       setActiveTab(getDefaultTabForRole(user.role));
     }
   }, [user.role]);
+
+  useEffect(() => {
+    if (adminIntent?.adminTab && filteredMenu.some(m => m.id === adminIntent.adminTab)) {
+      setActiveTab(adminIntent.adminTab);
+    }
+  }, [adminIntent, user.role]);
 
   const q = searchQuery.trim().toLowerCase();
 
@@ -1886,6 +1896,9 @@ export const AdminDashboardPage: React.FC = () => {
 
             {/* SUPER ADMIN HOME POSTS CMS */}
             {activeTab === 'home_posts' && user.role === 'super_admin' && <HomePostsManagerPanel />}
+
+            {/* SUPER ADMIN DAILY MISSIONS MANAGER */}
+            {activeTab === 'daily_missions' && user.role === 'super_admin' && <DailyMissionsManagerPanel />}
 
             {/* FIREBASE INFO GUIDE */}
             {activeTab === 'firebase_guide' && (

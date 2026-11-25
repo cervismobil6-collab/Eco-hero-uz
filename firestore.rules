@@ -196,20 +196,29 @@ service cloud.firestore {
         data.keys().hasOnly([
           'id', 'title', 'description', 'category', 'severity', 'status',
           'region', 'district', 'address', 'lat', 'lng',
-          'imageUrl', 'videoUrl', 'resolvedImageUrl',
+          'imageUrl', 'beforeImageUrl', 'videoUrl', 'beforeVideoUrl',
+          'resolvedImageUrl', 'afterImageUrl', 'afterVideoUrl', 'resolutionDescription',
           'reporterUid', 'reporterName', 'schoolId', 'schoolName',
-          'assignedAmbassadorUid', 'captainInstructions', 'escalationTarget',
-          'isHazardous', 'rewardCoins', 'upvotes', 'createdAt', 'updatedAt', 'resolvedAt'
+          'assignedAmbassadorUid', 'assignedAmbassadorName', 'assignedAt',
+          'submittedForFinalReviewAt', 'finalReviewedBy', 'finalReviewedAt', 'finalReviewNote',
+          'captainInstructions', 'escalationTarget',
+          'isHazardous', 'rewardsIssued', 'reuploadRequestCount',
+          'rewardCoins', 'upvotes', 'createdAt', 'updatedAt', 'resolvedAt'
         ]) &&
         isValidId(data.id) &&
         data.title is string && data.title.size() >= 3 && data.title.size() <= 200 &&
         (!('description' in data) || (data.description is string && data.description.size() <= 2000)) &&
-        data.category in ['waste', 'water', 'deforestation', 'air', 'greening_needed', 'electrical_hazard', 'chemical_hazard'] &&
+        data.category in ['waste', 'water', 'deforestation', 'air', 'greening_needed', 'school_ecology', 'other', 'electrical_hazard', 'chemical_hazard'] &&
         data.region is string && data.region.size() >= 2 && data.region.size() <= 100 &&
         data.district is string && data.district.size() >= 2 && data.district.size() <= 100 &&
-        data.status in ['pending', 'verified', 'in_progress', 'resolved', 'rejected', 'PENDING_REVIEW', 'APPROVED', 'NEEDS_INFO', 'ASSIGNED', 'IN_PROGRESS', 'ESCALATED', 'RESOLVED', 'REJECTED'] &&
+        data.status in ['pending', 'verified', 'in_progress', 'resolved', 'rejected', 'PENDING_REVIEW', 'APPROVED', 'NEEDS_INFO', 'ASSIGNED', 'IN_PROGRESS', 'FINAL_REVIEW', 'REUPLOAD_REQUIRED', 'ESCALATED', 'RESOLVED', 'REJECTED'] &&
         isValidId(data.reporterUid) &&
         data.createdAt is timestamp &&
+        (!('beforeImageUrl' in data) || (data.beforeImageUrl is string && data.beforeImageUrl.size() <= 1024)) &&
+        (!('afterImageUrl' in data) || (data.afterImageUrl is string && data.afterImageUrl.size() <= 1024)) &&
+        (!('afterVideoUrl' in data) || (data.afterVideoUrl is string && data.afterVideoUrl.size() <= 1024)) &&
+        (!('resolutionDescription' in data) || (data.resolutionDescription is string && data.resolutionDescription.size() <= 2000)) &&
+        (!('finalReviewNote' in data) || (data.finalReviewNote is string && data.finalReviewNote.size() <= 1000)) &&
         (!('rewardCoins' in data) || (data.rewardCoins is number && data.rewardCoins >= 0)) &&
         (!('captainInstructions' in data) || (data.captainInstructions is string && data.captainInstructions.size() <= 1000)) &&
         (!('escalationTarget' in data) || (data.escalationTarget is string && data.escalationTarget.size() <= 200));
@@ -337,12 +346,14 @@ service cloud.firestore {
 
     function isValidTransaction(data) {
       return data.keys().hasAll(['id', 'userId', 'amount', 'type', 'reason', 'createdAt']) &&
-        data.keys().hasOnly(['id', 'userId', 'amount', 'type', 'status', 'reason', 'adjustedBy', 'createdAt']) &&
+        data.keys().hasOnly(['id', 'userId', 'amount', 'type', 'status', 'reason', 'adjustedBy', 'reportId', 'rewardStage', 'createdAt']) &&
         isValidId(data.id) &&
         isValidId(data.userId) &&
         data.amount is number &&
         data.type in ['earn', 'spend', 'bonus', 'adjustment'] &&
         data.reason is string && data.reason.size() <= 500 &&
+        (!('reportId' in data) || (data.reportId is string && data.reportId.size() <= 128)) &&
+        (!('rewardStage' in data) || (data.rewardStage is string && data.rewardStage.size() <= 64)) &&
         data.createdAt is timestamp;
     }
 
@@ -719,10 +730,10 @@ service cloud.firestore {
       allow delete: if isValidId(schoolId) && isSuperAdmin();
     }
 
-    // 3. Ecological Problem Reports (6-Step Workflow)
+    // 3. Ecological Problem Reports (8-Stage Before/After Accountability Workflow)
     match /reports/{reportId} {
       allow get: if isValidId(reportId) && (
-        existing().status in ['APPROVED', 'ASSIGNED', 'IN_PROGRESS', 'ESCALATED', 'RESOLVED', 'verified', 'in_progress', 'resolved'] ||
+        existing().status in ['APPROVED', 'ASSIGNED', 'IN_PROGRESS', 'FINAL_REVIEW', 'REUPLOAD_REQUIRED', 'ESCALATED', 'RESOLVED', 'verified', 'in_progress', 'resolved'] ||
         (isSignedIn() && (
           existing().reporterUid == request.auth.uid ||
           isSuperAdmin() ||
@@ -733,13 +744,14 @@ service cloud.firestore {
           isAmbassador(existing().schoolId)
         ))
       );
-      allow list: if existing().status in ['APPROVED', 'ASSIGNED', 'IN_PROGRESS', 'ESCALATED', 'RESOLVED', 'verified', 'in_progress', 'resolved'] ||
+      allow list: if existing().status in ['APPROVED', 'ASSIGNED', 'IN_PROGRESS', 'FINAL_REVIEW', 'REUPLOAD_REQUIRED', 'ESCALATED', 'RESOLVED', 'verified', 'in_progress', 'resolved'] ||
         (isSignedIn() && existing().reporterUid == request.auth.uid) ||
         isBootstrappedAdmin();
       allow create: if isValidId(reportId) && isSignedIn() && isValidEcoReport(incoming()) &&
         incoming().reporterUid == request.auth.uid &&
         incoming().status in ['pending', 'PENDING_REVIEW'] &&
         incoming().createdAt == request.time &&
+        (!('rewardsIssued' in incoming()) || incoming().rewardsIssued == false) &&
         (!('rewardCoins' in incoming()) || incoming().rewardCoins == 0);
       allow update: if isValidId(reportId) && isSignedIn() && isValidEcoReport(incoming()) &&
         incoming().id == existing().id &&
@@ -749,16 +761,19 @@ service cloud.firestore {
         (existing().status != 'RESOLVED' && existing().status != 'resolved' && existing().status != 'REJECTED' && existing().status != 'rejected' && (
           isModerator() ||
           (isSchoolAdmin(existing().schoolId) &&
-            existing().status in ['APPROVED', 'ASSIGNED', 'IN_PROGRESS', 'verified', 'in_progress'] &&
-            incoming().diff(existing()).affectedKeys().hasOnly(['assignedAmbassadorUid', 'captainInstructions', 'status', 'escalationTarget', 'isHazardous', 'updatedAt']) &&
+            !incoming().diff(existing()).affectedKeys().hasAny(['imageUrl', 'beforeImageUrl', 'videoUrl', 'beforeVideoUrl', 'rewardsIssued']) &&
+            incoming().status in ['ASSIGNED', 'ESCALATED', 'RESOLVED', 'REJECTED', 'REUPLOAD_REQUIRED'] &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['assignedAmbassadorUid', 'assignedAmbassadorName', 'assignedAt', 'captainInstructions', 'status', 'escalationTarget', 'isHazardous', 'finalReviewedBy', 'finalReviewedAt', 'finalReviewNote', 'reuploadRequestCount', 'resolvedAt', 'updatedAt']) &&
             incoming().updatedAt == request.time) ||
           (isAmbassador(existing().schoolId) &&
             existing().assignedAmbassadorUid == request.auth.uid &&
-            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'resolvedImageUrl', 'updatedAt']) &&
+            !incoming().diff(existing()).affectedKeys().hasAny(['imageUrl', 'beforeImageUrl', 'videoUrl', 'beforeVideoUrl', 'rewardsIssued', 'rewardCoins']) &&
+            incoming().status in ['IN_PROGRESS', 'FINAL_REVIEW'] &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'resolvedImageUrl', 'afterImageUrl', 'afterVideoUrl', 'resolutionDescription', 'submittedForFinalReviewAt', 'updatedAt']) &&
             incoming().updatedAt == request.time) ||
           (existing().reporterUid == request.auth.uid &&
             existing().status in ['pending', 'PENDING_REVIEW', 'NEEDS_INFO'] &&
-            incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'address', 'imageUrl', 'videoUrl', 'updatedAt']) &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'address', 'imageUrl', 'beforeImageUrl', 'videoUrl', 'beforeVideoUrl', 'updatedAt']) &&
             incoming().updatedAt == request.time)
         ))
       );

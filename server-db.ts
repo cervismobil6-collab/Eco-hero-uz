@@ -87,7 +87,21 @@ export interface UnifiedDatabase {
   ecoMissions: any[];
   missionSubmissions: any[];
   missionCompletions: Record<string, string[]>;
-  botStarters: Record<string, { chatId: string; username?: string; firstName?: string; startedAt: string; lastSeenAt?: string }>;
+  dailyMissions: any[];
+  dailyMissionSubmissions: any[];
+  dailyMissionCompletions: Record<string, string[]>;
+  botStarters: Record<
+    string,
+    {
+      chatId: string;
+      username?: string;
+      firstName?: string;
+      startedAt: string;
+      lastSeenAt?: string;
+      firstTimeRefEligible?: boolean;
+      firstTimeRefCode?: string;
+    }
+  >;
   deletedIds: string[];
   weeklyChallenge: {
     weekKey: string;
@@ -1197,6 +1211,36 @@ const SEED_ECO_MISSIONS = [
   },
 ];
 
+const SEED_DAILY_MISSIONS = [
+  {
+    id: 'daily_mission_plastic_01',
+    title: '5 dona plastik butilkani saralash',
+    description: "Maktab yoki uy atrofidagi plastik idishlarni to'plab qayta ishlash qutisiga tashlang va rasm yuklang.",
+    rewardCoins: 50,
+    status: 'active',
+    createdAt: new Date().toISOString(),
+    createdByName: 'Super Admin',
+  },
+  {
+    id: 'daily_mission_watering_02',
+    title: "Ko'chat va gullarni sug'orish",
+    description: "Maktab hovlisidagi daraxt yoki xona gullarini sug'orib, parvarish qiling va rasmga olib yuboring.",
+    rewardCoins: 80,
+    status: 'active',
+    createdAt: new Date().toISOString(),
+    createdByName: 'Super Admin',
+  },
+  {
+    id: 'daily_mission_cleanup_03',
+    title: 'Toza sinf va qog‘oz yig‘ish',
+    description: "Sinf xonasi va maktab hududidagi keraksiz qog'oz chiqindilarini yig'ib makulaturaga topshiring.",
+    rewardCoins: 40,
+    status: 'active',
+    createdAt: new Date().toISOString(),
+    createdByName: 'Super Admin',
+  },
+];
+
 function createDefaultDatabase(): UnifiedDatabase {
   return {
     users: { ...SEED_USERS },
@@ -1233,6 +1277,9 @@ function createDefaultDatabase(): UnifiedDatabase {
     ecoMissions: [...SEED_ECO_MISSIONS],
     missionSubmissions: [],
     missionCompletions: {},
+    dailyMissions: [...SEED_DAILY_MISSIONS],
+    dailyMissionSubmissions: [],
+    dailyMissionCompletions: {},
     botStarters: {},
     deletedIds: [],
     weeklyChallenge: createDefaultWeeklyChallenge(),
@@ -1755,6 +1802,14 @@ function loadUnifiedDatabase(): { db: UnifiedDatabase; needsSave: boolean } {
         missionCompletions:
           parsed.missionCompletions && typeof parsed.missionCompletions === 'object'
             ? parsed.missionCompletions
+            : {},
+        dailyMissions: Array.isArray(parsed.dailyMissions)
+          ? parsed.dailyMissions.filter((m: any) => !deletedSet.has(String(m?.id || '')))
+          : SEED_DAILY_MISSIONS.filter((m: any) => !deletedSet.has(String(m?.id || ''))),
+        dailyMissionSubmissions: Array.isArray(parsed.dailyMissionSubmissions) ? parsed.dailyMissionSubmissions : [],
+        dailyMissionCompletions:
+          parsed.dailyMissionCompletions && typeof parsed.dailyMissionCompletions === 'object'
+            ? parsed.dailyMissionCompletions
             : {},
         botStarters:
           parsed.botStarters && typeof parsed.botStarters === 'object' ? parsed.botStarters : {},
@@ -2874,6 +2929,9 @@ export function exportCompactBackupSnapshot() {
       dailyQuizClaims: centralDb.dailyQuizClaims || {},
       missionSubmissions: centralDb.missionSubmissions || [],
       missionCompletions: centralDb.missionCompletions || {},
+      dailyMissions: centralDb.dailyMissions || [],
+      dailyMissionSubmissions: centralDb.dailyMissionSubmissions || [],
+      dailyMissionCompletions: centralDb.dailyMissionCompletions || {},
       uidAliases: centralDb.uidAliases || {},
       weeklyChallenge: centralDb.weeklyChallenge || createDefaultWeeklyChallenge(),
       ratingConfigs: centralDb.ratingConfigs || { schoolRatings: {}, districtStudentRatings: {} },
@@ -2913,6 +2971,9 @@ export function mergeDatabaseSnapshotNonDestructive(rawSnapshot: any): {
       schoolDuels: rawSnapshot.schoolDuels,
       qrEcoScans: rawSnapshot.qrEcoScans,
       missionSubmissions: rawSnapshot.missionSubmissions,
+      dailyMissions: rawSnapshot.dailyMissions,
+      dailyMissionSubmissions: rawSnapshot.dailyMissionSubmissions,
+      dailyMissionCompletions: rawSnapshot.dailyMissionCompletions,
       monthlyAwards: rawSnapshot.monthlyAwards,
       studentMonthlyAwards: rawSnapshot.studentMonthlyAwards,
       adRewardClaims: rawSnapshot.adRewardClaims,
@@ -3063,6 +3124,10 @@ export function mergeDatabaseSnapshotNonDestructive(rawSnapshot: any): {
     if (Array.isArray(extra.schoolDuels)) mergeArrayById('schoolDuels', extra.schoolDuels);
     if (Array.isArray(extra.qrEcoScans)) mergeArrayById('qrEcoScans', extra.qrEcoScans);
     if (Array.isArray(extra.missionSubmissions)) mergeArrayById('missionSubmissions', extra.missionSubmissions);
+    if (Array.isArray(extra.dailyMissions)) mergeArrayById('dailyMissions', extra.dailyMissions);
+    if (Array.isArray(extra.dailyMissionSubmissions)) {
+      mergeArrayById('dailyMissionSubmissions', extra.dailyMissionSubmissions);
+    }
     if (Array.isArray(extra.monthlyAwards)) mergeArrayById('monthlyAwards', extra.monthlyAwards);
     if (Array.isArray(extra.studentMonthlyAwards)) mergeArrayById('studentMonthlyAwards', extra.studentMonthlyAwards);
     if (Array.isArray(extra.adRewardClaims)) mergeArrayById('adRewardClaims', extra.adRewardClaims);
@@ -3078,6 +3143,14 @@ export function mergeDatabaseSnapshotNonDestructive(rawSnapshot: any): {
         if (!Array.isArray(arr)) continue;
         centralDb.missionCompletions[uid] = Array.from(
           new Set([...(centralDb.missionCompletions[uid] || []), ...arr])
+        );
+      }
+    }
+    if (extra.dailyMissionCompletions && typeof extra.dailyMissionCompletions === 'object') {
+      for (const [uid, arr] of Object.entries(extra.dailyMissionCompletions) as [string, any][]) {
+        if (!Array.isArray(arr)) continue;
+        centralDb.dailyMissionCompletions[uid] = Array.from(
+          new Set([...(centralDb.dailyMissionCompletions[uid] || []), ...arr])
         );
       }
     }
@@ -3508,6 +3581,7 @@ export function recordTransaction(tx: {
   adjustedBy?: string;
   mediaSubmissionId?: string;
   reportId?: string;
+  rewardStage?: string;
 }) {
   const record = {
     id: `tx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -3519,6 +3593,7 @@ export function recordTransaction(tx: {
     ...(tx.adjustedBy ? { adjustedBy: tx.adjustedBy } : {}),
     ...(tx.mediaSubmissionId ? { mediaSubmissionId: tx.mediaSubmissionId } : {}),
     ...(tx.reportId ? { reportId: tx.reportId } : {}),
+    ...(tx.rewardStage ? { rewardStage: tx.rewardStage } : {}),
     createdAt: new Date().toISOString(),
   };
   centralDb.transactions.unshift(record);

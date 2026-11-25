@@ -14,6 +14,8 @@ export type ProblemCategory =
   | 'deforestation'
   | 'air'
   | 'greening_needed'
+  | 'school_ecology'
+  | 'other'
   | 'electrical_hazard'
   | 'chemical_hazard';
 
@@ -30,6 +32,8 @@ export type ProblemStatus =
   | 'NEEDS_INFO'
   | 'ASSIGNED'
   | 'IN_PROGRESS'
+  | 'FINAL_REVIEW'
+  | 'REUPLOAD_REQUIRED'
   | 'ESCALATED'
   | 'RESOLVED'
   | 'REJECTED';
@@ -102,6 +106,8 @@ export interface UserProfile {
   approvedRoles?: UserRole[];
   roleRevocationReason?: string;
   allowStudentMessages?: boolean;
+  notificationsEnabled?: boolean;
+  preferredLanguage?: 'uz' | 'ru' | 'en';
   // Legacy accessors
   reportsCount?: number;
   cleanupsCount?: number;
@@ -348,7 +354,11 @@ export interface EcoReport {
   imageUrl: string;
   beforeImageUrl?: string;
   videoUrl?: string;
+  beforeVideoUrl?: string;
   resolvedImageUrl?: string;
+  afterImageUrl?: string;
+  afterVideoUrl?: string;
+  resolutionDescription?: string;
   aiAuthenticityCheck?: {
     isAiGenerated: boolean;
     isVerifiedResolved: boolean;
@@ -356,14 +366,27 @@ export interface EcoReport {
     verdictUz: string;
     checkedAt: string;
   };
+  rewardsIssued?: boolean;
   ambassadorResolutionRewarded?: boolean;
+  studentRewardedCoins?: number;
+  ambassadorRewardedCoins?: number;
+  studentRewardTxId?: string;
+  ambassadorRewardTxId?: string;
+  reuploadRequestCount?: number;
   reporterUid: string;
   reporterName: string;
   schoolId?: string;
   schoolName: string;
+  schoolNumber?: string;
   rewardCoins: number;
   assignedAmbassadorUid?: string;
   assignedAmbassadorName?: string;
+  assignedAt?: string;
+  submittedForFinalReviewAt?: string;
+  finalReviewedBy?: string;
+  finalReviewedByUid?: string;
+  finalReviewedAt?: string;
+  finalReviewNote?: string;
   captainInstructions?: string;
   ambassadorSolutions?: string;
   progressEvidenceUrl?: string;
@@ -469,6 +492,7 @@ export interface CoinTransaction {
   adjustedBy?: string;
   mediaSubmissionId?: string;
   reportId?: string;
+  rewardStage?: string;
   createdAt: string;
 }
 
@@ -818,9 +842,18 @@ export interface DistrictAmbassadorRating {
   region: string;
   district: string;
   ecoCoins: number;
+  ecoXP?: number;
+  monthlyXP?: number;
+  monthlyCoinsEarned?: number;
   verifiedActivitiesCount: number;
+  monthlyVerifiedActivitiesCount?: number;
   tasksCompletedCount: number;
+  monthlyTasksCompletedCount?: number;
   resolvedReportsCount: number;
+  resolvedProblemsCount?: number;
+  monthlyResolvedProblemsCount?: number;
+  monthlyScore?: number;
+  overallScore?: number;
   realScore: number;
   rank: number;
   isTop3: boolean;
@@ -845,6 +878,7 @@ export interface DistrictLeaderboardDetailsResponse {
   success: boolean;
   region: string;
   district: string;
+  rankingMode?: 'monthly' | 'overall';
   periodKey: string;
   periodLabel?: string;
   daysRemainingInMonth: number;
@@ -855,7 +889,12 @@ export interface DistrictLeaderboardDetailsResponse {
   mySchoolRating: DistrictSchoolRating | null;
   totalSchoolsInDistrict: number;
   ambassadorRatings: DistrictAmbassadorRating[];
+  top10Ambassadors?: DistrictAmbassadorRating[];
   myAmbassadorRating: DistrictAmbassadorRating | null;
+  ambassadorRatingsMonthly?: DistrictAmbassadorRating[];
+  ambassadorRatingsOverall?: DistrictAmbassadorRating[];
+  myAmbassadorMonthlyRating?: DistrictAmbassadorRating | null;
+  myAmbassadorOverallRating?: DistrictAmbassadorRating | null;
   totalAmbassadorsInDistrict: number;
   monthlyAwards: MonthlyAwardRecord[];
 }
@@ -1333,3 +1372,33 @@ export interface ChampionshipLiveResponse {
   };
   recentWinners: any[];
 }
+
+export interface DailyMission {
+  id: string;
+  title: string;
+  description: string;
+  rewardCoins: number;
+  status: 'active' | 'archived';
+  createdAt: string;
+  createdByName?: string;
+}
+
+export interface DailyMissionSubmission {
+  id: string;
+  missionId: string;
+  missionTitle: string;
+  userId: string;
+  userName: string;
+  userGrade?: string;
+  schoolId: string;
+  schoolName: string;
+  photoUrl: string;
+  comment?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  awardedCoins: number;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  adminNote?: string;
+  createdAt: string;
+}
+

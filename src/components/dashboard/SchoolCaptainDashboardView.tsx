@@ -39,6 +39,9 @@ export const SchoolCaptainDashboardView: React.FC = () => {
     studentsLeaderboard,
     ecoTasks,
     registrationApplications,
+    dailyMissionSubmissions,
+    adminIntent,
+    clearAdminIntent,
     liveSyncVersion,
     createEcoTask,
     updateEcoTask,
@@ -46,6 +49,7 @@ export const SchoolCaptainDashboardView: React.FC = () => {
     schoolReportAction,
     appointAmbassadorHierarchical,
     reviewApplication,
+    reviewDailyMissionSubmission,
     fetchDistrictLeaderboardDetails,
     fetchRosterDirectory,
     showNotification,
@@ -59,6 +63,11 @@ export const SchoolCaptainDashboardView: React.FC = () => {
   const [studentSourceFilter, setStudentSourceFilter] = useState<'all' | 'bot'>('all');
   const [selectedChatChannelId, setSelectedChatChannelId] = useState<string>('');
   const chatSectionRef = React.useRef<HTMLDivElement | null>(null);
+  const dailyVerifyRef = React.useRef<HTMLDivElement | null>(null);
+  const [highlightedDailySubId, setHighlightedDailySubId] = useState<string | null>(null);
+  const [dailyRejectNoteMap, setDailyRejectNoteMap] = useState<Record<string, string>>({});
+  const [reviewingDailyId, setReviewingDailyId] = useState<string | null>(null);
+  const [dailyPreviewPhoto, setDailyPreviewPhoto] = useState<string | null>(null);
 
   // Direct Ambassador Onboarding Form state
   const [ambFullName, setAmbFullName] = useState('');
@@ -199,6 +208,44 @@ export const SchoolCaptainDashboardView: React.FC = () => {
     [ecoTasks, mySchool?.id, user.schoolId]
   );
 
+  const scopedDailySubmissions = useMemo(() => {
+    const isPrivileged = user.role === 'super_admin' || user.role === 'moderator';
+    return dailyMissionSubmissions.filter(s => {
+      if (isPrivileged) return true;
+      const sameSchoolId = Boolean(user.schoolId && s.schoolId === user.schoolId);
+      const sameSchoolName =
+        Boolean(user.schoolName && s.schoolName) &&
+        String(s.schoolName).trim().toLowerCase() === String(user.schoolName).trim().toLowerCase();
+      return sameSchoolId || sameSchoolName;
+    });
+  }, [dailyMissionSubmissions, user.role, user.schoolId, user.schoolName]);
+
+  const pendingDailySubmissions = useMemo(
+    () => scopedDailySubmissions.filter(s => s.status === 'pending'),
+    [scopedDailySubmissions]
+  );
+
+  useEffect(() => {
+    if (adminIntent?.verifyDailySubId) {
+      setHighlightedDailySubId(adminIntent.verifyDailySubId);
+      window.setTimeout(() => {
+        dailyVerifyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 150);
+      clearAdminIntent();
+    }
+  }, [adminIntent, clearAdminIntent]);
+
+  const handleReviewDailySub = async (subId: string, action: 'approve' | 'reject') => {
+    setReviewingDailyId(subId);
+    try {
+      const note = dailyRejectNoteMap[subId]?.trim();
+      await reviewDailyMissionSubmission(subId, action, note || undefined);
+      if (highlightedDailySubId === subId) setHighlightedDailySubId(null);
+    } finally {
+      setReviewingDailyId(null);
+    }
+  };
+
   const mySchoolRating = districtDetails?.mySchoolRating || districtDetails?.schoolRatings.find(s => s.id === mySchool?.id);
   const top3ThresholdScore = districtDetails?.schoolRatings?.[2]?.realScore ?? 0;
 
@@ -317,6 +364,139 @@ export const SchoolCaptainDashboardView: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Bugungi Missiyalarni Tekshirish Queue */}
+      <div
+        ref={dailyVerifyRef}
+        className={`p-6 rounded-2xl bg-white dark:bg-slate-900 border space-y-4 ${
+          pendingDailySubmissions.length > 0
+            ? 'border-emerald-500/50 shadow-lg shadow-emerald-500/10'
+            : 'border-slate-200 dark:border-slate-800'
+        }`}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+              <span>Bugungi Missiyalarni Tekshirish</span>
+              {pendingDailySubmissions.length > 0 && (
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500 text-slate-950 text-[11px] font-black font-mono">
+                  {pendingDailySubmissions.length} ta kutilmoqda
+                </span>
+              )}
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              O‘quvchilar bugungi missiyani bajarib yuborgan rasmlarni tekshiring. Tasdiqlangach o‘quvchiga EcoCoin va chat xabari boradi.
+            </p>
+          </div>
+        </div>
+
+        {pendingDailySubmissions.length === 0 ? (
+          <div className="py-6 text-center text-xs text-slate-500 dark:text-slate-400 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">
+            Hozircha tekshirish kutilayotgan bugungi missiya rasmlari yo‘q.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {pendingDailySubmissions.map(sub => {
+              const isHighlighted = highlightedDailySubId === sub.id;
+              const isBusy = reviewingDailyId === sub.id;
+              return (
+                <div
+                  key={sub.id}
+                  className={`rounded-2xl border overflow-hidden flex flex-col justify-between bg-slate-50 dark:bg-slate-950/70 ${
+                    isHighlighted
+                      ? 'border-emerald-400 ring-2 ring-emerald-400/50'
+                      : 'border-slate-200 dark:border-slate-800'
+                  }`}
+                >
+                  <div className="space-y-3 p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-sm font-extrabold text-slate-900 dark:text-white truncate">
+                          {sub.userName} {sub.userGrade ? `(${sub.userGrade})` : ''}
+                        </div>
+                        <div className="text-[11px] text-slate-500 truncate">
+                          {sub.schoolName} · {new Date(sub.createdAt).toLocaleString('uz-UZ')}
+                        </div>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-lg bg-amber-500/15 text-amber-500 font-mono text-xs font-extrabold shrink-0">
+                        +{sub.awardedCoins} ECO
+                      </span>
+                    </div>
+
+                    <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                      🎯 {sub.missionTitle}
+                    </div>
+
+                    {sub.comment && (
+                      <p className="text-xs text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200/70 dark:border-slate-800">
+                        {sub.comment}
+                      </p>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => setDailyPreviewPhoto(resolveMediaUrl(sub.photoUrl))}
+                      className="block w-full aspect-video rounded-xl overflow-hidden bg-slate-200 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 cursor-zoom-in"
+                    >
+                      <img
+                        src={resolveMediaUrl(sub.photoUrl)}
+                        alt={sub.missionTitle}
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover"
+                      />
+                    </button>
+
+                    <input
+                      type="text"
+                      value={dailyRejectNoteMap[sub.id] || ''}
+                      onChange={e =>
+                        setDailyRejectNoteMap(prev => ({ ...prev, [sub.id]: e.target.value }))
+                      }
+                      placeholder="Izoh yoki rad etish sababi (ixtiyoriy)..."
+                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <div className="p-3 pt-0 flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={isBusy}
+                      onClick={() => handleReviewDailySub(sub.id, 'approve')}
+                      className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold inline-flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>{isBusy ? 'Saqlanmoqda...' : `Tasdiqlash (+${sub.awardedCoins} ECO)`}</span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isBusy}
+                      onClick={() => handleReviewDailySub(sub.id, 'reject')}
+                      className="px-3.5 py-2.5 rounded-xl bg-rose-500/15 hover:bg-rose-500 hover:text-white text-rose-500 text-xs font-bold inline-flex items-center gap-1 disabled:opacity-50 cursor-pointer transition-colors"
+                    >
+                      <XCircle className="w-4 h-4" />
+                      <span>Rad etish</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {dailyPreviewPhoto && (
+        <div
+          onClick={() => setDailyPreviewPhoto(null)}
+          className="fixed inset-0 z-50 bg-slate-950/90 flex items-center justify-center p-4 cursor-zoom-out"
+        >
+          <img
+            src={dailyPreviewPhoto}
+            alt="Missiya rasmi"
+            className="max-w-full max-h-[85vh] rounded-2xl object-contain shadow-2xl"
+          />
+        </div>
+      )}
 
       {/* Real District School Rating & Month-End TOP-3 Tracker */}
       <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">

@@ -223,6 +223,8 @@ export async function logOutFirebase() {
   }
 }
 
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+
 // Audit Logger
 export async function recordAuditLog(
   actor: { uid: string; fullName: string; role: UserRole },
@@ -252,4 +254,55 @@ export async function recordAuditLog(
   }
 
   return log;
+}
+
+// Upload BEFORE/AFTER photo or video to Firebase Storage when Firebase Auth session is active
+export async function uploadEvidenceToFirebaseStorage(
+  file: Blob | File,
+  folder: 'before' | 'after' | 'reports' = 'reports',
+  fileName?: string
+): Promise<string | null> {
+  try {
+    if (!app || !auth?.currentUser) return null;
+    const storage = getStorage(app);
+    const safeName = (fileName || (file instanceof File ? file.name : 'evidence.jpg')).replace(/[^a-zA-Z0-9._-]/g, '_');
+    const storagePath = `eco_reports/${folder}/${auth.currentUser.uid}/${Date.now()}_${safeName}`;
+    const storageRef = ref(storage, storagePath);
+    const snap = await uploadBytes(storageRef, file);
+    return await getDownloadURL(snap.ref);
+  } catch (err) {
+    console.warn('Firebase Storage upload fallback to server disk:', err);
+    return null;
+  }
+}
+
+// Mirror report record to Firestore `reports` collection when Firebase Auth is signed in
+export async function syncEcoReportToFirestore(report: EcoReport): Promise<void> {
+  try {
+    if (!db || !auth?.currentUser || !report?.id) return;
+    const sanitized: Record<string, any> = {
+      id: report.id,
+      title: String(report.title || 'Ekologik muammo').slice(0, 200),
+      description: String(report.description || '').slice(0, 2000),
+      category: report.category,
+      severity: report.severity || 'medium',
+      status: report.status,
+      region: String(report.region || 'Toshkent shahri').slice(0, 100),
+      district: String(report.district || 'Yunusobod tumani').slice(0, 100),
+      address: String(report.address || '').slice(0, 300),
+      lat: Number(report.lat) || 41.2995,
+      lng: Number(report.lng) || 69.2401,
+      imageUrl: String(report.imageUrl || '').slice(0, 1024),
+      beforeImageUrl: String(report.beforeImageUrl || report.imageUrl || '').slice(0, 1024),
+      reporterUid: report.reporterUid || auth.currentUser.uid,
+      reporterName: String(report.reporterName || '').slice(0, 150),
+      schoolId: String(report.schoolId || '').slice(0, 128),
+      schoolName: String(report.schoolName || '').slice(0, 200),
+      createdAt: report.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    await setDoc(doc(db, 'reports', report.id), sanitized, { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `reports/${report?.id || 'unknown'}`);
+  }
 }

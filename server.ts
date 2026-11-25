@@ -43,6 +43,7 @@ import {
   getPersistentDataDir,
   mergeUserAccounts,
   resolveCanonicalUid,
+  phoneMatchKey,
   syncUserStatsConsistency,
   isSyntheticEmail,
   reconcileSchoolsAndStudents,
@@ -704,6 +705,23 @@ app.get('/api/bootstrap', (req: AuthenticatedRequest, res) => {
       : (centralDb.missionSubmissions || []).filter((s: any) => s.userId === caller.uid);
     const callerCompletedMissions = caller ? centralDb.missionCompletions?.[caller.uid] || [] : [];
 
+    const visibleDailyMissions = (centralDb.dailyMissions || []).filter(
+      (m: any) => m.status === 'active' || isSuperAdmin
+    );
+    const visibleDailyMissionSubmissions = !caller
+      ? []
+      : isSuperAdmin || isModerator
+      ? centralDb.dailyMissionSubmissions || []
+      : isCaptain
+      ? (centralDb.dailyMissionSubmissions || []).filter(
+          (s: any) =>
+            s.userId === caller.uid ||
+            (caller.schoolId && s.schoolId === caller.schoolId) ||
+            (caller.schoolName && s.schoolName === caller.schoolName)
+        )
+      : (centralDb.dailyMissionSubmissions || []).filter((s: any) => s.userId === caller.uid);
+    const callerCompletedDailyMissions = caller ? centralDb.dailyMissionCompletions?.[caller.uid] || [] : [];
+
     res.json({
       success: true,
       user: sanitizeSelfUser(caller),
@@ -743,6 +761,9 @@ app.get('/api/bootstrap', (req: AuthenticatedRequest, res) => {
       ecoMissions: visibleMissions,
       missionSubmissions: visibleMissionSubmissions,
       missionCompletions: callerCompletedMissions,
+      dailyMissions: visibleDailyMissions,
+      dailyMissionSubmissions: visibleDailyMissionSubmissions,
+      dailyMissionCompletions: callerCompletedDailyMissions,
       weeklyChallenge: buildWeeklyChallengeSummary(caller),
       schoolTeamMission: buildSchoolTeamMissionSummary(caller),
       championshipMeta: buildChampionshipEligibility(caller),
@@ -892,7 +913,8 @@ function recordBotStarter(
   chatId: string | number,
   username?: string,
   firstName?: string,
-  deferSave = false
+  deferSave = false,
+  refMeta?: { firstTimeRefEligible?: boolean; firstTimeRefCode?: string }
 ) {
   const key = String(chatId || '').trim();
   if (!key) return { isNew: false };
@@ -900,13 +922,24 @@ function recordBotStarter(
     centralDb.botStarters = {};
   }
   const nowIso = new Date().toISOString();
-  const isNew = !centralDb.botStarters[key];
+  const prev = centralDb.botStarters[key];
+  const isNew = !prev;
   centralDb.botStarters[key] = {
     chatId: key,
-    username: username || centralDb.botStarters[key]?.username || '',
-    firstName: firstName || centralDb.botStarters[key]?.firstName || '',
-    startedAt: centralDb.botStarters[key]?.startedAt || nowIso,
+    username: username || prev?.username || '',
+    firstName: firstName || prev?.firstName || '',
+    startedAt: prev?.startedAt || nowIso,
     lastSeenAt: nowIso,
+    ...(refMeta?.firstTimeRefEligible !== undefined
+      ? { firstTimeRefEligible: refMeta.firstTimeRefEligible }
+      : prev?.firstTimeRefEligible !== undefined
+      ? { firstTimeRefEligible: prev.firstTimeRefEligible }
+      : {}),
+    ...(refMeta?.firstTimeRefCode
+      ? { firstTimeRefCode: refMeta.firstTimeRefCode }
+      : prev?.firstTimeRefCode
+      ? { firstTimeRefCode: prev.firstTimeRefCode }
+      : {}),
   };
   if (!deferSave) {
     saveCentralDb();
@@ -915,6 +948,16 @@ function recordBotStarter(
     }
   }
   return { isNew };
+}
+
+function isUserFullyRegistered(u: any): boolean {
+  if (!u || typeof u !== 'object') return false;
+  if (checkIsSuperAdmin(u)) return true;
+  const hasName = String(u.fullName || '').trim().length >= 2;
+  const hasPhone = phoneMatchKey(u.phoneNumber).length >= 9;
+  const cleanSchool = String(u.schoolName || '').trim();
+  const hasSchool = Boolean(cleanSchool && cleanSchool !== 'Maktab kiritilmagan');
+  return Boolean((u.isOnboarded || (hasName && hasPhone && hasSchool)) && hasName && hasPhone && hasSchool);
 }
 
 function ensureCurrentWeeklyChallenge() {
@@ -2142,6 +2185,8 @@ app.post('/api/reports/submit', requireAuth, async (req: AuthenticatedRequest, r
 
     const reportId = String(targetReportId || `rep_${Date.now()}`);
     const nowIso = new Date().toISOString();
+    const initialImage = String(imageUrl || imageBase64 || '').trim();
+    const initialVideo = String(videoUrl || '').trim();
     const reportData: any = {
       id: reportId,
       clientReportId: targetReportId || reportId,
@@ -2149,22 +2194,27 @@ app.post('/api/reports/submit', requireAuth, async (req: AuthenticatedRequest, r
       description: description || '',
       category: finalCategory,
       severity: hazardCheck.isHazardous ? 'high' : aiAnalysisResult?.severityLevel || severity || 'medium',
-      status: 'pending',
+      status: 'PENDING_REVIEW',
       coinsAwarded: false,
+      rewardsIssued: false,
+      ambassadorResolutionRewarded: false,
       rewardCoins: configuredReward,
       region: region || userRec?.region || 'Toshkent shahri',
       district: district || userRec?.district || 'Yunusobod tumani',
       address: address || `${region || 'Toshkent'}, ${district || ''}`,
       lat: Number(lat) || 41.2995,
       lng: Number(lng) || 69.2401,
-      imageUrl: imageUrl || imageBase64 || '',
-      videoUrl: videoUrl || '',
+      imageUrl: initialImage,
+      beforeImageUrl: initialImage,
+      videoUrl: initialVideo,
+      beforeVideoUrl: initialVideo,
       reporterUid: uid,
       reporterName: rName,
       authorUid: uid,
       authorName: rName,
       schoolId: resolvedSchool?.id || userRec?.schoolId || schoolId || '',
       schoolName: resolvedSchool?.name || sName,
+      schoolNumber: resolvedSchool?.number || userRec?.schoolNumber || '',
       authorTelegramId: userRec?.telegramId || null,
       isHazardous: hazardCheck.isHazardous,
       ...(hazardCheck.safetyWarning ? { safetyWarning: hazardCheck.safetyWarning } : {}),
@@ -2174,7 +2224,7 @@ app.post('/api/reports/submit', requireAuth, async (req: AuthenticatedRequest, r
           status: 'PENDING_REVIEW',
           actorName: rName,
           actorRole: userRec?.role || 'student',
-          note: hazardCheck.isHazardous ? "Xavfli holat sifatida belgilandi — kattalar/tashkilot eskalatsiyasi tavsiya etiladi" : "O'quvchi tomonidan yuborildi",
+          note: hazardCheck.isHazardous ? "Xavfli holat sifatida belgilandi — kattalar/tashkilot eskalatsiyasi tavsiya etiladi" : "O'quvchi tomonidan yuborildi (Admin tekshiruvida)",
           timestamp: nowIso,
         },
       ],
@@ -2393,7 +2443,7 @@ app.post(
       const { status, resolvedImageUrl } = req.body;
       const valid = [
         'pending', 'verified', 'in_progress', 'resolved', 'rejected',
-        'PENDING_REVIEW', 'APPROVED', 'NEEDS_INFO', 'ASSIGNED', 'IN_PROGRESS', 'ESCALATED', 'RESOLVED', 'REJECTED',
+        'PENDING_REVIEW', 'APPROVED', 'NEEDS_INFO', 'ASSIGNED', 'IN_PROGRESS', 'FINAL_REVIEW', 'REUPLOAD_REQUIRED', 'ESCALATED', 'RESOLVED', 'REJECTED',
       ];
       if (!valid.includes(status)) {
         return res.status(400).json({ error: "Noto'g'ri status" });
@@ -2572,7 +2622,7 @@ app.post('/api/reports/:id/workflow', requireAuth, async (req: AuthenticatedRequ
   }
 });
 
-// School Admin decision: student self-resolved OR assign to school's Eco-Ambassador
+// School Admin Initial Review, Eco-Elchi Assignment, and Final Before/After Verification
 app.post(
   '/api/reports/:id/school-action',
   requireRoles('school_admin', 'super_admin', 'moderator'),
@@ -2590,75 +2640,88 @@ app.post(
       const nowIso = new Date().toISOString();
       if (!Array.isArray(report.statusHistory)) report.statusHistory = [];
 
+      // Legacy direct student resolution (with strict atomic anti-duplicate guard)
       if (action === 'confirm_student_resolved') {
-        if (report.status === 'resolved' || report.status === 'RESOLVED') {
-          return res.json({ success: true, report, message: 'Hisobot allaqachon tasdiqlangan' });
+        const hasPriorFinalTx = (centralDb.transactions || []).some(
+          (t: any) => t.reportId === report.id && t.rewardStage === 'final_resolution'
+        );
+        if (report.status === 'resolved' || report.status === 'RESOLVED' || report.rewardsIssued || hasPriorFinalTx) {
+          return res.status(400).json({ error: 'Hisobot allaqachon tasdiqlangan va mukofot berilgan' });
         }
-        const reward = Number(report.rewardCoins) || getConfiguredReward('problemResolved') || 100;
-        report.status = 'resolved';
+        const reward = 100;
+        report.rewardsIssued = true;
+        report.coinsAwarded = true;
+        report.resolutionRewardAwarded = true;
+        report.rewardCoins = reward;
+        report.studentRewardedCoins = reward;
+        report.status = 'RESOLVED';
         report.resolvedAt = nowIso;
         report.resolvedBy = caller.fullName;
+        report.finalReviewedBy = caller.fullName;
+        report.finalReviewedByUid = caller.uid;
+        report.finalReviewedAt = nowIso;
+        report.finalReviewNote = note || "Maktab administratori o'quvchi bajarganini tasdiqladi";
         report.resolvedImageUrl = report.resolvedImageUrl || report.imageUrl;
         report.updatedAt = nowIso;
         report.statusHistory.push({
           status: 'RESOLVED',
           actorName: caller.fullName,
           actorRole: caller.role,
-          note: note || "Maktab admini o'quvchi ishni haqiqatda bajarganini tasdiqladi",
+          note: report.finalReviewNote,
           timestamp: nowIso,
         });
 
-        if (!report.coinsAwarded) {
-          report.coinsAwarded = true;
-          report.rewardCoins = reward;
-          const student = findUserByAnyIdentifier({
-            uid: report.reporterUid || report.authorUid,
-            telegramId: report.authorTelegramId,
+        const student = findUserByAnyIdentifier({
+          uid: report.reporterUid || report.authorUid,
+          telegramId: report.authorTelegramId,
+        });
+        if (student) {
+          student.ecoCoins = (student.ecoCoins || 0) + reward;
+          student.totalCoinsEarned = (student.totalCoinsEarned || 0) + reward;
+          student.ecoXP = Number(student.ecoXP || 0) + reward * 4;
+          student.reportsCount = (student.reportsCount || 0) + 1;
+          student.cleanupsCount = (student.cleanupsCount || 0) + 1;
+          syncUserStatsConsistency(student);
+          const tx = recordTransaction({
+            userId: student.uid,
+            amount: reward,
+            type: 'earn',
+            status: 'approved',
+            reportId: report.id,
+            rewardStage: 'final_resolution',
+            reason: `Maktab administratori ekologik ishingizni tasdiqladi: ${report.title}`,
           });
-          if (student) {
-            student.ecoCoins = (student.ecoCoins || 0) + reward;
-            student.totalCoinsEarned = (student.totalCoinsEarned || 0) + reward;
-            student.reportsCount = (student.reportsCount || 0) + 1;
-            student.cleanupsCount = (student.cleanupsCount || 0) + 1;
-            recordTransaction({
-              userId: student.uid,
-              amount: reward,
-              type: 'earn',
-              status: 'approved',
-              reportId: report.id,
-              reason: `Maktab admini ekologik ishingizni tasdiqladi: ${report.title}`,
-            });
-            centralDb.notifications.unshift({
-              id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
-              userId: student.uid,
-              title: `+${reward} EcoCoin! Ekologik ishingiz tasdiqlandi`,
-              message: `${caller.fullName} "${report.title}" bo'yicha bajargan ishingizni tasdiqladi.`,
-              type: 'coin',
-              read: false,
-              createdAt: nowIso,
-            });
-            const tgId = student.telegramId || student.chatId || report.authorTelegramId;
-            if (tgId) {
-              sendTelegramMessage(
-                tgId,
-                `🎉 <b>MAKTAB ADMINI ISHINGIZNI TASDIQLADI!</b>\n\n` +
-                  `📌 <b>Muammo:</b> ${report.title}\n` +
-                  `💰 <b>Mukofot:</b> +${reward} EcoCoin\n` +
-                  `💳 <b>Balans:</b> ${student.ecoCoins} EcoCoin`,
-                { reply_markup: { inline_keyboard: [[{ text: '🌍 ECO HERO ilovasini ochish', web_app: { url: APP_URL } }]] } }
-              ).catch(() => {});
-            }
+          report.studentRewardTxId = tx.id;
+          centralDb.notifications.unshift({
+            id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+            userId: student.uid,
+            title: `+${reward} EcoCoin! Ekologik ishingiz tasdiqlandi`,
+            message: `${caller.fullName} "${report.title}" bo'yicha ishingizni tasdiqladi.`,
+            type: 'coin',
+            read: false,
+            createdAt: nowIso,
+          });
+          const tgId = student.telegramId || student.chatId || report.authorTelegramId;
+          if (tgId) {
+            sendTelegramMessage(
+              tgId,
+              `🎉 <b>MAKTAB ADMINISTRATORI ISHINGIZNI TASDIQLADI!</b>\n\n` +
+                `📌 <b>Muammo:</b> ${report.title}\n` +
+                `💰 <b>Mukofot:</b> +${reward} EcoCoin\n` +
+                `💳 <b>Balans:</b> ${student.ecoCoins} EcoCoin`,
+              { reply_markup: { inline_keyboard: [[{ text: '🌍 ECO HERO ilovasini ochish', web_app: { url: APP_URL } }]] } }
+            ).catch(() => {});
           }
-          if (report.schoolName) {
-            findOrCreateSchool({
-              schoolId: report.schoolId,
-              schoolName: report.schoolName,
-              region: report.region,
-              district: report.district,
-              coinsDelta: reward,
-              cleanupsDelta: 1,
-            });
-          }
+        }
+        if (report.schoolName) {
+          findOrCreateSchool({
+            schoolId: report.schoolId,
+            schoolName: report.schoolName,
+            region: report.region,
+            district: report.district,
+            coinsDelta: reward,
+            cleanupsDelta: 1,
+          });
         }
 
         saveCentralDb();
@@ -2671,88 +2734,48 @@ app.post(
           targetCollection: 'reports',
           targetId: report.id,
         });
-        return res.json({ success: true, report, message: "O'quvchi bajargan ish tasdiqlandi va EcoCoin berildi!" });
+        return res.json({ success: true, report, message: "O'quvchi bajargan ish tasdiqlandi va +100 EcoCoin berildi!" });
       }
 
-      if (action === 'assign_ambassador') {
-        let targetAmb = assignedAmbassadorUid ? findUserByAnyIdentifier({ uid: assignedAmbassadorUid }) : null;
-        if (!targetAmb) {
-          targetAmb = Object.values(centralDb.users || {}).find(
-            (u: any) =>
-              u &&
-              u.role === 'ambassador' &&
-              ((report.schoolId && u.schoolId === report.schoolId) ||
-                (report.schoolName && u.schoolName === report.schoolName))
-          );
+      // School Admin Rejects report (Initial or Final Verification) -> NO coins
+      if (action === 'reject' || action === 'final_reject') {
+        if (String(report.status || '').toUpperCase() === 'RESOLVED' || report.rewardsIssued) {
+          return res.status(400).json({ error: 'Allaqachon hal qilingan va mukofotlangan hisobotni rad etib bo‘lmaydi' });
         }
-        const ambUid = targetAmb?.uid || assignedAmbassadorUid || '';
-        const ambName = targetAmb?.fullName || 'Maktab Eko-Elchisi';
-
-        report.assignedAmbassadorUid = ambUid;
-        report.assignedAmbassadorName = ambName;
-        report.captainInstructions =
-          note || "O'quvchi faqat muammoni xabar qilgan. O'quvchi bilan birgalikda muammoni hal qilib, avvalgi va keyingi rasmni yuklang!";
-        report.status = 'in_progress';
+        const reasonNote = String(note || '').trim() || 'Maktab administratori tomonidan rad etildi';
+        report.status = 'REJECTED';
+        report.moderatorNote = reasonNote;
+        report.finalReviewNote = reasonNote;
+        report.finalReviewedBy = caller.fullName;
+        report.finalReviewedByUid = caller.uid;
+        report.finalReviewedAt = nowIso;
         report.updatedAt = nowIso;
         report.statusHistory.push({
-          status: 'ASSIGNED',
+          status: 'REJECTED',
           actorName: caller.fullName,
           actorRole: caller.role,
-          note: `Eko-Elchiga biriktirildi: ${ambName}`,
+          note: reasonNote,
           timestamp: nowIso,
         });
-
-        if (ambUid) {
-          const existingTask = centralDb.ecoTasks.find((t: any) => t.relatedReportId === report.id);
-          if (!existingTask) {
-            centralDb.ecoTasks.unshift({
-              id: `task_${Date.now()}`,
-              schoolId: report.schoolId,
-              schoolName: report.schoolName,
-              region: report.region,
-              district: report.district,
-              title: `Muammoni hal etish: ${report.title}`,
-              instructions: report.captainInstructions,
-              assignedByUid: caller.uid,
-              assignedByName: caller.fullName,
-              assigneeUid: ambUid,
-              assigneeName: ambName,
-              relatedReportId: report.id,
-              status: 'assigned',
-              rewardCoins: 200,
-              createdAt: nowIso,
-            });
-          }
-          centralDb.notifications.unshift({
-            id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
-            userId: ambUid,
-            title: `Yangi muammo biriktirildi: ${report.title}`,
-            message: `${report.reporterName} bilan birgalikda muammoni hal qilib, avvalgi/keyingi rasmlarni yuklang (+200 EcoCoin).`,
-            type: 'task',
-            read: false,
-            createdAt: nowIso,
-          });
-          const ambTg = targetAmb?.telegramId || targetAmb?.chatId;
-          if (ambTg) {
-            sendTelegramMessage(
-              ambTg,
-              `🛡 <b>SIZGA YANGI EKO-MUAMMO BIRIKTIRILDI!</b>\n\n` +
-                `📌 <b>Muammo:</b> ${report.title}\n` +
-                `👤 <b>Xabar bergan o'quvchi:</b> ${report.reporterName}\n` +
-                `📋 <b>Topshiriq:</b> O'quvchi bilan birga muammoni hal qiling va Mini Appda Avvalgi + Keyingi rasmlarni yuklang.\n` +
-                `💰 <b>Mukofot:</b> Sizga +200 EcoCoin, o'quvchiga +100 EcoCoin!`,
-              { reply_markup: { inline_keyboard: [[{ text: '📸 Dalil yuklash', web_app: { url: APP_URL } }]] } }
-            ).catch(() => {});
-          }
-        }
 
         const student = findUserByAnyIdentifier({ uid: report.reporterUid || report.authorUid });
         if (student) {
           centralDb.notifications.unshift({
             id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
             userId: student.uid,
-            title: `Xabaringiz Eko-Elchiga yuborildi`,
-            message: `${ambName} siz bilan birga "${report.title}" muammosini hal qiladi. Hal bo'lgach +100 EcoCoin olasiz!`,
+            title: `Murojaat rad etildi: ${report.title}`,
+            message: `${caller.fullName}: ${reasonNote}`,
+            type: 'status',
+            read: false,
+            createdAt: nowIso,
+          });
+        }
+        if (report.assignedAmbassadorUid && report.assignedAmbassadorUid !== student?.uid) {
+          centralDb.notifications.unshift({
+            id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            userId: report.assignedAmbassadorUid,
+            title: `Natija rad etildi: ${report.title}`,
+            message: `${caller.fullName}: ${reasonNote}`,
             type: 'status',
             read: false,
             createdAt: nowIso,
@@ -2761,7 +2784,411 @@ app.post(
 
         saveCentralDb();
         broadcastRealtimeEvent('db:updated', { scope: 'reports' });
-        return res.json({ success: true, report, message: `Muammo Eko-Elchi (${ambName}) ga biriktirildi!` });
+        addAuditLog({
+          actorUid: caller.uid,
+          actorName: caller.fullName,
+          actorRole: caller.role,
+          action: action === 'final_reject' ? 'school_final_reject' : 'school_initial_reject',
+          targetCollection: 'reports',
+          targetId: report.id,
+          details: { note: reasonNote },
+        });
+        return res.json({ success: true, report, message: 'Hisobot rad etildi.' });
+      }
+
+      // School Admin requests AFTER photo re-upload -> preserves BEFORE photo & history, NO coins
+      if (action === 'final_request_reupload') {
+        if (String(report.status || '').toUpperCase() === 'RESOLVED' || report.rewardsIssued) {
+          return res.status(400).json({ error: 'Allaqachon yakuniy tasdiqlangan hisobot uchun qayta rasm so‘rab bo‘lmaydi' });
+        }
+        if (!report.afterImageUrl && !report.afterVideoUrl && !report.resolvedImageUrl) {
+          return res.status(400).json({ error: 'Hali keyingi dalil yuklanmagan' });
+        }
+        const reqNote =
+          String(note || '').trim() ||
+          "Iltimos, muammo hal qilingan joyning aniqroq keyingi rasm yoki videosini qayta yuklang.";
+        report.status = 'REUPLOAD_REQUIRED';
+        report.finalReviewNote = reqNote;
+        report.finalReviewedBy = caller.fullName;
+        report.finalReviewedByUid = caller.uid;
+        report.finalReviewedAt = nowIso;
+        report.reuploadRequestCount = Number(report.reuploadRequestCount || 0) + 1;
+        report.updatedAt = nowIso;
+        report.statusHistory.push({
+          status: 'REUPLOAD_REQUIRED',
+          actorName: caller.fullName,
+          actorRole: caller.role,
+          note: reqNote,
+          timestamp: nowIso,
+        });
+
+        for (const task of centralDb.ecoTasks || []) {
+          if (task.relatedReportId === report.id) {
+            task.status = 'needs_revision';
+            task.completionNote = reqNote;
+            task.updatedAt = nowIso;
+          }
+        }
+
+        const ambUser = report.assignedAmbassadorUid
+          ? findUserByAnyIdentifier({ uid: report.assignedAmbassadorUid })
+          : null;
+        if (ambUser) {
+          centralDb.notifications.unshift({
+            id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            userId: ambUser.uid,
+            title: `Qayta rasm yuklash so'raldi: ${report.title}`,
+            message: `${caller.fullName}: ${reqNote}`,
+            type: 'task',
+            read: false,
+            createdAt: nowIso,
+          });
+          const ambTg = ambUser.telegramId || ambUser.chatId;
+          if (ambTg) {
+            sendTelegramMessage(
+              ambTg,
+              `🔄 <b>QAYTA RASM YUKLASH SO'RALDI</b>\n\n` +
+                `📌 <b>Muammo:</b> ${report.title}\n` +
+                `🏫 <b>Maktab administratori:</b> ${caller.fullName}\n` +
+                `💬 <b>Izoh:</b> ${reqNote}\n\n` +
+                `Iltimos, hal qilingandan keyingi yangi rasm/videoni Eco-Elchi kabinetidan qayta yuklang.`,
+              { reply_markup: { inline_keyboard: [[{ text: '📸 Qayta rasm yuklash', web_app: { url: APP_URL } }]] } }
+            ).catch(() => {});
+          }
+        }
+
+        saveCentralDb();
+        broadcastRealtimeEvent('db:updated', { scope: 'reports' });
+        addAuditLog({
+          actorUid: caller.uid,
+          actorName: caller.fullName,
+          actorRole: caller.role,
+          action: 'school_request_reupload',
+          targetCollection: 'reports',
+          targetId: report.id,
+          details: { note: reqNote, reuploadRequestCount: report.reuploadRequestCount },
+        });
+        return res.json({ success: true, report, message: "Eco-Elchidan qayta keyingi rasm yuklash so'raldi." });
+      }
+
+      // School Admin approves Initial Report & assigns to school Eco-Elchi
+      if (action === 'assign_ambassador') {
+        if (report.isHazardous) {
+          return res.status(400).json({ error: 'Xavfli muammolarni Eco-Elchiga biriktirish taqiqlanadi — eskalatsiya qiling!' });
+        }
+        if (String(report.status || '').toUpperCase() === 'RESOLVED' || report.rewardsIssued) {
+          return res.status(400).json({ error: 'Ushbu muammo allaqachon hal qilingan' });
+        }
+
+        let targetAmb = assignedAmbassadorUid ? findUserByAnyIdentifier({ uid: assignedAmbassadorUid }) : null;
+        if (targetAmb && !assertSchoolAccess(targetAmb, report.schoolId) && !hasAnyRole(caller, ['super_admin', 'moderator'])) {
+          targetAmb = null;
+        }
+        if (!targetAmb) {
+          targetAmb = Object.values(centralDb.users || {}).find(
+            (u: any) =>
+              u &&
+              (u.role === 'ambassador' || (Array.isArray(u.approvedRoles) && u.approvedRoles.includes('ambassador'))) &&
+              ((report.schoolId && u.schoolId === report.schoolId) ||
+                (report.schoolName && u.schoolName === report.schoolName))
+          );
+        }
+        const ambUid = targetAmb?.uid || assignedAmbassadorUid || '';
+        const ambName = targetAmb?.fullName || 'Maktab Eko-Elchisi';
+        if (!ambUid) {
+          return res.status(400).json({ error: 'Maktabda faol Eko-Elchi topilmadi. Avval Eco-Elchi tayinlang.' });
+        }
+
+        // Guarantee immutable BEFORE backup exists
+        if (!report.beforeImageUrl && report.imageUrl) report.beforeImageUrl = report.imageUrl;
+        if (!report.beforeVideoUrl && report.videoUrl) report.beforeVideoUrl = report.videoUrl;
+
+        report.assignedAmbassadorUid = ambUid;
+        report.assignedAmbassadorName = ambName;
+        report.assignedAt = nowIso;
+        report.captainInstructions =
+          String(note || '').trim() ||
+          "Maktab administratori tasdiqladi. Muammoni hal qiling va keyingi (AFTER) foto/video dalilni yuklang!";
+        report.status = 'ASSIGNED';
+        report.updatedAt = nowIso;
+        report.statusHistory.push({
+          status: 'ASSIGNED',
+          actorName: caller.fullName,
+          actorRole: caller.role,
+          note: `Tasdiqlandi va Eco-Elchiga biriktirildi: ${ambName}`,
+          timestamp: nowIso,
+        });
+
+        const existingTask = centralDb.ecoTasks.find((t: any) => t.relatedReportId === report.id);
+        if (!existingTask) {
+          centralDb.ecoTasks.unshift({
+            id: `task_${Date.now()}`,
+            schoolId: report.schoolId,
+            schoolName: report.schoolName,
+            region: report.region,
+            district: report.district,
+            title: `Muammoni hal etish: ${report.title}`,
+            instructions: report.captainInstructions,
+            assignedByUid: caller.uid,
+            assignedByName: caller.fullName,
+            assigneeUid: ambUid,
+            assigneeName: ambName,
+            relatedReportId: report.id,
+            status: 'assigned',
+            rewardCoins: 200,
+            createdAt: nowIso,
+          });
+        } else {
+          existingTask.assigneeUid = ambUid;
+          existingTask.assigneeName = ambName;
+          existingTask.instructions = report.captainInstructions;
+          existingTask.updatedAt = nowIso;
+        }
+
+        centralDb.notifications.unshift({
+          id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+          userId: ambUid,
+          title: `Yangi muammo biriktirildi: ${report.title}`,
+          message: `O'quvchi ${report.reporterName} xabar bergan muammo sizga biriktirildi. Hal qilgach keyingi rasm yuklang (+200 EcoCoin).`,
+          type: 'task',
+          read: false,
+          createdAt: nowIso,
+        });
+        const ambTg = targetAmb?.telegramId || targetAmb?.chatId;
+        if (ambTg) {
+          sendTelegramMessage(
+            ambTg,
+            `🛡 <b>SIZGA YANGI EKO-MUAMMO BIRIKTIRILDI!</b>\n\n` +
+              `📌 <b>Muammo:</b> ${report.title}\n` +
+              `👤 <b>Xabar bergan o'quvchi:</b> ${report.reporterName}\n` +
+              `📍 <b>Manzil:</b> ${report.address || `${report.region}, ${report.district}`}\n` +
+              `📋 <b>Vazifa:</b> Muammoni hal qilib, Eco-Elchi kabinetida KEYINGI (AFTER) rasm/video yuklang.\n` +
+              `💰 <b>Yakuniy tasdiqlangach mukofot:</b> Sizga +200 EcoCoin, o'quvchiga +100 EcoCoin!`,
+            { reply_markup: { inline_keyboard: [[{ text: '📸 Kabinetda ochish', web_app: { url: APP_URL } }]] } }
+          ).catch(() => {});
+        }
+
+        const student = findUserByAnyIdentifier({ uid: report.reporterUid || report.authorUid });
+        if (student) {
+          centralDb.notifications.unshift({
+            id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            userId: student.uid,
+            title: `Murojaatingiz Eco-Elchiga biriktirildi`,
+            message: `${ambName} "${report.title}" muammosini hal qilish uchun biriktirildi. Yakuniy tasdiqlangach +100 EcoCoin beriladi!`,
+            type: 'status',
+            read: false,
+            createdAt: nowIso,
+          });
+        }
+
+        saveCentralDb();
+        broadcastRealtimeEvent('db:updated', { scope: 'reports' });
+        addAuditLog({
+          actorUid: caller.uid,
+          actorName: caller.fullName,
+          actorRole: caller.role,
+          action: 'school_assign_ambassador',
+          targetCollection: 'reports',
+          targetId: report.id,
+          details: { assignedAmbassadorUid: ambUid, assignedAmbassadorName: ambName },
+        });
+        return res.json({ success: true, report, message: `Muammo tasdiqlandi va Eco-Elchi (${ambName}) ga biriktirildi!` });
+      }
+
+      // School Admin FINAL VERIFICATION (Tasdiqlash) -> Marks RESOLVED & Atomically pays +100 Student / +200 Eco-Elchi
+      if (action === 'final_approve') {
+        const hasPriorFinalTx = (centralDb.transactions || []).some(
+          (t: any) => t.reportId === report.id && t.rewardStage === 'final_resolution'
+        );
+        if (
+          String(report.status || '').toUpperCase() === 'RESOLVED' ||
+          report.rewardsIssued ||
+          report.ambassadorResolutionRewarded ||
+          hasPriorFinalTx
+        ) {
+          return res.status(400).json({ error: 'Ushbu muammo allaqachon yakuniy tasdiqlangan va EcoCoin mukofotlari berilgan!' });
+        }
+        if (report.isHazardous) {
+          return res.status(400).json({ error: "Xavfli muammolarni o'quvchi/Eco-Elchi mukofoti bilan yopish mumkin emas" });
+        }
+        const afterEvidence = report.afterImageUrl || report.afterVideoUrl || report.resolvedImageUrl;
+        if (!afterEvidence) {
+          return res.status(400).json({ error: 'Yakuniy tasdiqlash uchun Eco-Elchi tomonidan yuklangan KEYINGI (AFTER) rasm yoki video mavjud bo‘lishi shart!' });
+        }
+
+        // Atomic idempotency locks BEFORE crediting balances
+        report.rewardsIssued = true;
+        report.ambassadorResolutionRewarded = true;
+        report.coinsAwarded = true;
+        report.resolutionRewardAwarded = true;
+
+        const cleanFinalNote =
+          String(note || '').trim() ||
+          "Maktab administratori avvalgi va keyingi dalillarni solishtirib muammoni hal qilingan deb tasdiqladi.";
+
+        report.status = 'RESOLVED';
+        report.resolvedAt = nowIso;
+        report.resolvedBy = caller.fullName;
+        report.finalReviewedBy = caller.fullName;
+        report.finalReviewedByUid = caller.uid;
+        report.finalReviewedAt = nowIso;
+        report.finalReviewNote = cleanFinalNote;
+        report.updatedAt = nowIso;
+        report.statusHistory.push({
+          status: 'RESOLVED',
+          actorName: caller.fullName,
+          actorRole: caller.role,
+          note: cleanFinalNote,
+          timestamp: nowIso,
+        });
+
+        for (const task of centralDb.ecoTasks || []) {
+          if (task.relatedReportId === report.id) {
+            task.status = 'verified';
+            task.evidenceUrl = afterEvidence;
+            task.completionNote = report.resolutionDescription || report.completionNote || cleanFinalNote;
+            task.updatedAt = nowIso;
+          }
+        }
+
+        // Fixed server-authoritative rewards (ignore any req.body amounts)
+        const ambassadorReward = 200;
+        const studentReward = 100;
+        const ambassadorXpGain = 800;
+        const studentXpGain = 400;
+
+        const ambassadorUser =
+          (report.assignedAmbassadorUid && findUserByAnyIdentifier({ uid: report.assignedAmbassadorUid })) ||
+          null;
+        const studentUser = findUserByAnyIdentifier({
+          uid: report.reporterUid || report.authorUid,
+          telegramId: report.authorTelegramId,
+        });
+
+        let paidAmb = 0;
+        let paidStu = 0;
+
+        if (ambassadorUser) {
+          ambassadorUser.ecoCoins = (ambassadorUser.ecoCoins || 0) + ambassadorReward;
+          ambassadorUser.totalCoinsEarned = (ambassadorUser.totalCoinsEarned || 0) + ambassadorReward;
+          ambassadorUser.ecoXP = Number(ambassadorUser.ecoXP || 0) + ambassadorXpGain;
+          ambassadorUser.cleanupsCount = (ambassadorUser.cleanupsCount || 0) + 1;
+          syncUserStatsConsistency(ambassadorUser);
+          const ambTx = recordTransaction({
+            userId: ambassadorUser.uid,
+            amount: ambassadorReward,
+            type: 'earn',
+            status: 'approved',
+            reportId: report.id,
+            rewardStage: 'final_resolution',
+            reason: `Muammo hal qilindi (Maktab administratori yakuniy tasdiqladi): ${report.title}`,
+          });
+          report.ambassadorRewardTxId = ambTx.id;
+          report.ambassadorRewardedCoins = ambassadorReward;
+          paidAmb = ambassadorReward;
+
+          // Sync ambassador roster record
+          const ambRecord = (centralDb.ambassadors || []).find((a: any) => a.id === ambassadorUser.uid);
+          if (ambRecord) {
+            ambRecord.verifiedActivitiesCount = Number(ambRecord.verifiedActivitiesCount || 0) + 1;
+            ambRecord.ecoCoins = ambassadorUser.ecoCoins;
+          }
+
+          centralDb.notifications.unshift({
+            id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+            userId: ambassadorUser.uid,
+            title: `+${ambassadorReward} EcoCoin! Muammo yakuniy tasdiqlandi`,
+            message: `${caller.fullName} "${report.title}" bo'yicha keyingi dalilingizni tasdiqladi (+${ambassadorReward} EcoCoin, +${ambassadorXpGain} XP).`,
+            type: 'coin',
+            read: false,
+            createdAt: nowIso,
+          });
+          const ambTg = ambassadorUser.telegramId || ambassadorUser.chatId;
+          if (ambTg) {
+            sendTelegramMessage(
+              ambTg,
+              `🎉 <b>YAKUNIY TASDIQLANDI! +${ambassadorReward} EcoCoin</b>\n\n` +
+                `📌 <b>Muammo:</b> ${report.title}\n` +
+                `🏫 <b>Tasdiqlagan admin:</b> ${caller.fullName}\n` +
+                `⭐ <b>Tajriba:</b> +${ambassadorXpGain} XP\n` +
+                `💳 <b>Balansingiz:</b> ${ambassadorUser.ecoCoins} EcoCoin`,
+              { reply_markup: { inline_keyboard: [[{ text: '🌍 ECO HERO Kabinet', web_app: { url: APP_URL } }]] } }
+            ).catch(() => {});
+          }
+        }
+
+        if (studentUser && studentUser.uid !== ambassadorUser?.uid) {
+          studentUser.ecoCoins = (studentUser.ecoCoins || 0) + studentReward;
+          studentUser.totalCoinsEarned = (studentUser.totalCoinsEarned || 0) + studentReward;
+          studentUser.ecoXP = Number(studentUser.ecoXP || 0) + studentXpGain;
+          studentUser.reportsCount = (studentUser.reportsCount || 0) + 1;
+          syncUserStatsConsistency(studentUser);
+          const stuTx = recordTransaction({
+            userId: studentUser.uid,
+            amount: studentReward,
+            type: 'earn',
+            status: 'approved',
+            reportId: report.id,
+            rewardStage: 'final_resolution',
+            reason: `Siz xabar bergan muammo hal qilindi va tasdiqlandi: ${report.title}`,
+          });
+          report.studentRewardTxId = stuTx.id;
+          report.studentRewardedCoins = studentReward;
+          paidStu = studentReward;
+
+          centralDb.notifications.unshift({
+            id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            userId: studentUser.uid,
+            title: `+${studentReward} EcoCoin! Xabaringiz hal qilindi`,
+            message: `${report.assignedAmbassadorName || 'Eco-Elchi'} "${report.title}" muammosini hal qildi va ${caller.fullName} tasdiqladi (+${studentReward} EcoCoin).`,
+            type: 'coin',
+            read: false,
+            createdAt: nowIso,
+          });
+          const stuTg = studentUser.telegramId || studentUser.chatId || report.authorTelegramId;
+          if (stuTg) {
+            sendTelegramMessage(
+              stuTg,
+              `🎉 <b>SIZ XABAR BERGAN MUAMMO HAL QILINDI! +${studentReward} EcoCoin</b>\n\n` +
+                `📌 <b>Muammo:</b> ${report.title}\n` +
+                `🛡 <b>Eco-Elchi:</b> ${report.assignedAmbassadorName || 'Maktab Eco-Elchisi'}\n` +
+                `🏫 <b>Tasdiqladi:</b> ${caller.fullName}\n` +
+                `💳 <b>Balansingiz:</b> ${studentUser.ecoCoins} EcoCoin`,
+              { reply_markup: { inline_keyboard: [[{ text: '🌍 ECO HERO ilovasini ochish', web_app: { url: APP_URL } }]] } }
+            ).catch(() => {});
+          }
+        }
+
+        if (report.schoolName) {
+          findOrCreateSchool({
+            schoolId: report.schoolId,
+            schoolName: report.schoolName,
+            region: report.region,
+            district: report.district,
+            coinsDelta: paidAmb + paidStu,
+            cleanupsDelta: 1,
+          });
+        }
+
+        saveCentralDb();
+        broadcastRealtimeEvent('db:updated', { scope: 'reports' });
+        addAuditLog({
+          actorUid: caller.uid,
+          actorName: caller.fullName,
+          actorRole: caller.role,
+          action: 'school_final_approve_report',
+          targetCollection: 'reports',
+          targetId: report.id,
+          details: { ambassadorReward: paidAmb, studentReward: paidStu },
+        });
+
+        return res.json({
+          success: true,
+          report,
+          ambassadorReward: paidAmb,
+          studentReward: paidStu,
+          message: `Muammo yakuniy tasdiqlandi!${paidAmb > 0 ? ` Eco-Elchiga +${paidAmb} EcoCoin` : ''}${paidStu > 0 ? `, O'quvchiga +${paidStu} EcoCoin` : ''} berildi!`,
+        });
       }
 
       return res.status(400).json({ error: "Noto'g'ri school-action amali" });
@@ -2771,7 +3198,7 @@ app.post(
   }
 );
 
-// Eco-Ambassador + Student joint resolution with Before/After Photos & AI Authenticity Check -> +200 / +100 EcoCoin
+// Eco-Elchi In-Progress & AFTER Evidence Submission -> Sends to School Admin Final Verification (BEFORE photo strictly immutable)
 app.post(
   '/api/reports/:id/ambassador-resolve',
   requireRoles('ambassador', 'school_admin', 'super_admin', 'moderator'),
@@ -2784,22 +3211,74 @@ app.post(
       if (!hasAnyRole(caller, ['super_admin', 'moderator']) && !assertSchoolAccess(caller, report.schoolId)) {
         return res.status(403).json({ error: "Boshqa maktab hisobotini yakunlay olmaysiz" });
       }
+      if (
+        caller.role === 'ambassador' &&
+        report.assignedAmbassadorUid &&
+        report.assignedAmbassadorUid !== caller.uid
+      ) {
+        return res.status(403).json({ error: 'Ushbu muammo boshqa Eco-Elchiga biriktirilgan' });
+      }
       if (report.isHazardous) {
         return res.status(400).json({ error: "Xavfli muammolarni o'quvchilar bajarishi taqiqlanadi!" });
       }
-      if (report.ambassadorResolutionRewarded || report.status === 'resolved' || report.status === 'RESOLVED') {
-        return res.status(400).json({ error: 'Ushbu muammo allaqachon hal qilingan va mukofot berilgan' });
+      if (
+        report.rewardsIssued ||
+        report.ambassadorResolutionRewarded ||
+        ['resolved', 'RESOLVED', 'rejected', 'REJECTED'].includes(String(report.status || ''))
+      ) {
+        return res.status(400).json({ error: 'Ushbu muammo allaqachon yopilgan' });
       }
 
-      const { beforeImageUrl, afterImageUrl, note } = req.body || {};
-      const finalBefore = String(beforeImageUrl || report.imageUrl || '').trim();
-      const finalAfter = String(afterImageUrl || '').trim();
-      if (!finalBefore || !finalAfter) {
-        return res.status(400).json({ error: "Avvalgi va hal qilingandan keyingi rasmlarni yuklash majburiy!" });
+      const { action, afterImageUrl, afterVideoUrl, note } = req.body || {};
+      const nowIso = new Date().toISOString();
+      if (!Array.isArray(report.statusHistory)) report.statusHistory = [];
+
+      // Action 1: Mark as IN_PROGRESS (Jarayonda)
+      if (action === 'start_progress') {
+        report.status = 'IN_PROGRESS';
+        report.updatedAt = nowIso;
+        if (!report.assignedAmbassadorUid) {
+          report.assignedAmbassadorUid = caller.uid;
+          report.assignedAmbassadorName = caller.fullName;
+        }
+        report.statusHistory.push({
+          status: 'IN_PROGRESS',
+          actorName: caller.fullName,
+          actorRole: caller.role,
+          note: String(note || '').trim() || "Eco-Elchi muammoni hal qilishni boshladi",
+          timestamp: nowIso,
+        });
+        for (const task of centralDb.ecoTasks || []) {
+          if (task.relatedReportId === report.id && task.status === 'assigned') {
+            task.status = 'in_progress';
+            task.updatedAt = nowIso;
+          }
+        }
+        saveCentralDb();
+        broadcastRealtimeEvent('db:updated', { scope: 'reports' });
+        return res.json({ success: true, report, message: "Holat 'Jarayonda' ga o'zgartirildi!" });
       }
 
-      const beforeInline = await resolveImageInputToInlineData(finalBefore);
-      const afterInline = await resolveImageInputToInlineData(finalAfter);
+      // Action 2: Submit AFTER evidence for School Admin Final Verification (DO NOT overwrite BEFORE photo, DO NOT award coins yet!)
+      const immutableBefore = String(report.beforeImageUrl || report.imageUrl || '').trim();
+      const finalAfterImg = String(afterImageUrl || '').trim();
+      const finalAfterVid = String(afterVideoUrl || '').trim();
+      const finalAfter = finalAfterImg || finalAfterVid;
+      if (!finalAfter) {
+        return res.status(400).json({ error: 'Muammo hal qilingandan keyingi (AFTER) foto yoki video yuklash majburiy!' });
+      }
+      const cleanNote = String(note || '').trim();
+      if (cleanNote.length < 3) {
+        return res.status(400).json({ error: "Muammo qanday hal qilingani haqida qisqacha tavsif yozing" });
+      }
+
+      // Strictly lock immutable student BEFORE media
+      if (!report.beforeImageUrl && immutableBefore) {
+        report.beforeImageUrl = immutableBefore;
+      }
+      if (!report.beforeVideoUrl && report.videoUrl) {
+        report.beforeVideoUrl = report.videoUrl;
+      }
 
       let aiVerdict: any = {
         isAiGenerated: false,
@@ -2807,172 +3286,125 @@ app.post(
         afterShowsResolved: true,
         sameLocationConsistent: true,
         isValidEcoResolution: true,
-        confidence: 85,
-        verdictUz: "Avvalgi va keyingi rasmlar haqiqiy hamda muammo hal etilgani tasdiqlandi.",
+        confidence: 88,
+        verdictUz: "Keyingi dalil yuklandi — maktab administratorining yakuniy tekshiruviga yuborildi.",
       };
 
-      if (process.env.GEMINI_API_KEY && beforeInline && afterInline) {
+      if (process.env.GEMINI_API_KEY && immutableBefore && finalAfterImg) {
         try {
-          const response: any = await generateContentWithModelFallback(
-            {
-              contents: [
-                {
-                  role: 'user',
-                  parts: [
-                    { text: '1-RASM (Muammodan AVVALGI holat):' },
-                    { inlineData: beforeInline },
-                    { text: '2-RASM (Hal qilingandan KEYINGI holat):' },
-                    { inlineData: afterInline },
-                    {
-                      text: `Muammo: ${report.title}\nTavsif: ${report.description}\nEko-Elchi izohi: ${note || '-'}\nUshbu ikkita rasmni qat'iy tekshiring:\n1) Biror rasm AI (sun'iy intellekt) da generatsiya qilingan yoki fotoshop qilingan emasmi?\n2) 1-rasmda muammo ko'rinib, 2-rasmda o'sha joy rostan ham tozalangan/tuzatilgan/ekilgan holatdami?\n3) Ikkala rasm haqiqiy kameradan olingan real natijami?`,
-                    },
-                  ],
+          const beforeInline = await resolveImageInputToInlineData(immutableBefore);
+          const afterInline = await resolveImageInputToInlineData(finalAfterImg);
+          if (beforeInline && afterInline) {
+            const response: any = await generateContentWithModelFallback(
+              {
+                contents: [
+                  {
+                    role: 'user',
+                    parts: [
+                      { text: "1-RASM (O'quvchining AVVALGI rasmi):" },
+                      { inlineData: beforeInline },
+                      { text: '2-RASM (Eco-Elchining KEYINGI rasmi):' },
+                      { inlineData: afterInline },
+                      {
+                        text: `Muammo: ${report.title}\nTavsif: ${report.description}\nHal qilish tavsifi: ${cleanNote}\nRasm AI (sun'iy intellekt) yordamida soxtalashtirilmagan haqiqiy foto ekanini va muammo holatini tekshiring.`,
+                      },
+                    ],
+                  },
+                ],
+                config: {
+                  systemInstruction:
+                    `Siz ECO HERO AI auditorisiz. JSON qaytaring: {"isAiGenerated": boolean, "beforeShowsProblem": boolean, "afterShowsResolved": boolean, "sameLocationConsistent": boolean, "isValidEcoResolution": boolean, "confidence": number, "verdictUz": string}. Agar rasm aniq sun'iy intellektda yasalgan fake bo'lsa "isAiGenerated": true yozing.`,
+                  responseMimeType: 'application/json',
+                  thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
                 },
-              ],
-              config: {
-                systemInstruction:
-                  `Siz ECO HERO AI haqiqiylik auditorisiz. 2 ta rasmni (Avvalgi va Keyingi) tahlil qilib FAQAT toza JSON qaytaring: {"isAiGenerated": boolean, "beforeShowsProblem": boolean, "afterShowsResolved": boolean, "sameLocationConsistent": boolean, "isValidEcoResolution": boolean, "confidence": number (0-100), "verdictUz": string (o'zbek tilida tushunarli xulosa)}. Agar rasmlardan biri AI yordamida yasalgan, tahrirlangan yoki muammo hal qilinmagan bo'lsa "isValidEcoResolution": false qaytaring.`,
-                responseMimeType: 'application/json',
-                thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM },
               },
-            },
-            25000
-          );
-          aiVerdict = parseModelJsonResponse(response?.text);
+              22000
+            );
+            aiVerdict = parseModelJsonResponse(response?.text) || aiVerdict;
+          }
         } catch (aiErr: any) {
-          console.warn('Before/After AI check error:', aiErr?.message || aiErr);
+          console.warn('Before/After AI advisory check skipped:', aiErr?.message || aiErr);
         }
       }
 
-      if (aiVerdict?.isAiGenerated === true || aiVerdict?.isValidEcoResolution === false) {
+      if (aiVerdict?.isAiGenerated === true) {
         return res.status(400).json({
           success: false,
           aiCheck: aiVerdict,
           error:
             aiVerdict?.verdictUz ||
-            (aiVerdict?.isAiGenerated
-              ? "AI tekshiruvi: rasmlardan biri sun'iy intellektda yasalgan yoki tahrirlangan! Faqat haqiqiy rasm yuklang."
-              : "AI tekshiruvi: keyingi rasmda muammo haqiqatda hal qilingani tasdiqlanmadi."),
+            "AI tekshiruvi: yuklangan rasm sun'iy intellektda yaratilganga o'xshaydi. Faqat joyida olingan haqiqiy rasm yuklang!",
         });
       }
 
-      const nowIso = new Date().toISOString();
-      report.beforeImageUrl = finalBefore;
-      report.resolvedImageUrl = finalAfter;
-      report.progressEvidenceUrl = finalAfter;
-      report.completionNote = note || "Eko-Elchi va o'quvchi hamkorligida hal qilindi";
-      report.status = 'resolved';
-      report.resolvedAt = nowIso;
-      report.resolvedBy = caller.fullName;
+      if (finalAfterImg) report.afterImageUrl = finalAfterImg;
+      if (finalAfterVid) report.afterVideoUrl = finalAfterVid;
+      report.resolvedImageUrl = finalAfterImg || finalAfterVid;
+      report.progressEvidenceUrl = finalAfterImg || finalAfterVid;
+      report.resolutionDescription = cleanNote;
+      report.completionNote = cleanNote;
+      report.submittedForFinalReviewAt = nowIso;
+      if (!report.assignedAmbassadorUid) {
+        report.assignedAmbassadorUid = caller.uid;
+        report.assignedAmbassadorName = caller.fullName;
+      }
+      report.status = 'FINAL_REVIEW';
       report.updatedAt = nowIso;
-      report.ambassadorResolutionRewarded = true;
-      report.coinsAwarded = true;
-      report.resolutionRewardAwarded = true;
       report.aiAuthenticityCheck = {
         isAiGenerated: false,
-        isVerifiedResolved: true,
-        confidence: Number(aiVerdict?.confidence || 92),
-        verdictUz: String(aiVerdict?.verdictUz || "AI tasdiqladi: haqiqiy rasmlar va muammo bartaraf etilgan."),
+        isVerifiedResolved: Boolean(aiVerdict?.isValidEcoResolution ?? true),
+        confidence: Number(aiVerdict?.confidence || 88),
+        verdictUz: String(aiVerdict?.verdictUz || "Maktab administratorining yakuniy tekshiruviga yuborildi."),
         checkedAt: nowIso,
       };
-      if (!Array.isArray(report.statusHistory)) report.statusHistory = [];
       report.statusHistory.push({
-        status: 'RESOLVED',
+        status: 'FINAL_REVIEW',
         actorName: caller.fullName,
         actorRole: caller.role,
-        note: report.aiAuthenticityCheck.verdictUz,
+        note: `Yakuniy tekshiruvga yuborildi: ${cleanNote}`,
         timestamp: nowIso,
       });
 
-      // Mark any linked ecoTasks as verified
       for (const task of centralDb.ecoTasks || []) {
         if (task.relatedReportId === report.id) {
-          task.status = 'verified';
+          task.status = 'submitted';
           task.evidenceUrl = finalAfter;
-          task.completionNote = report.completionNote;
+          task.completionNote = cleanNote;
           task.updatedAt = nowIso;
         }
       }
 
-      // Exact rewards: Eco-Ambassador gets +200 EcoCoin, Reporting Student gets +100 EcoCoin
-      const ambassadorReward = 200;
-      const studentReward = 100;
-
-      const ambassadorUser = findUserByAnyIdentifier({ uid: caller.uid }) || findUserByAnyIdentifier({ uid: report.assignedAmbassadorUid });
-      const studentUser = findUserByAnyIdentifier({
-        uid: report.reporterUid || report.authorUid,
-        telegramId: report.authorTelegramId,
-      });
-
-      if (ambassadorUser) {
-        ambassadorUser.ecoCoins = (ambassadorUser.ecoCoins || 0) + ambassadorReward;
-        ambassadorUser.totalCoinsEarned = (ambassadorUser.totalCoinsEarned || 0) + ambassadorReward;
-        ambassadorUser.cleanupsCount = (ambassadorUser.cleanupsCount || 0) + 1;
-        recordTransaction({
-          userId: ambassadorUser.uid,
-          amount: ambassadorReward,
-          type: 'earn',
-          status: 'approved',
-          reportId: report.id,
-          reason: `Muammoni hal qildi (AI tasdiqladi): ${report.title}`,
-        });
+      // Notify School Admins for Final Verification
+      const schoolAdmins = Object.values(centralDb.users || {}).filter(
+        (u: any) =>
+          u &&
+          u.role === 'school_admin' &&
+          ((report.schoolId && u.schoolId === report.schoolId) ||
+            (report.schoolName && u.schoolName === report.schoolName))
+      );
+      for (const admin of schoolAdmins) {
         centralDb.notifications.unshift({
           id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
-          userId: ambassadorUser.uid,
-          title: `+${ambassadorReward} EcoCoin! AI tasdiqladi`,
-          message: `"${report.title}" muammosi haqiqiy rasmlar bilan hal qilindi (+${ambassadorReward} EcoCoin).`,
-          type: 'coin',
+          userId: admin.uid,
+          title: `Yakuniy tekshiruv kutilmoqda: ${report.title}`,
+          message: `${caller.fullName} (Eco-Elchi) Avval/Keyin dalilini yubordi. Tasdiqlasangiz +100 / +200 EcoCoin beriladi.`,
+          type: 'status',
           read: false,
           createdAt: nowIso,
         });
-        const ambTg = ambassadorUser.telegramId || ambassadorUser.chatId;
-        if (ambTg) {
+        const adminTg = admin.telegramId || admin.chatId;
+        if (adminTg) {
           sendTelegramMessage(
-            ambTg,
-            `🎉 <b>AI TEKSHIRUVIDAN O'TDI! +${ambassadorReward} EcoCoin</b>\n\n📌 ${report.title}\n🤖 ${report.aiAuthenticityCheck.verdictUz}\n💳 Balansingiz: ${ambassadorUser.ecoCoins} EcoCoin`
+            adminTg,
+            `🔍 <b>YAKUNIY TEKSHIRUV KUTILMOQDA (AVVAL / KEYIN)</b>\n\n` +
+              `📌 <b>Muammo:</b> ${report.title}\n` +
+              `👤 <b>O'quvchi:</b> ${report.reporterName}\n` +
+              `🛡 <b>Eco-Elchi:</b> ${caller.fullName}\n` +
+              `📝 <b>Hal qilish izohi:</b> ${cleanNote}\n\n` +
+              `Maktab administratori kabinetida Avval va Keyin rasmlarni solishtirib Tasdiqlash, Rad etish yoki Qayta rasm so'rash tugmasini bosing.`,
+            { reply_markup: { inline_keyboard: [[{ text: '🔍 Yakuniy Tekshiruv', web_app: { url: APP_URL } }]] } }
           ).catch(() => {});
         }
-      }
-
-      if (studentUser && studentUser.uid !== ambassadorUser?.uid) {
-        studentUser.ecoCoins = (studentUser.ecoCoins || 0) + studentReward;
-        studentUser.totalCoinsEarned = (studentUser.totalCoinsEarned || 0) + studentReward;
-        studentUser.reportsCount = (studentUser.reportsCount || 0) + 1;
-        recordTransaction({
-          userId: studentUser.uid,
-          amount: studentReward,
-          type: 'earn',
-          status: 'approved',
-          reportId: report.id,
-          reason: `Siz xabar bergan muammo Eko-Elchi bilan hal qilindi: ${report.title}`,
-        });
-        centralDb.notifications.unshift({
-          id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-          userId: studentUser.uid,
-          title: `+${studentReward} EcoCoin! Muammongiz hal qilindi`,
-          message: `${ambassadorUser?.fullName || 'Eko-Elchi'} bilan birga "${report.title}" hal qilindi (+${studentReward} EcoCoin).`,
-          type: 'coin',
-          read: false,
-          createdAt: nowIso,
-        });
-        const stuTg = studentUser.telegramId || studentUser.chatId || report.authorTelegramId;
-        if (stuTg) {
-          sendTelegramMessage(
-            stuTg,
-            `🎉 <b>SIZ XABAR BERGAN MUAMMO HAL QILINDI! +${studentReward} EcoCoin</b>\n\n📌 ${report.title}\n🛡 Eko-Elchi: ${ambassadorUser?.fullName || caller.fullName}\n💳 Balansingiz: ${studentUser.ecoCoins} EcoCoin`
-          ).catch(() => {});
-        }
-      }
-
-      if (report.schoolName) {
-        findOrCreateSchool({
-          schoolId: report.schoolId,
-          schoolName: report.schoolName,
-          region: report.region,
-          district: report.district,
-          coinsDelta: ambassadorReward + (studentUser && studentUser.uid !== ambassadorUser?.uid ? studentReward : 0),
-          cleanupsDelta: 1,
-        });
       }
 
       saveCentralDb();
@@ -2981,18 +3413,16 @@ app.post(
         actorUid: caller.uid,
         actorName: caller.fullName,
         actorRole: caller.role,
-        action: 'report_ambassador_resolved_ai',
+        action: 'report_submitted_final_review',
         targetCollection: 'reports',
         targetId: report.id,
-        details: { ambassadorReward, studentReward, confidence: report.aiAuthenticityCheck.confidence },
+        details: { afterEvidence: finalAfter, note: cleanNote },
       });
 
       res.json({
         success: true,
         report,
-        ambassadorReward,
-        studentReward: studentUser && studentUser.uid !== ambassadorUser?.uid ? studentReward : 0,
-        message: `AI rasmlarni haqiqiy deb tasdiqladi! Eko-Elchiga +${ambassadorReward}, o'quvchiga +${studentReward} EcoCoin berildi!`,
+        message: "Keyingi dalil yuborildi! Hisobot Maktab administratorining yakuniy tekshiruviga o'tkazildi.",
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -3562,6 +3992,9 @@ app.post('/api/user/onboarding', requireAuth, (req: AuthenticatedRequest, res) =
     if (callerTelegramId && centralDb.registrationSessions[String(callerTelegramId)]) {
       delete centralDb.registrationSessions[String(callerTelegramId)];
     }
+    if (callerTelegramId && centralDb.botStarters?.[String(callerTelegramId)]) {
+      centralDb.botStarters[String(callerTelegramId)].firstTimeRefEligible = false;
+    }
     reconcileSchoolsAndStudents(false);
     saveCentralDb();
     broadcastRealtimeEvent('db:updated', { scope: 'users' });
@@ -3598,6 +4031,9 @@ app.post('/api/user/profile', requireAuth, (req: AuthenticatedRequest, res) => {
       avatarUrl,
       profileImage,
       activeRole,
+      allowStudentMessages,
+      notificationsEnabled,
+      preferredLanguage,
     } = req.body;
 
     const existing = centralDb.users[caller.uid] || caller;
@@ -3607,8 +4043,19 @@ app.post('/api/user/profile', requireAuth, (req: AuthenticatedRequest, res) => {
     if (typeof region === 'string' && region.trim()) safeUpdates.region = region.trim();
     if (typeof district === 'string' && district.trim()) safeUpdates.district = district.trim();
     if (typeof grade === 'string') safeUpdates.grade = grade.trim();
-    if (typeof avatarUrl === 'string') safeUpdates.avatarUrl = avatarUrl;
-    if (typeof profileImage === 'string') safeUpdates.profileImage = profileImage;
+    if (typeof avatarUrl === 'string') {
+      safeUpdates.avatarUrl = avatarUrl;
+      safeUpdates.customAvatar = true;
+    }
+    if (typeof profileImage === 'string') {
+      safeUpdates.profileImage = profileImage;
+      safeUpdates.customAvatar = true;
+    }
+    if (typeof allowStudentMessages === 'boolean') safeUpdates.allowStudentMessages = allowStudentMessages;
+    if (typeof notificationsEnabled === 'boolean') safeUpdates.notificationsEnabled = notificationsEnabled;
+    if (typeof preferredLanguage === 'string' && ['uz', 'ru', 'en'].includes(preferredLanguage)) {
+      safeUpdates.preferredLanguage = preferredLanguage;
+    }
 
     // Allow switching active role ONLY within server-approved roles (never arbitrary!)
     if (typeof activeRole === 'string') {
@@ -3644,6 +4091,41 @@ app.post('/api/user/profile', requireAuth, (req: AuthenticatedRequest, res) => {
     broadcastRealtimeEvent('db:updated', { scope: 'users' });
 
     res.json({ success: true, profile: sanitizeSelfUser(updated), liveMetrics: computeLiveMetrics() });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/user/change-password', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const caller = req.authUser;
+    const { currentPassword, newPassword } = req.body || {};
+    const nextPass = String(newPassword || '');
+    if (nextPass.length < 6) {
+      return res.status(400).json({ error: "Yangi parol kamida 6 ta belgidan iborat bo'lishi kerak" });
+    }
+
+    const existing = centralDb.users[caller.uid] || caller;
+    if (existing.passwordHash) {
+      const curPass = String(currentPassword || '');
+      if (!curPass) {
+        return res.status(400).json({ error: 'Joriy parolni kiriting' });
+      }
+      const check = await verifyPassword(curPass, existing.passwordHash);
+      if (!check.valid) {
+        return res.status(401).json({ error: "Joriy parol noto'g'ri kiritildi" });
+      }
+    }
+
+    const newHash = await hashPassword(nextPass);
+    upsertUser({
+      ...existing,
+      passwordHash: newHash,
+      uid: existing.uid,
+    });
+    saveCentralDb();
+
+    res.json({ success: true, message: 'Parol muvaffaqiyatli yangilandi' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -6370,21 +6852,29 @@ app.get('/api/championship/live', (req: AuthenticatedRequest, res) => {
   }
 });
 
-// Real-Time District Schools & Ambassadors Leaderboard + Monthly Top-3 Awards
+// Real-Time District Schools & Ambassadors Leaderboard (Monthly + Overall, Verified Activity Only)
 function computeDistrictLeaderboardDetails(params: {
   region?: string;
   district?: string;
   viewerUid?: string;
   viewerSchoolId?: string;
+  mode?: 'monthly' | 'overall';
 }) {
+  const rankingMode: 'monthly' | 'overall' = params.mode === 'overall' ? 'overall' : 'monthly';
+  const monthStatus = getTashkentMonthStatus();
   const firstSchool = (centralDb.schools || [])[0];
   const targetRegion = String(params.region || firstSchool?.region || '').trim();
   const targetDistrict = String(params.district || firstSchool?.district || '').trim();
 
+  // Strictly count ONLY verified/resolved reports (NEVER unapproved/pending/rejected)
   const resolvedReports = (centralDb.reports || []).filter((r) =>
-    ['resolved', 'RESOLVED', 'verified'].includes(String(r.status || ''))
+    ['resolved', 'RESOLVED'].includes(String(r.status || ''))
   );
   const approvedMedia = (centralDb.mediaSubmissions || []).filter((m) => m.status === 'APPROVED');
+  const verifiedTasks = (centralDb.ecoTasks || []).filter((t) => t.status === 'verified');
+  const approvedEarnTx = (centralDb.transactions || []).filter(
+    (t) => t.status === 'approved' && (t.type === 'earn' || t.type === 'bonus')
+  );
 
   const districtSchoolsRaw = (centralDb.schools || []).filter((s) => {
     const sameDist = targetDistrict ? String(s.district || '').toLowerCase() === targetDistrict.toLowerCase() : true;
@@ -6442,9 +6932,86 @@ function computeDistrictLeaderboardDetails(params: {
   }));
   const mySchoolRating = schoolRatings.find((s) => s.isMySchool) || null;
 
-  // All ambassadors in this district (from both centralDb.ambassadors and centralDb.users)
+  // All Eco-Elchis in this district — strictly verified activity for Monthly & Overall modes
   const districtSchoolIds = new Set(districtSchoolsRaw.map((s) => s.id));
   const ambMap = new Map<string, any>();
+
+  const computeAmbMetrics = (uid: string, seedAmb?: any, seedUser?: any) => {
+    const u = seedUser || centralDb.users?.[uid];
+    const matchedSchool = centralDb.schools.find((sc) => sc.id === (u?.schoolId || seedAmb?.schoolId));
+    const userResolvedReports = resolvedReports.filter(
+      (r) =>
+        r.assignedAmbassadorUid === uid ||
+        (r.reporterUid === uid && !r.assignedAmbassadorUid && Boolean(r.rewardsIssued || r.coinsAwarded))
+    );
+    const monthlyResolved = userResolvedReports.filter((r) =>
+      isDateInTashkentMonth(r.resolvedAt || r.finalReviewedAt || r.updatedAt || r.createdAt, monthStatus)
+    );
+    const userMedia = approvedMedia.filter((m) => m.userId === uid);
+    const monthlyMedia = userMedia.filter((m) =>
+      isDateInTashkentMonth(m.moderatedAt || m.updatedAt || m.createdAt, monthStatus)
+    );
+    const userTasks = verifiedTasks.filter((t) => t.assigneeUid === uid);
+    const monthlyTasks = userTasks.filter((t) =>
+      isDateInTashkentMonth(t.updatedAt || t.createdAt, monthStatus)
+    );
+    const userMonthlyTxCoins = approvedEarnTx
+      .filter((t) => t.userId === uid && isDateInTashkentMonth(t.createdAt, monthStatus))
+      .reduce((acc, t) => acc + Math.max(0, Number(t.amount || 0)), 0);
+
+    const resolvedProblemsCount = userResolvedReports.length;
+    const monthlyResolvedProblemsCount = monthlyResolved.length;
+    const verifiedActivitiesCount = userMedia.length + resolvedProblemsCount;
+    const monthlyVerifiedActivitiesCount = monthlyMedia.length + monthlyResolvedProblemsCount;
+    const tasksCompletedCount = userTasks.length;
+    const monthlyTasksCompletedCount = monthlyTasks.length;
+
+    const ecoCoins = Number(u?.ecoCoins ?? seedAmb?.ecoCoins ?? 0);
+    const totalCoinsEarned = Math.max(ecoCoins, Number(u?.totalCoinsEarned ?? seedAmb?.ecoCoins ?? 0));
+    const ecoXP = Math.max(
+      Number(u?.ecoXP || 0),
+      resolvedProblemsCount * 800 + userMedia.length * 300 + tasksCompletedCount * 400
+    );
+    const monthlyXP =
+      monthlyResolvedProblemsCount * 800 +
+      monthlyMedia.length * 300 +
+      monthlyTasksCompletedCount * 400 +
+      Math.round(userMonthlyTxCoins * 2);
+
+    const overallScore =
+      totalCoinsEarned +
+      resolvedProblemsCount * 250 +
+      userMedia.length * 100 +
+      tasksCompletedCount * 120;
+    const monthlyScore =
+      userMonthlyTxCoins +
+      monthlyResolvedProblemsCount * 250 +
+      monthlyMedia.length * 100 +
+      monthlyTasksCompletedCount * 120;
+
+    return {
+      id: uid,
+      fullName: u?.fullName || seedAmb?.fullName || 'Eco-Elchi',
+      schoolId: u?.schoolId || seedAmb?.schoolId || '',
+      schoolName: u?.schoolName || seedAmb?.schoolName || matchedSchool?.name || 'Maktab',
+      region: u?.region || seedAmb?.region || matchedSchool?.region || targetRegion,
+      district: u?.district || seedAmb?.district || matchedSchool?.district || targetDistrict,
+      ecoCoins,
+      ecoXP,
+      monthlyXP,
+      monthlyCoinsEarned: userMonthlyTxCoins,
+      verifiedActivitiesCount,
+      monthlyVerifiedActivitiesCount,
+      tasksCompletedCount,
+      monthlyTasksCompletedCount,
+      resolvedReportsCount: resolvedProblemsCount,
+      resolvedProblemsCount,
+      monthlyResolvedProblemsCount,
+      monthlyScore,
+      overallScore,
+      isMe: Boolean(params.viewerUid && uid === params.viewerUid),
+    };
+  };
 
   for (const a of centralDb.ambassadors || []) {
     if (a.status === 'revoked') continue;
@@ -6453,30 +7020,7 @@ function computeDistrictLeaderboardDetails(params: {
       districtSchoolIds.has(a.schoolId) ||
       String(a.district || '').toLowerCase() === targetDistrict.toLowerCase();
     if (!inDist) continue;
-    const matchedSchool = centralDb.schools.find((sc) => sc.id === a.schoolId);
-    const verifiedActivities =
-      Number(a.verifiedActivitiesCount || 0) +
-      approvedMedia.filter((m) => m.userId === a.id).length;
-    const tasksCompleted =
-      Number(a.tasksCompletedCount || 0) +
-      (centralDb.ecoTasks || []).filter((t) => t.assigneeUid === a.id && t.status === 'verified').length;
-    const resReports = resolvedReports.filter((r) => r.assignedAmbassadorUid === a.id || r.reporterUid === a.id).length;
-    const ecoCoins = Number(a.ecoCoins || 0);
-    const realScore = ecoCoins + tasksCompleted * 120 + verifiedActivities * 100 + resReports * 150;
-    ambMap.set(a.id, {
-      id: a.id,
-      fullName: a.fullName,
-      schoolId: a.schoolId,
-      schoolName: a.schoolName || matchedSchool?.name || 'Maktab',
-      region: a.region || matchedSchool?.region || targetRegion,
-      district: a.district || matchedSchool?.district || targetDistrict,
-      ecoCoins,
-      verifiedActivitiesCount: verifiedActivities,
-      tasksCompletedCount: tasksCompleted,
-      resolvedReportsCount: resReports,
-      realScore,
-      isMe: Boolean(params.viewerUid && a.id === params.viewerUid),
-    });
+    ambMap.set(a.id, computeAmbMetrics(a.id, a, centralDb.users?.[a.id]));
   }
 
   for (const u of allUsersList) {
@@ -6487,40 +7031,44 @@ function computeDistrictLeaderboardDetails(params: {
       districtSchoolIds.has(u.schoolId) ||
       String(u.district || '').toLowerCase() === targetDistrict.toLowerCase();
     if (!inDist) continue;
-    const mediaCount = approvedMedia.filter((m) => m.userId === u.uid).length;
-    const taskCount = (centralDb.ecoTasks || []).filter((t) => t.assigneeUid === u.uid && t.status === 'verified').length;
-    const resRep = resolvedReports.filter((r) => r.assignedAmbassadorUid === u.uid || r.reporterUid === u.uid).length;
-    const coins = Number(u.totalCoinsEarned || u.ecoCoins || 0);
-    const verifiedTotal = Number(u.cleanupsCount || 0) + mediaCount;
-    const realScore = coins + taskCount * 120 + verifiedTotal * 100 + resRep * 150;
-    const prev = ambMap.get(u.uid);
-    ambMap.set(u.uid, {
-      id: u.uid,
-      fullName: u.fullName,
-      schoolId: u.schoolId || prev?.schoolId || '',
-      schoolName: u.schoolName || prev?.schoolName || 'Maktab',
-      region: u.region || prev?.region || targetRegion,
-      district: u.district || prev?.district || targetDistrict,
-      ecoCoins: Math.max(coins, prev?.ecoCoins || 0),
-      verifiedActivitiesCount: Math.max(verifiedTotal, prev?.verifiedActivitiesCount || 0),
-      tasksCompletedCount: Math.max(taskCount, prev?.tasksCompletedCount || 0),
-      resolvedReportsCount: Math.max(resRep, prev?.resolvedReportsCount || 0),
-      realScore: Math.max(realScore, prev?.realScore || 0),
-      isMe: Boolean(params.viewerUid && u.uid === params.viewerUid),
-    });
+    const existingAmb = (centralDb.ambassadors || []).find((a: any) => a.id === u.uid);
+    if (existingAmb?.status === 'revoked') continue;
+    ambMap.set(u.uid, computeAmbMetrics(u.uid, existingAmb, u));
   }
 
-  const ambList = Array.from(ambMap.values()).sort((a, b) => b.realScore - a.realScore);
-  const totalAmb = ambList.length;
-  const ambassadorRatings = ambList.map((a, idx) => ({
-    ...a,
-    rank: idx + 1,
-    isTop3: idx < 3,
-    isLast: totalAmb > 1 && idx === totalAmb - 1,
-  }));
-  const myAmbassadorRating = ambassadorRatings.find((a) => a.isMe) || null;
+  const baseList = Array.from(ambMap.values());
+  const buildRankedList = (modeKey: 'monthly' | 'overall') => {
+    const sorted = [...baseList]
+      .map((item) => ({
+        ...item,
+        realScore: modeKey === 'monthly' ? item.monthlyScore : item.overallScore,
+      }))
+      .sort((a, b) => {
+        if (b.realScore !== a.realScore) return b.realScore - a.realScore;
+        const bRes = modeKey === 'monthly' ? b.monthlyResolvedProblemsCount : b.resolvedProblemsCount;
+        const aRes = modeKey === 'monthly' ? a.monthlyResolvedProblemsCount : a.resolvedProblemsCount;
+        if (bRes !== aRes) return bRes - aRes;
+        if (b.ecoCoins !== a.ecoCoins) return b.ecoCoins - a.ecoCoins;
+        return String(a.fullName).localeCompare(String(b.fullName));
+      });
+    const total = sorted.length;
+    return sorted.map((item, idx) => ({
+      ...item,
+      rank: idx + 1,
+      isTop3: idx < 3,
+      isLast: total > 1 && idx === total - 1,
+    }));
+  };
 
-  const monthStatus = getTashkentMonthStatus();
+  const ambassadorRatingsMonthly = buildRankedList('monthly');
+  const ambassadorRatingsOverall = buildRankedList('overall');
+  const ambassadorRatings =
+    rankingMode === 'overall' ? ambassadorRatingsOverall : ambassadorRatingsMonthly;
+  const myAmbassadorMonthlyRating = ambassadorRatingsMonthly.find((a) => a.isMe) || null;
+  const myAmbassadorOverallRating = ambassadorRatingsOverall.find((a) => a.isMe) || null;
+  const myAmbassadorRating =
+    rankingMode === 'overall' ? myAmbassadorOverallRating : myAmbassadorMonthlyRating;
+
   const districtAwards = (centralDb.monthlyAwards || []).filter(
     (aw: any) => !targetDistrict || String(aw.district || '').toLowerCase() === targetDistrict.toLowerCase()
   );
@@ -6532,6 +7080,7 @@ function computeDistrictLeaderboardDetails(params: {
     success: true,
     region: targetRegion,
     district: targetDistrict,
+    rankingMode,
     periodKey: monthStatus.periodKey,
     periodLabel: monthStatus.periodLabel,
     daysRemainingInMonth: monthStatus.daysRemainingInMonth,
@@ -6542,7 +7091,12 @@ function computeDistrictLeaderboardDetails(params: {
     mySchoolRating,
     totalSchoolsInDistrict: schoolRatings.length,
     ambassadorRatings,
+    top10Ambassadors: ambassadorRatings.slice(0, 10),
     myAmbassadorRating,
+    ambassadorRatingsMonthly,
+    ambassadorRatingsOverall,
+    myAmbassadorMonthlyRating,
+    myAmbassadorOverallRating,
     totalAmbassadorsInDistrict: ambassadorRatings.length,
     monthlyAwards: districtAwards,
   };
@@ -6558,12 +7112,14 @@ function handleDistrictLeaderboardDetails(req: AuthenticatedRequest, res: any) {
       (allowOverride || hasAnyRole(caller, ['district_coordinator'])) && req.query.district
         ? String(req.query.district)
         : caller.district || '';
+    const mode = req.query.mode === 'overall' ? 'overall' : 'monthly';
 
     const details = computeDistrictLeaderboardDetails({
       region,
       district,
       viewerUid: caller.uid,
       viewerSchoolId: caller.schoolId,
+      mode,
     });
     res.json(details);
   } catch (err: any) {
@@ -11533,11 +12089,24 @@ app.post('/api/referrals/claim', requireAuth, (req: AuthenticatedRequest, res) =
       return res.status(400).json({ error: "O'z-o'zini taklif qilish taqiqlangan" });
     }
 
-    const alreadyExists = centralDb.referrals.some(
-      (r) => r.referrerUid === targetReferrerUid && r.referredUid === claimer.uid
-    );
-    if (alreadyExists) {
+    // Strict first-time bot/platform join validation
+    const alreadyClaimedAnyReferral =
+      Boolean(claimer.referredBy) ||
+      centralDb.referrals.some((r) => r.referredUid === claimer.uid);
+    if (alreadyClaimedAnyReferral) {
       return res.status(400).json({ error: "Ushbu taklif allaqachon hisobga olingan" });
+    }
+
+    const tgKey = String(claimer.telegramId || claimer.chatId || '').trim();
+    const starterRecord = tgKey ? centralDb.botStarters?.[tgKey] : null;
+    const isVeteranBotUser = Boolean(
+      (starterRecord && starterRecord.firstTimeRefEligible === false) ||
+        (claimer.isOnboarded && claimer.welcomeBonusClaimed)
+    );
+    if (isVeteranBotUser) {
+      return res.status(400).json({
+        error: "Referal bonusi faqat botga birinchi marta qo'shilayotgan do'stlar uchun beriladi!",
+      });
     }
 
     const inviterBonus = getConfiguredReward('referralInviter');
@@ -11571,6 +12140,10 @@ app.post('/api/referrals/claim', requireAuth, (req: AuthenticatedRequest, res) =
 
     claimer.ecoCoins = (claimer.ecoCoins || 0) + inviteeBonus;
     claimer.totalCoinsEarned = (claimer.totalCoinsEarned || 0) + inviteeBonus;
+    claimer.referredBy = resolvedReferrer?.referralCode || targetReferrerUid;
+    if (starterRecord) {
+      starterRecord.firstTimeRefEligible = false;
+    }
     recordTransaction({
       userId: claimer.uid,
       amount: inviteeBonus,
@@ -11581,6 +12154,405 @@ app.post('/api/referrals/claim', requireAuth, (req: AuthenticatedRequest, res) =
 
     saveCentralDb();
     res.json({ success: true, reward: inviteeBonus, record: newRecord });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 8.5 BUGUNGI MISSIYALAR (DAILY MISSIONS) WORKFLOW
+// ==========================================
+app.get('/api/daily-missions', (req: AuthenticatedRequest, res) => {
+  const caller = req.authUser || null;
+  const isSuper = Boolean(caller && checkIsSuperAdmin(caller));
+  const items = (centralDb.dailyMissions || []).filter((m: any) => m.status === 'active' || isSuper);
+  const completedIds = caller ? centralDb.dailyMissionCompletions?.[caller.uid] || [] : [];
+  const submissions = !caller
+    ? []
+    : isSuper || hasAnyRole(caller, ['moderator'])
+    ? centralDb.dailyMissionSubmissions || []
+    : hasAnyRole(caller, ['school_admin'])
+    ? (centralDb.dailyMissionSubmissions || []).filter(
+        (s: any) =>
+          s.userId === caller.uid ||
+          (caller.schoolId && s.schoolId === caller.schoolId) ||
+          (caller.schoolName && s.schoolName === caller.schoolName)
+      )
+    : (centralDb.dailyMissionSubmissions || []).filter((s: any) => s.userId === caller.uid);
+  res.json({ success: true, missions: items, completedIds, submissions });
+});
+
+app.post('/api/daily-missions', requireRoles('super_admin'), async (req: AuthenticatedRequest, res) => {
+  try {
+    const caller = req.authUser;
+    const { title, description, rewardCoins } = req.body || {};
+    const cleanTitle = String(title || '').trim();
+    const cleanDesc = String(description || '').trim();
+    const reward = Math.max(5, Math.min(5000, Number(rewardCoins) || 50));
+    if (!cleanTitle) {
+      return res.status(400).json({ error: 'Missiya sarlavhasini kiriting' });
+    }
+
+    const nowIso = new Date().toISOString();
+    const created = {
+      id: `dmission_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      title: cleanTitle,
+      description: cleanDesc || "Topshiriqni bajarib rasmga oling va Maktab Sardori tekshiruviga yuboring.",
+      rewardCoins: reward,
+      status: 'active',
+      createdAt: nowIso,
+      createdByName: caller.fullName || 'Super Admin',
+    };
+
+    if (!Array.isArray(centralDb.dailyMissions)) centralDb.dailyMissions = [];
+    centralDb.dailyMissions.unshift(created);
+
+    // Notify registered students in-app and via Telegram chat
+    const allUsers = Object.values(centralDb.users || {}) as any[];
+    const tgTargets = new Set<string>();
+    for (const u of allUsers) {
+      if (!u || !u.uid) continue;
+      if (u.notificationsEnabled === false) continue;
+      if (u.isOnboarded && (u.role === 'student' || !u.role || u.uid === caller.uid)) {
+        centralDb.notifications.unshift({
+          id: `notif_dm_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          userId: u.uid,
+          title: '🆕 Yangi Bugungi Missiya!',
+          message: `"${created.title}" (+${created.rewardCoins} EcoCoin). Kabinetdan rasm yuklab topshiring!`,
+          type: 'mission',
+          read: false,
+          createdAt: nowIso,
+        });
+      }
+      const chatTarget = String(u.telegramChatId || u.telegramId || u.chatId || '').trim();
+      if (chatTarget && (u.isOnboarded || centralDb.botStarters?.[chatTarget])) {
+        tgTargets.add(chatTarget);
+      }
+    }
+    for (const starter of Object.values(centralDb.botStarters || {}) as any[]) {
+      const cId = String(starter?.chatId || '').trim();
+      if (cId) tgTargets.add(cId);
+    }
+
+    saveCentralDb();
+    broadcastRealtimeEvent('db:updated', { scope: 'daily_missions' });
+
+    const escapeTgHtml = (v: unknown) =>
+      String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    const tgMsg =
+      `🆕 <b>YANGI BUGUNGI MISSIYA QO'SHILDI!</b>\n\n` +
+      `🎯 <b>Vazifa:</b> ${escapeTgHtml(created.title)}\n` +
+      `📝 ${escapeTgHtml(created.description)}\n` +
+      `💰 <b>Mukofot:</b> +${created.rewardCoins} EcoCoin\n\n` +
+      `📸 O'quvchi kabinetiga kirib, vazifani bajarganingizni rasm qilib yuboring!`;
+    const replyMarkup = {
+      inline_keyboard: [[{ text: '🎯 Bugungi Missiyalarni Ochish', web_app: { url: `${APP_URL}?tab=admin&openDailyMissions=1` } }]],
+    };
+
+    // Fire Telegram broadcasts asynchronously in small batches
+    Promise.allSettled(
+      Array.from(tgTargets)
+        .slice(0, 500)
+        .map((cId) => sendTelegramMessage(cId, tgMsg, { reply_markup: replyMarkup }))
+    ).catch(() => {});
+
+    res.json({ success: true, mission: created, notifiedCount: tgTargets.size });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/daily-missions/:id', requireRoles('super_admin'), (req: AuthenticatedRequest, res) => {
+  try {
+    const id = String(req.params.id || '').trim();
+    const list = centralDb.dailyMissions || [];
+    const idx = list.findIndex((m: any) => m.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: 'Kunlik missiya topilmadi' });
+    }
+    list.splice(idx, 1);
+    recordDeletedId(id);
+    saveCentralDb();
+    broadcastRealtimeEvent('db:updated', { scope: 'daily_missions' });
+    res.json({ success: true, id });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/daily-missions/clear', requireRoles('super_admin'), (_req: AuthenticatedRequest, res) => {
+  try {
+    const list = centralDb.dailyMissions || [];
+    for (const m of list) {
+      if (m?.id) recordDeletedId(String(m.id));
+    }
+    centralDb.dailyMissions = [];
+    saveCentralDb();
+    broadcastRealtimeEvent('db:updated', { scope: 'daily_missions' });
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/daily-missions/:id/submit', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const caller = req.authUser;
+    if (!isUserFullyRegistered(caller)) {
+      return res.status(403).json({
+        code: 'REGISTRATION_REQUIRED',
+        error: "Bugungi missiyani topshirish uchun avval to'liq ro'yxatdan o'tishingiz shart (ism, telefon va maktab).",
+      });
+    }
+
+    const mission = (centralDb.dailyMissions || []).find((m: any) => m.id === req.params.id);
+    if (!mission || mission.status !== 'active') {
+      return res.status(404).json({ error: 'Kunlik missiya topilmadi yoki faol emas' });
+    }
+
+    if (!centralDb.dailyMissionCompletions || typeof centralDb.dailyMissionCompletions !== 'object') {
+      centralDb.dailyMissionCompletions = {};
+    }
+    const completed = centralDb.dailyMissionCompletions[caller.uid] || [];
+    if (completed.includes(mission.id)) {
+      return res.status(400).json({ error: 'Siz ushbu kunlik missiyani allaqachon bajargansiz!' });
+    }
+
+    if (!Array.isArray(centralDb.dailyMissionSubmissions)) centralDb.dailyMissionSubmissions = [];
+    const existingPending = centralDb.dailyMissionSubmissions.find(
+      (s: any) => s.missionId === mission.id && s.userId === caller.uid && s.status === 'pending'
+    );
+    if (existingPending) {
+      return res.status(400).json({ error: "Ushbu missiya bo'yicha rasmingiz Maktab Sardori tekshiruvida!" });
+    }
+
+    const { photoUrl, comment } = req.body || {};
+    const cleanPhotoUrl = String(photoUrl || '').trim();
+    if (!cleanPhotoUrl || !/^(\/uploads\/|https?:\/\/|data:image\/)/i.test(cleanPhotoUrl)) {
+      return res.status(400).json({ error: "Missiyani bajarganingizni tasdiqlovchi to'g'ri rasm yuklang!" });
+    }
+
+    const nowIso = new Date().toISOString();
+    const submission = {
+      id: `dsub_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      missionId: mission.id,
+      missionTitle: mission.title,
+      userId: caller.uid,
+      userName: caller.fullName || 'O‘quvchi',
+      userGrade: caller.grade || '',
+      schoolId: caller.schoolId || '',
+      schoolName: caller.schoolName || '',
+      photoUrl: cleanPhotoUrl,
+      comment: String(comment || '').trim(),
+      status: 'pending',
+      awardedCoins: Math.max(5, Number(mission.rewardCoins) || 50),
+      createdAt: nowIso,
+    };
+
+    centralDb.dailyMissionSubmissions.unshift(submission);
+
+    // Find Maktab Sardori (school_admin) for this school, fallback to Super Admin if none linked
+    const allUsers = Object.values(centralDb.users || {}) as any[];
+    const schoolCaptains = allUsers.filter((u: any) => {
+      if (!u || u.uid === caller.uid) return false;
+      const isCaptainRole =
+        u.role === 'school_admin' ||
+        (Array.isArray(u.approvedRoles) && u.approvedRoles.includes('school_admin'));
+      if (!isCaptainRole) return false;
+      const sameSchoolId = caller.schoolId && u.schoolId && u.schoolId === caller.schoolId;
+      const sameSchoolName =
+        caller.schoolName &&
+        u.schoolName &&
+        String(u.schoolName).trim().toLowerCase() === String(caller.schoolName).trim().toLowerCase();
+      return Boolean(sameSchoolId || sameSchoolName);
+    });
+
+    const escapeTgHtml = (v: unknown) =>
+      String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const reviewDeepLink = `${APP_URL}?tab=admin&adminTab=school_dashboard&verifyDaily=${encodeURIComponent(submission.id)}`;
+    const sardorText =
+      `📋 <b>O'QUVCHI BUGUNGI MISSIYANI BAJARDI!</b>\n\n` +
+      `👤 <b>O'quvchi:</b> ${escapeTgHtml(submission.userName)}${submission.userGrade ? ` (${escapeTgHtml(submission.userGrade)})` : ''}\n` +
+      `🏫 <b>Maktab:</b> ${escapeTgHtml(submission.schoolName)}\n` +
+      `🎯 <b>Missiya:</b> ${escapeTgHtml(submission.missionTitle)}\n` +
+      (submission.comment ? `💬 <b>Izoh:</b> ${escapeTgHtml(submission.comment)}\n` : '') +
+      `💰 <b>Tasdiqlansa mukofot:</b> +${submission.awardedCoins} EcoCoin\n\n` +
+      `👇 Rasmini ko'rib tasdiqlash uchun pastdagi <b>Tekshirish</b> tugmasini bosing:`;
+    const sardorMarkup = {
+      reply_markup: {
+        inline_keyboard: [[{ text: '🔍 Tekshirish', web_app: { url: reviewDeepLink } }]],
+      },
+    };
+
+    const notifiedCaptainTgIds = new Set<string>();
+    for (const cap of schoolCaptains) {
+      centralDb.notifications.unshift({
+        id: `notif_cap_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+        userId: cap.uid,
+        title: `📸 ${submission.userName} missiyani bajardi`,
+        message: `"${submission.missionTitle}" — Tekshirish va tasdiqlash kutilmoqda.`,
+        type: 'mission',
+        read: false,
+        createdAt: nowIso,
+      });
+      const tgChat = String(cap.telegramChatId || cap.telegramId || cap.chatId || '').trim();
+      if (tgChat) notifiedCaptainTgIds.add(tgChat);
+    }
+
+    saveCentralDb();
+    broadcastRealtimeEvent('db:updated', { scope: 'daily_missions' });
+
+    if (notifiedCaptainTgIds.size > 0) {
+      await Promise.allSettled(
+        Array.from(notifiedCaptainTgIds).map((cId) =>
+          sendTelegramPhoto(cId, submission.photoUrl, sardorText, sardorMarkup)
+        )
+      );
+    } else {
+      // Fallback: notify Super Admins so submissions never go unnoticed if school lacks an assigned Telegram captain
+      await notifySuperAdminsTelegram(sardorText, sardorMarkup, submission.photoUrl);
+    }
+
+    res.json({
+      success: true,
+      submission,
+      message: "Rasmingiz Maktab Sardoriga yuborildi! Tekshiruvdan so'ng EcoCoin hisobingizga tushadi.",
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/daily-missions/submissions/:subId/review', requireRoles('school_admin', 'super_admin', 'moderator'), async (req: AuthenticatedRequest, res) => {
+  try {
+    const caller = req.authUser;
+    const isPrivileged = checkIsSuperAdmin(caller) || hasAnyRole(caller, ['moderator']);
+    const sub = (centralDb.dailyMissionSubmissions || []).find((s: any) => s.id === req.params.subId);
+    if (!sub) return res.status(404).json({ error: 'Topshiriq hisoboti topilmadi' });
+    if (sub.status !== 'pending') return res.status(400).json({ error: "Ushbu hisobot allaqachon ko'rib chiqilgan" });
+
+    if (!isPrivileged) {
+      const sameSchool =
+        (caller.schoolId && sub.schoolId === caller.schoolId) ||
+        (caller.schoolName &&
+          sub.schoolName &&
+          String(caller.schoolName).trim().toLowerCase() === String(sub.schoolName).trim().toLowerCase());
+      if (!sameSchool) {
+        return res.status(403).json({ error: "Faqat o'z maktabingiz o'quvchilarining missiyasini tekshirishingiz mumkin" });
+      }
+    }
+
+    const { action, adminNote } = req.body || {};
+    const nowIso = new Date().toISOString();
+    sub.reviewedBy = caller.fullName || 'Maktab Sardori';
+    sub.reviewedAt = nowIso;
+    if (adminNote) sub.adminNote = String(adminNote).trim();
+
+    const targetUser = findUserByAnyIdentifier({ uid: sub.userId });
+
+    if (action === 'approve') {
+      sub.status = 'approved';
+      if (!centralDb.dailyMissionCompletions || typeof centralDb.dailyMissionCompletions !== 'object') {
+        centralDb.dailyMissionCompletions = {};
+      }
+      const list = centralDb.dailyMissionCompletions[sub.userId] || [];
+      if (!list.includes(sub.missionId)) {
+        list.push(sub.missionId);
+        centralDb.dailyMissionCompletions[sub.userId] = list;
+      }
+
+      if (targetUser) {
+        const amt = Math.max(5, Number(sub.awardedCoins) || 50);
+        const xpEarned = Math.max(30, amt * 2);
+        targetUser.ecoCoins = (targetUser.ecoCoins || 0) + amt;
+        targetUser.totalCoinsEarned = (targetUser.totalCoinsEarned || 0) + amt;
+        targetUser.ecoXP = (targetUser.ecoXP || 0) + xpEarned;
+        syncUserStatsConsistency(targetUser);
+        upsertUser(targetUser);
+
+        if (targetUser.schoolId) {
+          const sch = centralDb.schools.find((s: any) => s.id === targetUser.schoolId);
+          if (sch) {
+            sch.totalCoins = (sch.totalCoins || 0) + amt;
+          }
+        }
+
+        recordTransaction({
+          userId: targetUser.uid,
+          amount: amt,
+          type: 'earn',
+          status: 'approved',
+          reason: `Bugungi missiya tasdiqlandi: ${sub.missionTitle}`,
+        });
+
+        centralDb.notifications.unshift({
+          id: `notif_dapp_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+          userId: targetUser.uid,
+          title: `✅ +${amt} EcoCoin! Bugungi missiya tasdiqlandi`,
+          message: `"${sub.missionTitle}" missiyangiz ${sub.reviewedBy} tomonidan tasdiqlandi!`,
+          type: 'coin',
+          read: false,
+          createdAt: nowIso,
+        });
+
+        const escapeTgHtml = (v: unknown) =>
+          String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const studentChatId = String(targetUser.telegramChatId || targetUser.telegramId || targetUser.chatId || '').trim();
+        if (studentChatId) {
+          await sendTelegramMessage(
+            studentChatId,
+            `✅ <b>BUGUNGI MISSIYANGIZ TASDIQLANDI!</b>\n\n` +
+              `🎯 <b>Missiya:</b> ${escapeTgHtml(sub.missionTitle)}\n` +
+              `🛡 <b>Tasdiqladi:</b> ${escapeTgHtml(sub.reviewedBy)}\n` +
+              `💰 <b>Mukofot:</b> +${amt} EcoCoin · ⚡ +${xpEarned} XP\n` +
+              `💳 <b>Joriy balansingiz:</b> ${targetUser.ecoCoins} EcoCoin`,
+            {
+              reply_markup: {
+                inline_keyboard: [[{ text: "👤 O'quvchi Kabinetini Ochish", web_app: { url: `${APP_URL}?tab=admin` } }]],
+              },
+            }
+          ).catch(() => {});
+        }
+      }
+    } else if (action === 'reject') {
+      sub.status = 'rejected';
+      if (targetUser) {
+        centralDb.notifications.unshift({
+          id: `notif_drej_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+          userId: targetUser.uid,
+          title: '❌ Bugungi missiya rad etildi',
+          message: `"${sub.missionTitle}" rad etildi.${sub.adminNote ? ` Sabab: ${sub.adminNote}` : ' Qayta aniqroq rasm yuboring.'}`,
+          type: 'system',
+          read: false,
+          createdAt: nowIso,
+        });
+        const escapeTgHtml = (v: unknown) =>
+          String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const studentChatId = String(targetUser.telegramChatId || targetUser.telegramId || targetUser.chatId || '').trim();
+        if (studentChatId) {
+          await sendTelegramMessage(
+            studentChatId,
+            `❌ <b>BUGUNGI MISSIYA RAD ETILDI</b>\n\n` +
+              `🎯 <b>Missiya:</b> ${escapeTgHtml(sub.missionTitle)}\n` +
+              (sub.adminNote ? `📝 <b>Sabab:</b> ${escapeTgHtml(sub.adminNote)}\n` : '') +
+              `📸 Iltimos, vazifani to'g'ri bajarib qaytadan aniq rasm yuboring.`,
+            {
+              reply_markup: {
+                inline_keyboard: [[{ text: '📸 Qayta yuborish', web_app: { url: `${APP_URL}?tab=admin&openDailyMissions=1` } }]],
+              },
+            }
+          ).catch(() => {});
+        }
+      }
+    } else {
+      return res.status(400).json({ error: "Noto'g'ri amal" });
+    }
+
+    recalculateSchoolRanks();
+    saveCentralDb();
+    broadcastRealtimeEvent('db:updated', { scope: 'daily_missions' });
+    res.json({ success: true, submission: sub });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -11731,6 +12703,7 @@ interface RegistrationSession {
   schoolNumber?: string;
   grade?: string;
   referredBy?: string;
+  firstTimeRefEligible?: boolean;
   lat?: number;
   lng?: number;
   requestedRole?: string;
@@ -11914,6 +12887,9 @@ async function sendTelegramPhoto(chatId: string | number, photoUrl: string, capt
         form.append('chat_id', String(chatId));
         form.append('caption', caption);
         form.append('parse_mode', 'HTML');
+        if (extraOptions?.reply_markup) {
+          form.append('reply_markup', JSON.stringify(extraOptions.reply_markup));
+        }
         form.append('photo', new Blob([buffer], { type: mime }), `ecohero_photo${ext}`);
         const uploadRes = await fetch(`https://api.telegram.org/bot${activeBotToken}/sendPhoto`, {
           method: 'POST',
@@ -12025,7 +13001,12 @@ app.post('/api/telegram/auth-webapp', (req, res) => {
     const chatId = String(tgUser.id);
     const tgUsernameTag = tgUser.username ? `@${tgUser.username}` : undefined;
     const tgDisplayName = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ').trim() || undefined;
-    recordBotStarter(chatId, tgUsernameTag, tgDisplayName, true);
+    const wasSeenBeforeWebApp = Boolean(
+      centralDb.botStarters?.[chatId] || findUserByAnyIdentifier({ telegramId: chatId, chatId })
+    );
+    recordBotStarter(chatId, tgUsernameTag, tgDisplayName, true, {
+      firstTimeRefEligible: !wasSeenBeforeWebApp,
+    });
 
     const isVerifiedSuper =
       !isDevBypass &&
@@ -12062,9 +13043,12 @@ app.post('/api/telegram/auth-webapp', (req, res) => {
       registeredUser.telegramChatId = chatId;
       registeredUser.chatId = chatId;
       if (tgUser.username) registeredUser.telegramUsername = `@${tgUser.username}`;
-      if (tgUser.photo_url) {
+      if (tgUser.photo_url && !registeredUser.customAvatar && !String(registeredUser.avatarUrl || '').startsWith('/uploads/')) {
         registeredUser.avatarUrl = tgUser.photo_url;
         registeredUser.profileImage = tgUser.photo_url;
+      }
+      if (!registeredUser.isOnboarded && isUserFullyRegistered(registeredUser)) {
+        registeredUser.isOnboarded = true;
       }
       if (!registeredUser.email || isSyntheticEmail(registeredUser.email)) {
         registeredUser.email = registeredUser.email || `${tgUser.username || tgUser.id}@telegram.ecohero.uz`;
@@ -12269,7 +13253,11 @@ async function completeTelegramRegistration(
       reason: `ECO HERO bot orqali ro'yxatdan o'tish bonusi (+${welcomeReward} EcoCoin)`,
     });
 
-    if (session.referredBy) {
+    if (
+      session.referredBy &&
+      session.firstTimeRefEligible === true &&
+      !centralDb.referrals.some((r) => r.referredUid === finalProfile.uid)
+    ) {
       const refCodeClean = session.referredBy.trim();
       const refCodeUpper = refCodeClean.toUpperCase();
       const referrer: any = Object.values(centralDb.users).find(
@@ -12320,11 +13308,15 @@ async function completeTelegramRegistration(
         if (refChatId) {
           sendTelegramMessage(
             refChatId,
-            `🎉 <b>TAKLIF BONUSI!</b>\n\nDo'stingiz <b>${finalProfile.fullName}</b> sizning havolangiz orqali ro'yxatdan o'tdi!\n💰 Sizga <b>+${inviterBonus} EcoCoin</b> qo'shildi.`
+            `🎉 <b>TAKLIF BONUSI!</b>\n\nDo'stingiz <b>${finalProfile.fullName}</b> birinchi marta botga qo'shilib sizning havolangiz orqali ro'yxatdan o'tdi!\n💰 Sizga <b>+${inviterBonus} EcoCoin</b> qo'shildi.`
           ).catch(() => {});
         }
       }
     }
+  }
+
+  if (centralDb.botStarters?.[chatKey]) {
+    centralDb.botStarters[chatKey].firstTimeRefEligible = false;
   }
 
   syncUserStatsConsistency(finalProfile);
@@ -12835,10 +13827,28 @@ async function handleTelegramUpdateSerialized(update: any) {
     const text = (msg.text || msg.caption || '').trim();
     const userFirstName = msg.from?.first_name || 'Eko-Qahramon';
     const username = msg.from?.username ? `@${msg.from.username}` : undefined;
-    recordBotStarter(chatKey, username, userFirstName);
-    let session = getRegistrationSession(chatKey);
+    const priorBotStarter = centralDb.botStarters?.[chatKey];
     const regUser = findUserByAnyIdentifier({ telegramId: chatKey, chatId: chatKey });
-    const isRegistered = Boolean(regUser && regUser.isOnboarded);
+    const wasAlreadySeenInBot = Boolean(priorBotStarter || regUser?.isOnboarded);
+    if (regUser && !regUser.isOnboarded && isUserFullyRegistered(regUser)) {
+      regUser.isOnboarded = true;
+      upsertUser(regUser);
+      saveCentralDb();
+    }
+    const startParamPre = text.startsWith('/start') ? text.split(/\s+/)[1]?.trim() : undefined;
+    const isFreshBotJoin = !wasAlreadySeenInBot;
+    recordBotStarter(chatKey, username, userFirstName, false, {
+      firstTimeRefEligible:
+        isFreshBotJoin && Boolean(startParamPre && !startParamPre.startsWith('link_'))
+          ? true
+          : priorBotStarter
+          ? Boolean(priorBotStarter.firstTimeRefEligible && !regUser?.isOnboarded)
+          : false,
+      firstTimeRefCode:
+        isFreshBotJoin && startParamPre && !startParamPre.startsWith('link_') ? startParamPre : undefined,
+    });
+    let session = getRegistrationSession(chatKey);
+    const isRegistered = Boolean(regUser && (regUser.isOnboarded || isUserFullyRegistered(regUser)));
     const isBotSuperAdmin =
       checkIsSuperAdmin({ telegramId: chatId, verifiedTelegram: true }) ||
       Boolean(regUser && checkIsSuperAdmin(regUser));
@@ -13271,9 +14281,13 @@ async function handleTelegramUpdateSerialized(update: any) {
       }
 
       if (isRegistered && regUser) {
+        const refRejectedNotice =
+          startParam && !startParam.startsWith('link_')
+            ? `\n\nℹ️ <i>Siz botga avvaldan qo'shilganingiz sababli referal bonusi faqat botga birinchi marta kirayotgan do'stlarga beriladi.</i>`
+            : '';
         await sendTelegramMessage(
           chatId,
-          `🌿 <b>Assalomu alaykum, ${regUser.fullName}!</b>\n\n💰 <b>Balans:</b> ${regUser.ecoCoins} EcoCoin · ⚡ <b>${regUser.ecoXP || 0} XP</b>\n🏫 <b>Maktab:</b> ${regUser.schoolName}\n🛡 <b>Rol:</b> ${regUser.role}\n\n<b>Mavjud buyruqlar:</b>\n• /report — Ekologik muammo xabar qilish\n• /activity — Eko-faoliyat (foto/video) yuklash\n• /web — Veb / PWA ga kirish kodi · /sync — Sinxronlash\n• /profile — Profilim · /invite — Do'st taklif qilish\n• /tasks — Vazifalarim · /rank — Reytinglar · /coins — Hamyon`,
+          `🌿 <b>Assalomu alaykum, ${regUser.fullName}!</b>\n\n💰 <b>Balans:</b> ${regUser.ecoCoins} EcoCoin · ⚡ <b>${regUser.ecoXP || 0} XP</b>\n🏫 <b>Maktab:</b> ${regUser.schoolName}\n🛡 <b>Rol:</b> ${regUser.role}${refRejectedNotice}\n\n<b>Mavjud buyruqlar:</b>\n• /report — Ekologik muammo xabar qilish\n• /activity — Eko-faoliyat (foto/video) yuklash\n• /web — Veb / PWA ga kirish kodi · /sync — Sinxronlash\n• /profile — Profilim · /invite — Do'st taklif qilish\n• /tasks — Vazifalarim · /rank — Reytinglar · /coins — Hamyon`,
           {
             reply_markup: {
               inline_keyboard: [
@@ -13286,17 +14300,24 @@ async function handleTelegramUpdateSerialized(update: any) {
         return;
       }
 
+      const starterState = centralDb.botStarters?.[chatKey];
+      const canApplyReferral = Boolean(
+        startParam &&
+          starterState?.firstTimeRefEligible === true &&
+          (!starterState.firstTimeRefCode || starterState.firstTimeRefCode === startParam)
+      );
       const welcomeBonus = getConfiguredReward('welcomeBonus');
-      const inviteeBonus = startParam ? getConfiguredReward('referralInvitee') : 0;
+      const inviteeBonus = canApplyReferral ? getConfiguredReward('referralInvitee') : 0;
       setRegistrationSession(chatKey, {
         mode: 'REGISTER',
         step: 'PHONE',
-        referredBy: startParam || undefined,
+        referredBy: canApplyReferral ? startParam : undefined,
+        firstTimeRefEligible: canApplyReferral,
         updatedAt: Date.now(),
       });
       await sendTelegramMessage(
         chatId,
-        `🌿 <b>Assalomu alaykum! ECO HERO platformasiga xush kelibsiz!</b>\n\nRo'yxatdan o'tib +${welcomeBonus} EcoCoin${startParam ? ` (+${inviteeBonus} do'st taklifi bonusi)` : ''} olish uchun telefon raqamingizni yuboring:\n\n1️⃣ Pastdagi <b>«📲 Telefon raqamni yuborish»</b> tugmasini bosing:`,
+        `🌿 <b>Assalomu alaykum! ECO HERO platformasiga xush kelibsiz!</b>\n\nRo'yxatdan o'tib +${welcomeBonus} EcoCoin${canApplyReferral ? ` (+${inviteeBonus} birinchi qo'shilish bonusi)` : ''} olish uchun telefon raqamingizni yuboring:\n\n1️⃣ Pastdagi <b>«📲 Telefon raqamni yuborish»</b> tugmasini bosing:`,
         {
           reply_markup: {
             keyboard: [[{ text: '📲 Telefon raqamni yuborish', request_contact: true }]],

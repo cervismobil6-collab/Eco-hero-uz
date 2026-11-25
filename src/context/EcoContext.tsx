@@ -58,6 +58,8 @@ import {
   WeeklyChallengeSummary,
   SchoolTeamMissionSummary,
   ChampionshipEligibility,
+  DailyMission,
+  DailyMissionSubmission,
   ChampionshipLiveResponse,
 } from '../types/eco';
 import {
@@ -532,6 +534,27 @@ interface EcoContextType {
   ecoMissions: EcoMission[];
   missionSubmissions: MissionSubmission[];
   missionCompletions: string[];
+  dailyMissions: DailyMission[];
+  dailyMissionSubmissions: DailyMissionSubmission[];
+  dailyMissionCompletions: string[];
+  adminIntent: { adminTab?: string; verifyDailySubId?: string; openDailyMissions?: boolean; ts: number } | null;
+  clearAdminIntent: () => void;
+  createDailyMission: (payload: {
+    title: string;
+    description: string;
+    rewardCoins: number;
+  }) => Promise<{ success: boolean; mission?: DailyMission; notifiedCount?: number; error?: string }>;
+  deleteDailyMission: (id: string) => Promise<{ success: boolean; error?: string }>;
+  clearDailyMissions: () => Promise<{ success: boolean; error?: string }>;
+  submitDailyMission: (
+    missionId: string,
+    payload: { photoUrl: string; comment?: string }
+  ) => Promise<{ success: boolean; code?: string; submission?: DailyMissionSubmission; message?: string; error?: string }>;
+  reviewDailyMissionSubmission: (
+    subId: string,
+    action: 'approve' | 'reject',
+    adminNote?: string
+  ) => Promise<{ success: boolean; submission?: DailyMissionSubmission; error?: string }>;
   editReport: (reportId: string, updates: Partial<EcoReport>) => Promise<{ success: boolean; error?: string }>;
   deleteReport: (reportId: string) => Promise<{ success: boolean; error?: string }>;
   schoolReportAction: (
@@ -936,6 +959,16 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
   const [missionSubmissions, setMissionSubmissions] = useState<MissionSubmission[]>([]);
   const [missionCompletions, setMissionCompletions] = useState<string[]>([]);
+  const [dailyMissions, setDailyMissions] = useState<DailyMission[]>(() => {
+    try {
+      const saved = localStorage.getItem('ecohero_daily_missions');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [dailyMissionSubmissions, setDailyMissionSubmissions] = useState<DailyMissionSubmission[]>([]);
+  const [dailyMissionCompletions, setDailyMissionCompletions] = useState<string[]>([]);
   const [weeklyChallenge, setWeeklyChallenge] = useState<WeeklyChallengeSummary | null>(null);
   const [schoolTeamMission, setSchoolTeamMission] = useState<SchoolTeamMissionSummary | null>(null);
   const [championshipMeta, setChampionshipMeta] = useState<ChampionshipEligibility | null>(null);
@@ -1108,6 +1141,13 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [activeTab, setActiveTabState] = useState<string>(getTabFromPath);
   const [ratingIntent, setRatingIntent] = useState<{ tier: LeaderboardTier; filterToMyDistrict?: boolean; ts: number } | null>(null);
+  const [adminIntent, setAdminIntent] = useState<{
+    adminTab?: string;
+    verifyDailySubId?: string;
+    openDailyMissions?: boolean;
+    ts: number;
+  } | null>(null);
+  const clearAdminIntent = useCallback(() => setAdminIntent(null), []);
   const [isTelegramMiniApp, setIsTelegramMiniApp] = useState(false);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'info' | 'warning' } | null>(null);
   const notificationTimerRef = useRef<number | null>(null);
@@ -1311,6 +1351,14 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         if (Array.isArray(data.missionSubmissions)) setMissionSubmissions(data.missionSubmissions);
         if (Array.isArray(data.missionCompletions)) setMissionCompletions(data.missionCompletions);
+        if (Array.isArray(data.dailyMissions)) {
+          setDailyMissions(data.dailyMissions);
+          try {
+            localStorage.setItem('ecohero_daily_missions', JSON.stringify(data.dailyMissions));
+          } catch {}
+        }
+        if (Array.isArray(data.dailyMissionSubmissions)) setDailyMissionSubmissions(data.dailyMissionSubmissions);
+        if (Array.isArray(data.dailyMissionCompletions)) setDailyMissionCompletions(data.dailyMissionCompletions);
         if (data.weeklyChallenge) setWeeklyChallenge(data.weeklyChallenge);
         if (data.schoolTeamMission) setSchoolTeamMission(data.schoolTeamMission);
         if (data.championshipMeta) setChampionshipMeta(data.championshipMeta);
@@ -1320,15 +1368,28 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
 
         if (data.user) {
-          setUser(prev => ({
-            ...prev,
+          const hasCompleteProfile = Boolean(
+            data.user.isOnboarded ||
+              (data.user.fullName &&
+                data.user.phoneNumber &&
+                data.user.schoolName &&
+                data.user.schoolName !== 'Maktab kiritilmagan')
+          );
+          const mergedUser = {
+            ...userRef.current,
             ...data.user,
-          }));
-          if (data.user.uid) {
-            localStorage.setItem('ecohero_session_uid', data.user.uid);
+            isOnboarded: Boolean(data.user.isOnboarded || hasCompleteProfile),
+          };
+          setUser(mergedUser);
+          try {
+            localStorage.setItem('ecohero_user', JSON.stringify(mergedUser));
+          } catch {}
+          if (mergedUser.uid) {
+            localStorage.setItem('ecohero_session_uid', mergedUser.uid);
           }
-          if (data.user.isOnboarded) {
+          if (mergedUser.isOnboarded) {
             localStorage.setItem('ecohero_onboarded', 'true');
+            setOnboardingModalOpen(false);
           }
           if (data.user.welcomeBonusClaimed) {
             localStorage.setItem('ecohero_welcome_bonus_claimed', 'true');
@@ -1554,20 +1615,26 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
   }, [ecoMissions]);
 
-  // Prompt registration automatically for unauthenticated non-Telegram web visitors
+  // Prompt registration automatically for unauthenticated non-Telegram web visitors AFTER initial sync finishes
   useEffect(() => {
+    if (!bootstrapReady || !telegramAuthReady) return;
     const tg = (window as any).Telegram?.WebApp;
     const isTg = Boolean(tg?.initData || tg?.initDataUnsafe?.user);
     if (isTg) return;
 
     const isAlreadyOnboarded = localStorage.getItem('ecohero_onboarded') === 'true';
-    if (!isAlreadyOnboarded && !user.isOnboarded && !user.isVerified) {
+    const hasSavedComplete = Boolean(
+      user.isOnboarded ||
+        user.isVerified ||
+        (user.fullName && user.phoneNumber && user.schoolName && user.schoolName !== 'Maktab kiritilmagan')
+    );
+    if (!isAlreadyOnboarded && !hasSavedComplete) {
       const timer = window.setTimeout(() => {
         setOnboardingModalOpen(true);
       }, 900);
       return () => window.clearTimeout(timer);
     }
-  }, [user.isOnboarded, user.isVerified]);
+  }, [bootstrapReady, telegramAuthReady, user.isOnboarded, user.isVerified, user.fullName, user.phoneNumber, user.schoolName]);
 
   // Ensure daily popup check never stalls forever if offline/slow network
   useEffect(() => {
@@ -1837,22 +1904,34 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         .then(data => {
           if (data.success && data.user) {
             if (data.sessionToken) saveSessionToken(data.sessionToken);
-            setUser(prev => ({
-              ...prev,
+            const hasCompleteTgUser = Boolean(
+              data.user.isOnboarded ||
+                (data.user.fullName &&
+                  data.user.phoneNumber &&
+                  data.user.schoolName &&
+                  data.user.schoolName !== 'Maktab kiritilmagan')
+            );
+            const normalizedTgUser = {
+              ...userRef.current,
               ...data.user,
-            }));
-            if (data.user.uid) {
-              localStorage.setItem('ecohero_session_uid', data.user.uid);
+              isOnboarded: Boolean(data.user.isOnboarded || hasCompleteTgUser),
+            };
+            setUser(normalizedTgUser);
+            try {
+              localStorage.setItem('ecohero_user', JSON.stringify(normalizedTgUser));
+            } catch {}
+            if (normalizedTgUser.uid) {
+              localStorage.setItem('ecohero_session_uid', normalizedTgUser.uid);
             }
-            if (data.user.isOnboarded) {
+            if (normalizedTgUser.isOnboarded) {
               localStorage.setItem('ecohero_onboarded', 'true');
               setOnboardingModalOpen(false);
-              showNotification(`Xush kelibsiz, ${data.user.fullName || 'Eko-Qahramon'}!`, 'success');
+              showNotification(`Xush kelibsiz, ${normalizedTgUser.fullName || 'Eko-Qahramon'}!`, 'success');
             } else {
               localStorage.removeItem('ecohero_onboarded');
               setOnboardingModalOpen(true);
             }
-            syncBootstrap(data.user.uid, data.user.telegramId);
+            syncBootstrap(normalizedTgUser.uid, normalizedTgUser.telegramId);
             triggerHaptic('success');
           }
         })
@@ -1981,6 +2060,20 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const tab = params.get('tab');
     if (tab && VALID_TABS.has(tab.toLowerCase())) {
       setActiveTab(tab.toLowerCase());
+    }
+    const adminTabParam = params.get('adminTab');
+    const verifyDailyParam = params.get('verifyDaily');
+    const openDailyParam = params.get('openDailyMissions');
+    if (adminTabParam || verifyDailyParam || openDailyParam === '1') {
+      setAdminIntent({
+        adminTab: adminTabParam || undefined,
+        verifyDailySubId: verifyDailyParam || undefined,
+        openDailyMissions: openDailyParam === '1',
+        ts: Date.now(),
+      });
+      if (!tab) {
+        setActiveTab('admin');
+      }
     }
     const refCode = params.get('ref');
     if (refCode && refCode !== userRef.current.uid && refCode !== userRef.current.referralCode) {
@@ -4078,6 +4171,121 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [apiFetch, showNotification, syncBootstrap, triggerConfetti]);
 
+  const createDailyMission: EcoContextType['createDailyMission'] = useCallback(
+    async (payload) => {
+      try {
+        const res = await apiFetch('/api/daily-missions', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        const data = await parseApiJson<any>(res);
+        if (!res.ok || !data?.success) {
+          showNotification(data?.error || "Kunlik missiya qo'shilmadi", 'warning');
+          return { success: false, error: data?.error || 'Xatolik' };
+        }
+        setDailyMissions(prev => [data.mission, ...prev]);
+        await syncBootstrap();
+        showNotification("Yangi kunlik missiya qo'shildi va o'quvchilarga xabar yuborildi!", 'success');
+        return { success: true, mission: data.mission, notifiedCount: data.notifiedCount };
+      } catch (err: any) {
+        showNotification(err?.message || 'Tarmoq xatoligi', 'warning');
+        return { success: false, error: err?.message || 'Tarmoq xatoligi' };
+      }
+    },
+    [apiFetch, showNotification, syncBootstrap]
+  );
+
+  const deleteDailyMission: EcoContextType['deleteDailyMission'] = useCallback(
+    async (id) => {
+      try {
+        const res = await apiFetch(`/api/daily-missions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+        const data = await parseApiJson<any>(res);
+        if (!res.ok || !data?.success) {
+          showNotification(data?.error || "Missiya o'chirilmadi", 'warning');
+          return { success: false, error: data?.error || 'Xatolik' };
+        }
+        setDailyMissions(prev => prev.filter(m => m.id !== id));
+        await syncBootstrap();
+        showNotification("Kunlik missiya o'chirildi", 'info');
+        return { success: true };
+      } catch (err: any) {
+        return { success: false, error: err?.message || 'Tarmoq xatoligi' };
+      }
+    },
+    [apiFetch, showNotification, syncBootstrap]
+  );
+
+  const clearDailyMissions: EcoContextType['clearDailyMissions'] = useCallback(async () => {
+    try {
+      const res = await apiFetch('/api/daily-missions/clear', { method: 'POST', body: JSON.stringify({}) });
+      const data = await parseApiJson<any>(res);
+      if (!res.ok || !data?.success) {
+        showNotification(data?.error || 'Missiyalarni tozalab bo‘lmadi', 'warning');
+        return { success: false, error: data?.error || 'Xatolik' };
+      }
+      setDailyMissions([]);
+      await syncBootstrap();
+      showNotification("Avvalgi kunlik missiyalar o'chirildi", 'info');
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Tarmoq xatoligi' };
+    }
+  }, [apiFetch, showNotification, syncBootstrap]);
+
+  const submitDailyMission: EcoContextType['submitDailyMission'] = useCallback(
+    async (missionId, payload) => {
+      try {
+        const res = await apiFetch(`/api/daily-missions/${encodeURIComponent(missionId)}/submit`, {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        const data = await parseApiJson<any>(res);
+        if (!res.ok || !data?.success) {
+          showNotification(data?.error || 'Missiya yuborilmadi', 'warning');
+          return { success: false, code: data?.code, error: data?.error || 'Xatolik' };
+        }
+        if (data.submission) {
+          setDailyMissionSubmissions(prev => [data.submission, ...prev]);
+        }
+        await syncBootstrap();
+        triggerHaptic('success');
+        showNotification(data.message || "Rasmingiz Maktab Sardoriga yuborildi!", 'success');
+        return { success: true, submission: data.submission, message: data.message };
+      } catch (err: any) {
+        showNotification(err?.message || 'Tarmoq xatoligi', 'warning');
+        return { success: false, error: err?.message || 'Tarmoq xatoligi' };
+      }
+    },
+    [apiFetch, showNotification, syncBootstrap, triggerHaptic]
+  );
+
+  const reviewDailyMissionSubmission: EcoContextType['reviewDailyMissionSubmission'] = useCallback(
+    async (subId, action, adminNote) => {
+      try {
+        const res = await apiFetch(`/api/daily-missions/submissions/${encodeURIComponent(subId)}/review`, {
+          method: 'POST',
+          body: JSON.stringify({ action, adminNote }),
+        });
+        const data = await parseApiJson<any>(res);
+        if (!res.ok || !data?.success) {
+          showNotification(data?.error || 'Tasdiqlash amalga oshmadi', 'warning');
+          return { success: false, error: data?.error || 'Xatolik' };
+        }
+        await syncBootstrap();
+        if (action === 'approve') {
+          triggerConfetti();
+          showNotification("O'quvchi missiyasi tasdiqlandi, coin va chat xabari yuborildi!", 'success');
+        } else {
+          showNotification('Missiya rad etildi va o‘quvchiga xabar yuborildi.', 'info');
+        }
+        return { success: true, submission: data.submission };
+      } catch (err: any) {
+        return { success: false, error: err?.message || 'Tarmoq xatoligi' };
+      }
+    },
+    [apiFetch, showNotification, syncBootstrap, triggerConfetti]
+  );
+
   const fetchChampionshipLive: EcoContextType['fetchChampionshipLive'] = useCallback(
     async ({ level, entity, region, district }) => {
       try {
@@ -4761,6 +4969,16 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ecoMissions,
         missionSubmissions,
         missionCompletions,
+        dailyMissions,
+        dailyMissionSubmissions,
+        dailyMissionCompletions,
+        adminIntent,
+        clearAdminIntent,
+        createDailyMission,
+        deleteDailyMission,
+        clearDailyMissions,
+        submitDailyMission,
+        reviewDailyMissionSubmission,
         editReport,
         deleteReport,
         schoolReportAction,
