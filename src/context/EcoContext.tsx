@@ -91,6 +91,7 @@ import {
   loadUltraBackupFromFirestore,
   syncSchoolsToFirestore,
 } from '../services/firestoreCatalogSync';
+import { clearMapDataCache } from '../services/mapDataService';
 
 // One-time cleanup of legacy cached demo records in browser storage
 if (typeof window !== 'undefined') {
@@ -1392,7 +1393,9 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
       if (synced > 0) {
+        clearMapDataCache();
         await syncBootstrap();
+        setLiveSyncVersion((v) => v + 1);
         showNotification(`${synced} ta oflayn hisobot serverga sinxronlandi!`, 'success');
       }
     } catch {
@@ -2654,6 +2657,7 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
       const data = await res.json();
       if (res.ok && data.success) {
+        clearMapDataCache();
         await syncBootstrap();
         if (status === 'resolved' || status === 'verified') {
           triggerConfetti();
@@ -3778,7 +3782,9 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return { success: false, error: data.error || 'Xatolik' };
         }
         setReports(prev => prev.map(r => (r.id === reportId ? { ...r, ...data.report } : r)));
+        clearMapDataCache();
         await syncBootstrap();
+        setLiveSyncVersion((v) => v + 1);
         showNotification('Hisobot yangilandi!', 'success');
         return { success: true };
       } catch (err: any) {
@@ -3798,7 +3804,9 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return { success: false, error: data.error || 'Xatolik' };
         }
         setReports(prev => prev.filter(r => r.id !== reportId));
+        clearMapDataCache();
         await syncBootstrap();
+        setLiveSyncVersion((v) => v + 1);
         showNotification("Hisobot o'chirildi", 'info');
         return { success: true };
       } catch (err: any) {
@@ -4207,6 +4215,7 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   localStorage.setItem('ecohero_live_metrics', JSON.stringify(payload.liveMetrics));
                 } catch {}
               }
+              clearMapDataCache();
               if (syncDebounceRef.current) window.clearTimeout(syncDebounceRef.current);
               syncDebounceRef.current = window.setTimeout(() => {
                 syncBootstrap();

@@ -3018,6 +3018,11 @@ app.patch('/api/reports/:id', requireRoles('super_admin', 'moderator'), (req: Au
     report.updatedAt = new Date().toISOString();
 
     saveCentralDb();
+    broadcastRealtimeEvent('db:updated', {
+      scope: 'reports',
+      action: 'updated',
+      reportId: report.id,
+    });
     res.json({ success: true, report });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -3028,8 +3033,13 @@ app.delete('/api/reports/:id', requireRoles('super_admin', 'moderator'), (req: A
   try {
     const idx = centralDb.reports.findIndex((r) => r.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'Hisobot topilmadi' });
-    centralDb.reports.splice(idx, 1);
+    const [removed] = centralDb.reports.splice(idx, 1);
     saveCentralDb();
+    broadcastRealtimeEvent('db:updated', {
+      scope: 'reports',
+      action: 'deleted',
+      reportId: removed?.id || req.params.id,
+    });
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -3051,6 +3061,11 @@ app.post('/api/reports/:id/upvote', requireAuth, (req: AuthenticatedRequest, res
       report.upvotes = (report.upvotes || 0) + 1;
     }
     saveCentralDb();
+    broadcastRealtimeEvent('db:updated', {
+      scope: 'reports',
+      action: 'upvoted',
+      reportId: report.id,
+    });
     res.json({ success: true, report });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -4055,6 +4070,11 @@ app.post(
       }
 
       saveCentralDb();
+      broadcastRealtimeEvent('db:updated', {
+        scope: 'schools',
+        action: 'updated',
+        schoolId,
+      });
       addAuditLog({
         actorUid: req.authUser.uid,
         actorName: req.authUser.fullName,

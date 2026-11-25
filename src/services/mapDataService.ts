@@ -3,9 +3,9 @@ import {
   collection,
   getDocs,
   limit,
-  orderBy,
+  onSnapshot,
   query,
-  startAfter,
+  where,
   DocumentData,
   QueryDocumentSnapshot,
 } from 'firebase/firestore';
@@ -49,6 +49,43 @@ function setCached<T>(key: string, data: T): void {
 
 export function clearMapDataCache(): void {
   memoryCache.clear();
+}
+
+const PUBLIC_MAP_REPORT_STATUSES = [
+  'APPROVED',
+  'ASSIGNED',
+  'IN_PROGRESS',
+  'ESCALATED',
+  'RESOLVED',
+  'verified',
+  'in_progress',
+  'resolved',
+];
+
+function normalizeTimestampValue(val: any): string {
+  if (!val) return '';
+  if (typeof val === 'string') return val;
+  if (typeof val?.toDate === 'function') {
+    try {
+      return val.toDate().toISOString();
+    } catch {
+      return '';
+    }
+  }
+  if (typeof val?.seconds === 'number') {
+    return new Date(val.seconds * 1000).toISOString();
+  }
+  return '';
+}
+
+function normalizeFirestoreReport(id: string, raw: any): EcoReport {
+  return {
+    ...(raw || {}),
+    id,
+    createdAt: normalizeTimestampValue(raw?.createdAt) || new Date().toISOString(),
+    updatedAt: normalizeTimestampValue(raw?.updatedAt) || undefined,
+    resolvedAt: normalizeTimestampValue(raw?.resolvedAt) || undefined,
+  } as EcoReport;
 }
 
 export const FALLBACK_MAP_CONFIG: MapProviderConfigResponse = {
@@ -188,22 +225,28 @@ export async function fetchPaginatedMapSchools(params: {
   const cached = getCached<PaginatedResult<School>>(cacheKey);
   if (cached) return cached;
 
-  // 1. Try Firestore real paginated query when DB is initialized and user has Firebase Auth session
+  // 1. Try Firestore schools query obeying firestore.rules
   try {
     if (db && auth?.currentUser) {
-      const constraints: any[] = [orderBy('totalCoins', 'desc'), limit(limitCount)];
-      if (params.lastDoc) {
-        constraints.push(startAfter(params.lastDoc));
-      }
-      const q = query(collection(db, 'schools'), ...constraints);
+      const q = query(
+        collection(db, 'schools'),
+        where('status', 'in', ['active', 'verified']),
+        limit(limitCount)
+      );
       const snap = await getDocs(q);
       if (!snap.empty) {
-        const fsSchools = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as School[];
+        const fsSchools = snap.docs
+          .map((d) => ({
+            ...(d.data() as any),
+            id: d.id,
+            createdAt: normalizeTimestampValue((d.data() as any)?.createdAt) || new Date().toISOString(),
+          }))
+          .sort((a, b) => Number(b.totalCoins || 0) - Number(a.totalCoins || 0)) as School[];
         const result: PaginatedResult<School> = {
           items: fsSchools,
           total: fsSchools.length,
           page,
-          totalPages: snap.docs.length === limitCount ? page + 1 : page,
+          totalPages: 1,
           source: 'firestore',
           lastFirestoreDoc: snap.docs[snap.docs.length - 1] || null,
         };
@@ -262,34 +305,8 @@ export async function fetchPaginatedMapReports(params: {
   const cached = getCached<PaginatedResult<EcoReport>>(cacheKey);
   if (cached) return cached;
 
-  // 1. Try Firestore eco_reports or reports collection when signed into Firebase Auth
-  try {
-    if (db && auth?.currentUser) {
-      const colNames = ['eco_reports', 'reports'];
-      for (const colName of colNames) {
-        const constraints: any[] = [orderBy('createdAt', 'desc'), limit(limitCount)];
-        if (params.lastDoc) constraints.push(startAfter(params.lastDoc));
-        const snap = await getDocs(query(collection(db, colName), ...constraints));
-        if (!snap.empty) {
-          const fsReports = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as EcoReport[];
-          const result: PaginatedResult<EcoReport> = {
-            items: fsReports,
-            total: fsReports.length,
-            page,
-            totalPages: snap.docs.length === limitCount ? page + 1 : page,
-            source: 'firestore',
-            lastFirestoreDoc: snap.docs[snap.docs.length - 1] || null,
-          };
-          setCached(cacheKey, result);
-          return result;
-        }
-      }
-    }
-  } catch (err) {
-    handleFirestoreError(err, OperationType.LIST, 'eco_reports');
-  }
-
-  // 2. Fallback/Primary unified server endpoint
+  // 1. Try Unified Server endpoint first so scoped pending + live reports stay authoritative;
+  //    then fall back to Firestore public reports collection if server unreachable
   try {
     const qs = new URLSearchParams({
       page: String(page),
@@ -315,10 +332,74 @@ export async function fetchPaginatedMapReports(params: {
       return result;
     }
   } catch {
-    // Caller falls back to EcoContext
+    // Fallback to Firestore below
+  }
+
+  // 2. Firestore public reports query (strictly obeying firestore.rules)
+  try {
+    if (db) {
+      const snap = await getDocs(
+        query(
+          collection(db, 'reports'),
+          where('status', 'in', PUBLIC_MAP_REPORT_STATUSES),
+          limit(limitCount)
+        )
+      );
+      if (!snap.empty) {
+        const fsReports = snap.docs
+          .map((d) => normalizeFirestoreReport(d.id, d.data()))
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        const result: PaginatedResult<EcoReport> = {
+          items: fsReports,
+          total: fsReports.length,
+          page,
+          totalPages: 1,
+          source: 'firestore',
+          lastFirestoreDoc: snap.docs[snap.docs.length - 1] || null,
+        };
+        setCached(cacheKey, result);
+        return result;
+      }
+    }
+  } catch (err) {
+    handleFirestoreError(err, OperationType.LIST, 'reports');
   }
 
   return { items: [], total: 0, page: 1, totalPages: 1, source: 'context' };
+}
+
+export function subscribeRealtimeMapReports(
+  onUpdate: (reports: EcoReport[], meta: { fromCache: boolean; hasPendingWrites: boolean }) => void,
+  onError?: (err: unknown) => void
+): () => void {
+  if (!db) return () => {};
+  try {
+    const q = query(
+      collection(db, 'reports'),
+      where('status', 'in', PUBLIC_MAP_REPORT_STATUSES),
+      limit(120)
+    );
+    return onSnapshot(
+      q,
+      { includeMetadataChanges: true },
+      (snapshot) => {
+        const items = snapshot.docs
+          .map((d) => normalizeFirestoreReport(d.id, d.data()))
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        onUpdate(items, {
+          fromCache: snapshot.metadata.fromCache,
+          hasPendingWrites: snapshot.metadata.hasPendingWrites,
+        });
+      },
+      (err) => {
+        handleFirestoreError(err, OperationType.LIST, 'reports');
+        onError?.(err);
+      }
+    );
+  } catch (err) {
+    onError?.(err);
+    return () => {};
+  }
 }
 
 export function buildSchoolsGeoJson(schools: School[]): FeatureCollection {
