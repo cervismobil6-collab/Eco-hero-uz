@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { parseEcoHerouzTelegramPost } from './src/utils/telegramNews';
 
 interface FirebaseAppletConfig {
   projectId: string;
@@ -172,6 +173,7 @@ const ALLOWED_CATALOG_FIELDS: Record<string, string[]> = {
   ],
   home_posts: [
     'id', 'title', 'content', 'category', 'imageUrl', 'ctaText', 'ctaUrl',
+    'telegramPostId', 'telegramPostUrl',
     'authorUid', 'authorName', 'authorRole', 'schoolId', 'schoolName',
     'region', 'district', 'isPinned', 'status', 'createdAt', 'updatedAt',
   ],
@@ -208,6 +210,18 @@ function sanitizeCatalogRecord(collectionName: string, record: Record<string, an
   if (typeof out.channelUrl === 'string') out.channelUrl = out.channelUrl.slice(0, 1024);
   if (typeof out.channelUsername === 'string') out.channelUsername = out.channelUsername.slice(0, 120);
 
+  if (collectionName === 'home_posts') {
+    const parsedTg =
+      parseEcoHerouzTelegramPost(out.telegramPostUrl) ||
+      parseEcoHerouzTelegramPost(out.telegramPostId);
+    if (parsedTg) {
+      out.telegramPostId = parsedTg.postId;
+      out.telegramPostUrl = parsedTg.postUrl;
+    } else {
+      delete out.telegramPostId;
+      delete out.telegramPostUrl;
+    }
+  }
   if (collectionName === 'eco_missions' && !out.updatedAt) {
     out.updatedAt = new Date().toISOString();
   }

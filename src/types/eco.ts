@@ -507,6 +507,8 @@ export interface EcoArticle {
   date: string;
   imageUrl: string;
   views: number;
+  telegramPostId?: string;
+  telegramPostUrl?: string;
 }
 
 export interface EcoPartner {
@@ -800,6 +802,8 @@ export interface HomePost {
   imageUrl?: string;
   ctaText?: string;
   ctaUrl?: string;
+  telegramPostId?: string;
+  telegramPostUrl?: string;
   authorUid: string;
   authorName: string;
   authorRole: UserRole | string;

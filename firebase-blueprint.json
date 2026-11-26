@@ -483,6 +483,8 @@
         "imageUrl": { "type": "string", "maxLength": 1024 },
         "ctaText": { "type": "string", "maxLength": 80 },
         "ctaUrl": { "type": "string", "maxLength": 1024 },
+        "telegramPostId": { "type": "string", "maxLength": 32, "pattern": "^[0-9]{1,12}$", "description": "@EcoHerouz Telegram kanalidagi post ID raqami" },
+        "telegramPostUrl": { "type": "string", "maxLength": 128, "pattern": "^https://t\\.me/EcoHerouz/[0-9]{1,12}$", "description": "Yangilikning @EcoHerouz kanalidagi to'g'ridan-to'g'ri post havolasi" },
         "authorUid": { "type": "string", "minLength": 1, "maxLength": 128 },
         "authorName": { "type": "string", "maxLength": 150 },
         "authorRole": { "type": "string", "maxLength": 64 },

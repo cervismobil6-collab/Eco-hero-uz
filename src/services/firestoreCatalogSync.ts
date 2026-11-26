@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { EcoAd, EcoMission, HomePost, LiveMetrics, RewardSettings, School, ShopItem } from '../types/eco';
+import { parseEcoHerouzTelegramPost } from '../utils/telegramNews';
 
 type CatalogCollectionName = 'eco_missions' | 'shopItems' | 'eco_ads' | 'home_posts';
 
@@ -75,6 +76,7 @@ const ALLOWED_FIELDS: Record<CatalogCollectionName | 'reward_settings' | 'catalo
   ],
   home_posts: [
     'id', 'title', 'content', 'category', 'imageUrl', 'ctaText', 'ctaUrl',
+    'telegramPostId', 'telegramPostUrl',
     'authorUid', 'authorName', 'authorRole', 'schoolId', 'schoolName',
     'region', 'district', 'isPinned', 'status', 'createdAt', 'updatedAt',
   ],
@@ -132,6 +134,16 @@ function sanitizeForFirestore(
     out.updatedAt = out.updatedAt || new Date().toISOString();
   }
   if (collectionName === 'home_posts') {
+    const parsedTg =
+      parseEcoHerouzTelegramPost(out.telegramPostUrl) ||
+      parseEcoHerouzTelegramPost(out.telegramPostId);
+    if (parsedTg) {
+      out.telegramPostId = parsedTg.postId;
+      out.telegramPostUrl = parsedTg.postUrl;
+    } else {
+      delete out.telegramPostId;
+      delete out.telegramPostUrl;
+    }
     out.createdAt = out.createdAt || new Date().toISOString();
     out.updatedAt = out.updatedAt || new Date().toISOString();
   }

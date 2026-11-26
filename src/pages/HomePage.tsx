@@ -30,7 +30,14 @@ import {
 } from '../components/home/HomeHubArtworks';
 import { computeUserStreakState } from '../utils/streak';
 import { calculateLevelProgress } from '../utils/level';
-import { resolveMediaUrl, openAdTargetUrl } from '../utils/api';
+import { resolveMediaUrl, openAdTargetUrl, isInsideTelegramWebApp } from '../utils/api';
+import {
+  ECOHERO_NEWS_CHANNEL_URL,
+  ECOHERO_NEWS_CHANNEL_USERNAME,
+  isGenericEcoHerouzChannelUrl,
+  resolveNewsTelegramPostUrl,
+  validateEcoHerouzPostInput,
+} from '../utils/telegramNews';
 import { HomePost, HomePostCategory } from '../types/eco';
 import heroEcoForestImg from '../assets/images/hero_eco_forest_1795179384249.jpg';
 import realisticAvatarImg from '../assets/images/profile_avatar_realistic_1795605008121.jpg';
@@ -62,6 +69,7 @@ export const HomePage: React.FC = () => {
   const [postImageUrl, setPostImageUrl] = useState('');
   const [postCtaText, setPostCtaText] = useState('');
   const [postCtaUrl, setPostCtaUrl] = useState('');
+  const [postTelegramInput, setPostTelegramInput] = useState('');
   const [postPinned, setPostPinned] = useState(false);
   const [savingPost, setSavingPost] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
@@ -144,8 +152,9 @@ export const HomePage: React.FC = () => {
     setPostContent('');
     setPostCategory('news');
     setPostImageUrl('/assets/schools/eco_courtyard.jpg');
-    setPostCtaText("Batafsil ko'rish");
-    setPostCtaUrl('https://t.me/Ecoheros_bot');
+    setPostCtaText('');
+    setPostCtaUrl('');
+    setPostTelegramInput('');
     setPostPinned(false);
     setPostModalOpen(true);
   };
@@ -158,23 +167,43 @@ export const HomePage: React.FC = () => {
     setPostImageUrl(post.imageUrl || '');
     setPostCtaText(post.ctaText || '');
     setPostCtaUrl(post.ctaUrl || '');
+    setPostTelegramInput(post.telegramPostUrl || post.telegramPostId || '');
     setPostPinned(Boolean(post.isPinned));
     setPostModalOpen(true);
   };
 
+  const inlineTgValidation = validateEcoHerouzPostInput(postTelegramInput);
+
   const handleSavePost = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!postTitle.trim() || !postContent.trim() || savingPost) return;
+    if (!inlineTgValidation.valid) {
+      showNotification(inlineTgValidation.error || 'Telegram post havolasi noto‘g‘ri', 'warning');
+      return;
+    }
+    if (isGenericEcoHerouzChannelUrl(postCtaUrl)) {
+      showNotification(
+        `Umumiy kanal havolasi emas, aniq post ID yoki ${ECOHERO_NEWS_CHANNEL_URL}/POST_ID kiriting`,
+        'warning'
+      );
+      return;
+    }
     setSavingPost(true);
     try {
+      const tgPayload = {
+        telegramPostId: inlineTgValidation.normalized?.postId || '',
+        telegramPostUrl: inlineTgValidation.normalized?.postUrl || '',
+        telegramPostInput: postTelegramInput.trim(),
+      };
       if (editingPost) {
         const res = await updateHomePost(editingPost.id, {
           title: postTitle.trim(),
           content: postContent.trim(),
           category: postCategory,
           imageUrl: postImageUrl.trim() || undefined,
-          ctaText: postCtaText.trim() || undefined,
-          ctaUrl: postCtaUrl.trim() || undefined,
+          ctaText: postCtaText.trim(),
+          ctaUrl: postCtaUrl.trim(),
+          ...tgPayload,
           isPinned: postPinned,
         });
         if (res.success) {
@@ -189,6 +218,7 @@ export const HomePage: React.FC = () => {
           imageUrl: postImageUrl.trim() || undefined,
           ctaText: postCtaText.trim() || undefined,
           ctaUrl: postCtaUrl.trim() || undefined,
+          ...tgPayload,
           isPinned: postPinned,
         });
         if (res.success) {
@@ -654,16 +684,39 @@ export const HomePage: React.FC = () => {
                       <span className="text-slate-800 dark:text-slate-200 font-semibold">{post.authorName}</span>
                     </div>
 
-                    {post.ctaUrl && (
-                      <button
-                        type="button"
-                        onClick={() => openAdTargetUrl(post.ctaUrl)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold shrink-0 transition-colors cursor-pointer"
-                      >
-                        <span>{post.ctaText || 'Ochish'}</span>
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+                    {(() => {
+                      const telegramPostUrl = resolveNewsTelegramPostUrl(post);
+                      const fallbackCtaUrl =
+                        post.category !== 'news' &&
+                        post.ctaUrl &&
+                        !isGenericEcoHerouzChannelUrl(post.ctaUrl)
+                          ? post.ctaUrl
+                          : '';
+                      const targetUrl = telegramPostUrl || fallbackCtaUrl;
+                      if (!targetUrl) return null;
+                      const buttonLabel = telegramPostUrl
+                        ? post.category === 'news'
+                          ? 'Batafsil o‘qish'
+                          : post.ctaText?.trim() || 'Batafsil o‘qish'
+                        : post.ctaText?.trim() || 'Ochish';
+                      return (
+                        <a
+                          href={targetUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={e => {
+                            if (isInsideTelegramWebApp()) {
+                              e.preventDefault();
+                              openAdTargetUrl(targetUrl);
+                            }
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold shrink-0 transition-colors cursor-pointer"
+                        >
+                          <span>{buttonLabel}</span>
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      );
+                    })()}
                   </div>
                 </article>
               );
@@ -735,19 +788,45 @@ export const HomePage: React.FC = () => {
                   />
                 )}
               </div>
+              <div className="space-y-1.5 p-3 rounded-xl bg-[#040D0A] border border-emerald-500/20">
+                <div className="flex items-center justify-between text-[11px] font-bold text-emerald-400">
+                  <span>Telegram post ({ECOHERO_NEWS_CHANNEL_USERNAME})</span>
+                  <span className="text-[10px] font-normal text-slate-400">ixtiyoriy</span>
+                </div>
+                <input
+                  type="text"
+                  value={postTelegramInput}
+                  onChange={e => setPostTelegramInput(e.target.value)}
+                  placeholder={`Post ID (125) yoki ${ECOHERO_NEWS_CHANNEL_URL}/125`}
+                  className="w-full px-3 py-2 rounded-lg bg-[#071812] border border-emerald-500/20 font-mono text-xs outline-none"
+                />
+                {postTelegramInput.trim() ? (
+                  inlineTgValidation.valid && inlineTgValidation.normalized ? (
+                    <p className="text-[10px] text-emerald-400 font-mono truncate">
+                      «Batafsil o‘qish» → {inlineTgValidation.normalized.postUrl}
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-rose-400">{inlineTgValidation.error}</p>
+                  )
+                ) : (
+                  <p className="text-[10px] text-slate-400">
+                    Bo‘sh qolsa tugma ko‘rinmaydi.
+                  </p>
+                )}
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <input
                   type="text"
                   value={postCtaText}
                   onChange={e => setPostCtaText(e.target.value)}
-                  placeholder="Tugma matni"
+                  placeholder="Tugma matni (ixtiyoriy)"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-[#040D0A] border border-emerald-500/20 font-semibold outline-none"
                 />
                 <input
                   type="text"
                   value={postCtaUrl}
                   onChange={e => setPostCtaUrl(e.target.value)}
-                  placeholder="Havola URL"
+                  placeholder="Qo‘shimcha havola (ixtiyoriy)"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-[#040D0A] border border-emerald-500/20 font-semibold outline-none"
                 />
               </div>

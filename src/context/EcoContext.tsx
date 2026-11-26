@@ -482,11 +482,28 @@ interface EcoContextType {
     imageUrl?: string;
     ctaText?: string;
     ctaUrl?: string;
+    telegramPostId?: string;
+    telegramPostUrl?: string;
+    telegramPostInput?: string;
     isPinned?: boolean;
   }) => Promise<{ success: boolean; post?: HomePost; error?: string }>;
   updateHomePost: (
     id: string,
-    updates: Partial<Pick<HomePost, 'title' | 'content' | 'category' | 'imageUrl' | 'ctaText' | 'ctaUrl' | 'isPinned' | 'status'>>
+    updates: Partial<
+      Pick<
+        HomePost,
+        | 'title'
+        | 'content'
+        | 'category'
+        | 'imageUrl'
+        | 'ctaText'
+        | 'ctaUrl'
+        | 'telegramPostId'
+        | 'telegramPostUrl'
+        | 'isPinned'
+        | 'status'
+      >
+    > & { telegramPostInput?: string }
   ) => Promise<{ success: boolean; post?: HomePost; error?: string }>;
   deleteHomePost: (id: string) => Promise<{ success: boolean; error?: string }>;
   // Real-time WebSocket Telegram-style Chat, Scoped Rosters & District User-Growth Race

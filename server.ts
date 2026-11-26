@@ -16,6 +16,11 @@ import QRCode from 'qrcode';
 import { computeUserStreakState, getUzbekistanDateKey } from './src/utils/streak';
 import { calculateLevelFromXp } from './src/utils/level';
 import {
+  isGenericEcoHerouzChannelUrl,
+  parseEcoHerouzTelegramPost,
+  validateEcoHerouzPostInput,
+} from './src/utils/telegramNews';
+import {
   centralDb,
   saveCentralDb,
   findOrCreateSchool,
@@ -9724,13 +9729,44 @@ app.post(
       if (!checkIsSuperAdmin(caller)) {
         return res.status(403).json({ error: 'Bosh sahifaga post joylash faqat Super Admin uchun ruxsat etilgan' });
       }
-      const { title, content, category, imageUrl, ctaText, ctaUrl, isPinned } = req.body;
+      const {
+        title,
+        content,
+        category,
+        imageUrl,
+        ctaText,
+        ctaUrl,
+        telegramPostInput,
+        telegramPostId,
+        telegramPostUrl,
+        isPinned,
+      } = req.body;
       if (!title || !content) {
         return res.status(400).json({ error: 'Post sarlavhasi va matni kiritilishi shart' });
+      }
+      if (ctaUrl && isGenericEcoHerouzChannelUrl(ctaUrl)) {
+        return res.status(400).json({
+          error: "Umumiy kanal havolasi emas, aniq post ID yoki post havolasini kiriting (masalan: 123 yoki https://t.me/EcoHerouz/123).",
+        });
+      }
+      const rawTgInput =
+        telegramPostInput !== undefined
+          ? telegramPostInput
+          : telegramPostUrl !== undefined
+          ? telegramPostUrl
+          : telegramPostId !== undefined
+          ? telegramPostId
+          : parseEcoHerouzTelegramPost(ctaUrl)
+          ? ctaUrl
+          : '';
+      const tgValidation = validateEcoHerouzPostInput(rawTgInput);
+      if (!tgValidation.valid) {
+        return res.status(400).json({ error: tgValidation.error });
       }
       const allowedCats = ['bot_news', 'website', 'channel_ad', 'news', 'school_event'];
       const resolvedCat = allowedCats.includes(category) ? category : 'news';
       const nowIso = new Date().toISOString();
+      const normalizedCtaUrl = ctaUrl ? String(ctaUrl).trim() : '';
 
       const post = {
         id: `hpost_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -9738,8 +9774,14 @@ app.post(
         content: String(content).trim().slice(0, 1500),
         category: resolvedCat,
         imageUrl: imageUrl ? String(imageUrl).trim() : '/assets/schools/eco_courtyard.jpg',
-        ctaText: ctaText ? String(ctaText).trim().slice(0, 80) : '',
-        ctaUrl: ctaUrl ? String(ctaUrl).trim() : '',
+        ctaText: ctaText
+          ? String(ctaText).trim().slice(0, 80)
+          : tgValidation.normalized
+          ? "Batafsil o‘qish"
+          : '',
+        ctaUrl: parseEcoHerouzTelegramPost(normalizedCtaUrl) ? '' : normalizedCtaUrl,
+        telegramPostId: tgValidation.normalized?.postId || '',
+        telegramPostUrl: tgValidation.normalized?.postUrl || '',
         authorUid: caller.uid,
         authorName: caller.fullName,
         authorRole: caller.role,
@@ -9765,7 +9807,11 @@ app.post(
         action: 'create_home_post',
         targetCollection: 'home_posts',
         targetId: post.id,
-        details: { title: post.title, category: post.category },
+        details: {
+          title: post.title,
+          category: post.category,
+          telegramPostUrl: post.telegramPostUrl || undefined,
+        },
       });
 
       res.json({ success: true, post });
@@ -9787,13 +9833,58 @@ app.patch(
       const post = (centralDb.homePosts || []).find((p: any) => p.id === req.params.id);
       if (!post) return res.status(404).json({ error: 'Post topilmadi' });
 
-      const { title, content, category, imageUrl, ctaText, ctaUrl, isPinned, status } = req.body;
+      const {
+        title,
+        content,
+        category,
+        imageUrl,
+        ctaText,
+        ctaUrl,
+        telegramPostInput,
+        telegramPostId,
+        telegramPostUrl,
+        isPinned,
+        status,
+      } = req.body;
+
+      if (ctaUrl !== undefined && isGenericEcoHerouzChannelUrl(ctaUrl)) {
+        return res.status(400).json({
+          error: "Umumiy kanal havolasi emas, aniq post ID yoki post havolasini kiriting (masalan: 123 yoki https://t.me/EcoHerouz/123).",
+        });
+      }
+
+      const hasExplicitTgField =
+        telegramPostInput !== undefined || telegramPostUrl !== undefined || telegramPostId !== undefined;
+      if (hasExplicitTgField) {
+        const rawTgInput =
+          telegramPostInput !== undefined
+            ? telegramPostInput
+            : telegramPostUrl !== undefined
+            ? telegramPostUrl
+            : telegramPostId;
+        const tgValidation = validateEcoHerouzPostInput(rawTgInput);
+        if (!tgValidation.valid) {
+          return res.status(400).json({ error: tgValidation.error });
+        }
+        post.telegramPostId = tgValidation.normalized?.postId || '';
+        post.telegramPostUrl = tgValidation.normalized?.postUrl || '';
+      } else if (ctaUrl !== undefined) {
+        const parsedFromCta = parseEcoHerouzTelegramPost(ctaUrl);
+        if (parsedFromCta) {
+          post.telegramPostId = parsedFromCta.postId;
+          post.telegramPostUrl = parsedFromCta.postUrl;
+        }
+      }
+
       if (title !== undefined) post.title = String(title).trim().slice(0, 180);
       if (content !== undefined) post.content = String(content).trim().slice(0, 1500);
       if (category !== undefined) post.category = category;
       if (imageUrl !== undefined) post.imageUrl = String(imageUrl).trim();
       if (ctaText !== undefined) post.ctaText = String(ctaText).trim().slice(0, 80);
-      if (ctaUrl !== undefined) post.ctaUrl = String(ctaUrl).trim();
+      if (ctaUrl !== undefined) {
+        const trimmedCta = String(ctaUrl).trim();
+        post.ctaUrl = parseEcoHerouzTelegramPost(trimmedCta) ? '' : trimmedCta;
+      }
       if (isPinned !== undefined) post.isPinned = Boolean(isPinned);
       if (status === 'active' || status === 'paused') post.status = status;
       post.updatedAt = new Date().toISOString();
