@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { motion, Variants } from 'framer-motion';
 import { useEco } from '../context/EcoContext';
+import dailyQuestChestImg from '../assets/images/daily_quest_chest_1795179383259.jpg';
 
 export const EcoRewardsHubPage: React.FC = () => {
   const { user, setActiveTab, triggerHaptic, showNotification } = useEco();
@@ -171,17 +172,24 @@ export const EcoRewardsHubPage: React.FC = () => {
       {/* Compact Header */}
       <motion.section
         variants={itemVariants}
-        className="p-5 sm:p-8 rounded-3xl bg-gradient-to-br from-[#062118] via-[#04140F] to-[#020A07] border border-emerald-500/25 text-white shadow-lg"
+        className="p-4 sm:p-6 rounded-3xl bg-gradient-to-br from-[#062118] via-[#04140F] to-[#020A07] border border-emerald-500/25 text-white shadow-lg"
       >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="space-y-1.5 max-w-xl">
-            <p className="text-xs font-semibold text-emerald-400">Mukofotlar markazi · EcoHero</p>
-            <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-balance">
-              Asrang, yig'ing va sovrin yuting
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              Ekologik vazifalarni bajarib EcoCoin to'plang va maktabingizni chempionatda oldinga olib chiqing.
-            </p>
+          <div className="flex items-center gap-3.5 max-w-xl">
+            <img
+              src={dailyQuestChestImg}
+              alt="Mukofotlar markazi"
+              className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border border-emerald-400/35 shadow-lg shrink-0"
+            />
+            <div className="space-y-1 min-w-0">
+              <p className="text-xs font-semibold text-emerald-400">Mukofotlar markazi · EcoHero</p>
+              <h1 className="text-xl sm:text-3xl font-extrabold tracking-tight text-balance">
+                Asrang, yig&apos;ing va sovrin yuting
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-300 leading-snug">
+                Ekologik vazifalarni bajarib EcoCoin to&apos;plang va maktabingizni chempionatda oldinga olib chiqing.
+              </p>
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">

@@ -237,13 +237,14 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-md overflow-y-auto">
-      <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 sm:p-7 shadow-2xl my-6 relative">
-        
+      <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/25 p-5 sm:p-6 shadow-2xl my-6 relative">
+
         {/* Close button (allowed in edit mode or when already onboarded) */}
         {(isEditMode || user.isOnboarded) && (
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 p-1.5 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-white bg-slate-100 dark:bg-slate-800 transition-colors cursor-pointer"
+            className="absolute top-4 right-4 p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-white bg-slate-100 dark:bg-[#040D0A] transition-colors cursor-pointer"
+            aria-label="Yopish"
           >
             <X className="w-4 h-4" />
           </button>
@@ -326,7 +327,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                 value={phoneNumber}
                 onChange={e => setPhoneNumber(e.target.value)}
                 placeholder="+998 90 123 45 67"
-                className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 font-mono"
+                className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 font-mono"
               />
             </div>
             <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -347,7 +348,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                 value={fullName}
                 onChange={e => setFullName(e.target.value)}
                 placeholder="Masalan: Anvar Qodirov"
-                className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-emerald-500"
+                className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-emerald-500"
               />
             </div>
             <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -366,7 +367,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                 <select
                   value={region}
                   onChange={e => handleRegionChange(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
                 >
                   {UZBEKISTAN_REGIONS.map(reg => (
                     <option key={reg} value={reg}>{reg}</option>
@@ -384,7 +385,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                 <select
                   value={district}
                   onChange={e => setDistrict(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
                 >
                   {(UZBEKISTAN_DISTRICTS[region] || []).map(dist => (
                     <option key={dist} value={dist}>{dist}</option>
@@ -408,7 +409,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                   value={schoolName}
                   onChange={e => setSchoolName(e.target.value)}
                   placeholder="Masalan: 17-sonli maktab"
-                  className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-emerald-500"
+                  className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-emerald-500"
                 />
               </div>
             </div>
@@ -422,7 +423,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                 <select
                   value={grade}
                   onChange={e => setGrade(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
                 >
                   <option value="5-sinf">5-sinf</option>
                   <option value="6-sinf">6-sinf</option>
@@ -452,7 +453,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                     value={email}
                     onChange={e => setEmail(e.target.value)}
                     placeholder="misol@maktab.uz"
-                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-emerald-500"
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-emerald-500"
                   />
                 </div>
               </div>
@@ -470,7 +471,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                     placeholder="Kamida 6 ta belgi"
-                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-emerald-500"
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-emerald-500"
                   />
                 </div>
               </div>
@@ -496,7 +497,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs sm:text-sm rounded-2xl shadow-lg shadow-emerald-500/25 transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 mt-2"
+            className="w-full py-3.5 bg-gradient-to-r from-[#00F5A0] to-[#10B981] hover:brightness-105 text-[#04110B] font-black text-xs uppercase tracking-wider rounded-xl border-b-[3px] border-emerald-700 active:translate-y-[1px] transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 mt-2 min-h-[46px]"
           >
             {loading ? (
               <span>Saqlanmoqda...</span>

@@ -142,6 +142,8 @@ const CATEGORY_LABELS: Record<ProblemCategory, string> = {
   deforestation: 'Daraxt kesish',
   air: 'Havo ifloslanishi',
   greening_needed: 'Ko‘kalamzorlashtirish',
+  school_ecology: 'Maktab ekologiyasi',
+  other: 'Boshqa ekologik muammolar',
   electrical_hazard: 'Elektr xavfi',
   chemical_hazard: 'Kimyoviy xavf',
 };
@@ -153,6 +155,8 @@ const STATUS_LABELS: Record<string, { label: string; tone: string }> = {
   approved: { label: 'Tasdiqlangan', tone: 'text-sky-700 bg-sky-50 dark:bg-sky-950/50 dark:text-sky-300' },
   assigned: { label: 'Biriktirilgan', tone: 'text-indigo-700 bg-indigo-50 dark:bg-indigo-950/50 dark:text-indigo-300' },
   in_progress: { label: 'Jarayonda', tone: 'text-indigo-700 bg-indigo-50 dark:bg-indigo-950/50 dark:text-indigo-300' },
+  final_review: { label: 'Yakuniy tekshiruvda', tone: 'text-violet-700 bg-violet-50 dark:bg-violet-950/50 dark:text-violet-300' },
+  reupload_required: { label: 'Qayta rasm so‘ralgan', tone: 'text-orange-700 bg-orange-50 dark:bg-orange-950/50 dark:text-orange-300' },
   escalated: { label: 'Yuqori bosqichda', tone: 'text-rose-700 bg-rose-50 dark:bg-rose-950/50 dark:text-rose-300' },
   resolved: { label: 'Hal etilgan', tone: 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950/50 dark:text-emerald-300' },
   rejected: { label: 'Rad etilgan', tone: 'text-slate-600 bg-slate-100 dark:bg-slate-800 dark:text-slate-300' },

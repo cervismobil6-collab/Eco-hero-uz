@@ -151,26 +151,26 @@ export const HomePostsManagerPanel: React.FC = () => {
   };
 
   return (
-    <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
         <div>
-          <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
             <Megaphone className="w-4 h-4 text-emerald-500" />
             <span>Asosiy Sahifa Postlari Boshqaruvi</span>
           </h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
+          <p className="text-xs text-slate-500 dark:text-emerald-200/70">
             Botdagi yangiliklar, sayt havolalari, Telegram kanal reklamalari va maktab e’lonlarini bosh sahifaga joylashtiring va tahrirlang.
           </p>
         </div>
-        <span className="text-xs font-mono tabular-nums text-slate-500 shrink-0">
+        <span className="text-xs font-mono tabular-nums text-emerald-600 dark:text-emerald-400 font-bold shrink-0">
           {managedPosts.length} ta post
         </span>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Create Post Form */}
-        <form onSubmit={handleSubmit} className="lg:col-span-5 space-y-3 p-4 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800">
-          <div className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+        <form onSubmit={handleSubmit} className="lg:col-span-5 space-y-3 p-4 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20">
+          <div className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-emerald-300 flex items-center gap-1.5">
             <Plus className="w-3.5 h-3.5 text-emerald-500" />
             <span>Yangi post qo‘shish</span>
           </div>
@@ -180,7 +180,7 @@ export const HomePostsManagerPanel: React.FC = () => {
             <select
               value={category}
               onChange={e => setCategory(e.target.value as HomePostCategory)}
-              className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+              className="w-full min-h-[40px] px-3 py-2 rounded-xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 text-xs text-slate-900 dark:text-white outline-none focus:border-emerald-500"
             >
               <option value="bot_news">Bot yangiligi</option>
               <option value="channel_ad">Telegram kanal reklamasi</option>
@@ -198,7 +198,7 @@ export const HomePostsManagerPanel: React.FC = () => {
               value={title}
               onChange={e => setTitle(e.target.value)}
               placeholder="Masalan: @Ecoheros_bot yangi eko-tanlovi!"
-              className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+              className="w-full min-h-[40px] px-3 py-2 rounded-xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 text-xs text-slate-900 dark:text-white outline-none focus:border-emerald-500"
             />
           </div>
 
@@ -210,7 +210,7 @@ export const HomePostsManagerPanel: React.FC = () => {
               value={content}
               onChange={e => setContent(e.target.value)}
               placeholder="Batafsil ma'lumot, e'lon yoki hamkor kanal haqida yozing..."
-              className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white resize-none"
+              className="w-full px-3 py-2 rounded-xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 text-xs text-slate-900 dark:text-white resize-none outline-none focus:border-emerald-500"
             />
           </div>
 
@@ -222,7 +222,7 @@ export const HomePostsManagerPanel: React.FC = () => {
                 value={ctaText}
                 onChange={e => setCtaText(e.target.value)}
                 placeholder="Masalan: Kanalga o‘tish"
-                className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+                className="w-full min-h-[40px] px-3 py-2 rounded-xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 text-xs text-slate-900 dark:text-white outline-none focus:border-emerald-500"
               />
             </div>
             <div>
@@ -232,7 +232,7 @@ export const HomePostsManagerPanel: React.FC = () => {
                 value={ctaUrl}
                 onChange={e => setCtaUrl(e.target.value)}
                 placeholder="https://t.me/..."
-                className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white"
+                className="w-full min-h-[40px] px-3 py-2 rounded-xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 text-xs font-mono text-slate-900 dark:text-white outline-none focus:border-emerald-500"
               />
             </div>
           </div>
@@ -245,10 +245,10 @@ export const HomePostsManagerPanel: React.FC = () => {
                 value={imageUrl}
                 onChange={e => setImageUrl(e.target.value)}
                 placeholder="/assets/schools/eco_courtyard.jpg"
-                className="flex-1 min-w-0 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white"
+                className="flex-1 min-w-0 min-h-[40px] px-3 py-2 rounded-xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 text-xs font-mono text-slate-900 dark:text-white outline-none focus:border-emerald-500"
               />
-              <label className="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold flex items-center gap-1.5 cursor-pointer shrink-0">
-                <Upload className="w-3.5 h-3.5" />
+              <label className="min-h-[40px] px-3 py-2 rounded-xl border border-slate-300 dark:border-emerald-500/25 bg-white dark:bg-[#061812] text-xs font-semibold flex items-center gap-1.5 cursor-pointer shrink-0 hover:border-emerald-500/50">
+                <Upload className="w-3.5 h-3.5 text-emerald-500" />
                 <span>{isUploading ? '...' : 'Yuklash'}</span>
                 <input type="file" accept="image/*" onChange={e => handleImageUpload(e, 'create')} className="hidden" />
               </label>
@@ -268,34 +268,34 @@ export const HomePostsManagerPanel: React.FC = () => {
           <button
             type="submit"
             disabled={isSaving}
-            className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold cursor-pointer transition-colors"
+            className="w-full min-h-[44px] py-2.5 rounded-xl bg-gradient-to-r from-[#00F5A0] to-[#10B981] hover:brightness-105 disabled:opacity-50 text-[#04110B] text-xs font-black border-b-[3px] border-emerald-700 active:translate-y-[1px] cursor-pointer transition-all"
           >
             {isSaving ? 'Joylashtirilmoqda...' : 'Asosiy sahifaga chiqarish'}
           </button>
         </form>
 
         {/* Managed Posts List */}
-        <div className="lg:col-span-7 divide-y divide-slate-100 dark:divide-slate-800 max-h-[520px] overflow-y-auto pr-1">
+        <div className="lg:col-span-7 divide-y divide-slate-100 dark:divide-emerald-500/15 max-h-[520px] overflow-y-auto pr-1">
           {managedPosts.length === 0 ? (
             <div className="py-12 text-center text-xs text-slate-500">
               Hozircha siz boshqarayotgan postlar yo‘q. Chap tarafdan yangi post qo‘shing.
             </div>
           ) : (
             managedPosts.map(post => (
-              <div key={post.id} className="py-4 first:pt-0 space-y-2.5">
+              <div key={post.id} className="py-3.5 first:pt-0 space-y-2.5">
                 {editingId === post.id ? (
-                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2.5">
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 space-y-2.5">
                     <input
                       type="text"
                       value={editTitle}
                       onChange={e => setEditTitle(e.target.value)}
-                      className="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold"
+                      className="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none focus:border-emerald-500"
                     />
                     <textarea
                       rows={2}
                       value={editContent}
                       onChange={e => setEditContent(e.target.value)}
-                      className="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs resize-none"
+                      className="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 text-xs resize-none outline-none focus:border-emerald-500"
                     />
                     <div className="grid grid-cols-2 gap-2">
                       <input
@@ -303,14 +303,14 @@ export const HomePostsManagerPanel: React.FC = () => {
                         value={editCtaText}
                         onChange={e => setEditCtaText(e.target.value)}
                         placeholder="Tugma matni"
-                        className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs"
+                        className="px-3 py-1.5 rounded-lg bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 text-xs outline-none focus:border-emerald-500"
                       />
                       <input
                         type="text"
                         value={editCtaUrl}
                         onChange={e => setEditCtaUrl(e.target.value)}
                         placeholder="https://..."
-                        className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono"
+                        className="px-3 py-1.5 rounded-lg bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 text-xs font-mono outline-none focus:border-emerald-500"
                       />
                     </div>
                     <div className="flex gap-2">
@@ -319,9 +319,9 @@ export const HomePostsManagerPanel: React.FC = () => {
                         value={editImageUrl}
                         onChange={e => setEditImageUrl(e.target.value)}
                         placeholder="Rasm havolasi"
-                        className="flex-1 min-w-0 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono"
+                        className="flex-1 min-w-0 px-3 py-1.5 rounded-lg bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 text-xs font-mono outline-none focus:border-emerald-500"
                       />
-                      <label className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold flex items-center gap-1 cursor-pointer shrink-0">
+                      <label className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-emerald-500/25 bg-white dark:bg-[#061812] text-xs font-semibold flex items-center gap-1 cursor-pointer shrink-0">
                         <Upload className="w-3.5 h-3.5" />
                         <span>Rasm</span>
                         <input type="file" accept="image/*" onChange={e => handleImageUpload(e, 'edit')} className="hidden" />
@@ -331,7 +331,7 @@ export const HomePostsManagerPanel: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setEditingId(null)}
-                        className="px-3 py-1.5 rounded-lg text-xs text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center gap-1 cursor-pointer"
+                        className="px-3 py-1.5 rounded-lg text-xs text-slate-500 hover:bg-slate-200 dark:hover:bg-emerald-500/10 flex items-center gap-1 cursor-pointer"
                       >
                         <X className="w-3.5 h-3.5" /> Bekor
                       </button>
@@ -358,7 +358,7 @@ export const HomePostsManagerPanel: React.FC = () => {
                         {post.isPinned && (
                           <>
                             <span className="text-slate-400">·</span>
-                            <span className="text-indigo-500 font-semibold">Qadalgan</span>
+                            <span className="text-sky-500 font-semibold">Qadalgan</span>
                           </>
                         )}
                       </div>
@@ -390,8 +390,8 @@ export const HomePostsManagerPanel: React.FC = () => {
                         }}
                         className={`p-2 rounded-lg border transition-colors cursor-pointer ${
                           post.isPinned
-                            ? 'border-indigo-500/40 bg-indigo-500/10 text-indigo-500'
-                            : 'border-slate-200 dark:border-slate-800 text-slate-400 hover:text-indigo-500'
+                            ? 'border-sky-500/40 bg-sky-500/10 text-sky-500'
+                            : 'border-slate-200 dark:border-emerald-500/20 text-slate-400 hover:text-sky-500'
                         }`}
                       >
                         <Pin className="w-3.5 h-3.5" />
@@ -403,7 +403,7 @@ export const HomePostsManagerPanel: React.FC = () => {
                           await updateHomePost(post.id, { status: post.status === 'active' ? 'paused' : 'active' });
                           await refreshManaged();
                         }}
-                        className="p-2 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-400 hover:text-amber-500 transition-colors cursor-pointer"
+                        className="p-2 rounded-lg border border-slate-200 dark:border-emerald-500/20 text-slate-400 hover:text-amber-500 transition-colors cursor-pointer"
                       >
                         {post.status === 'active' ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
                       </button>
@@ -411,7 +411,7 @@ export const HomePostsManagerPanel: React.FC = () => {
                         type="button"
                         title="Tahrirlash"
                         onClick={() => startEdit(post)}
-                        className="p-2 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-400 hover:text-emerald-500 transition-colors cursor-pointer"
+                        className="p-2 rounded-lg border border-slate-200 dark:border-emerald-500/20 text-slate-400 hover:text-emerald-500 transition-colors cursor-pointer"
                       >
                         <Edit3 className="w-3.5 h-3.5" />
                       </button>
@@ -422,7 +422,7 @@ export const HomePostsManagerPanel: React.FC = () => {
                           await deleteHomePost(post.id);
                           await refreshManaged();
                         }}
-                        className="p-2 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-400 hover:text-rose-500 transition-colors cursor-pointer"
+                        className="p-2 rounded-lg border border-slate-200 dark:border-emerald-500/20 text-slate-400 hover:text-rose-500 transition-colors cursor-pointer"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>

@@ -156,29 +156,29 @@ export const EcoRatingPage: React.FC = () => {
   ];
 
   const getPodiumAvatar = (item: any) => {
-    if (item?.avatarUrl) return item.avatarUrl;
-    return `https://api.dicebear.com/7.x/shapes/svg?seed=${encodeURIComponent(getItemTitle(item))}`;
+    if (item?.avatarUrl && !String(item.avatarUrl).includes('dicebear.com')) return item.avatarUrl;
+    return ecoTrophyCrestImg;
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-5">
       {/* Page Header */}
-      <div className="relative overflow-hidden rounded-[32px] p-6 sm:p-8 bg-gradient-to-br from-[#061812] via-[#0B291E] to-[#040D0A] border border-emerald-500/25 shadow-2xl">
+      <div className="relative overflow-hidden rounded-3xl p-4 sm:p-6 bg-gradient-to-br from-[#072419] via-[#051811] to-[#040D0A] border border-emerald-500/30 shadow-2xl">
         <div className="pointer-events-none absolute -right-16 -top-16 w-64 h-64 rounded-full bg-emerald-500/15 blur-3xl" />
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="flex items-start gap-4 max-w-2xl">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border border-amber-400/40 bg-[#040D0A] shrink-0 shadow-lg shadow-emerald-950/60">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5 max-w-2xl">
+            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden border border-amber-400/40 bg-[#040D0A] shrink-0 shadow-lg shadow-emerald-950/60">
               <img src={ecoTrophyCrestImg} alt="EcoHero Chempionat" className="w-full h-full object-cover" />
             </div>
-            <div className="space-y-1.5 min-w-0">
-              <div className="flex items-center gap-2 text-emerald-400 font-mono text-xs font-semibold tracking-wider uppercase">
-                <Trophy className="w-4 h-4 text-amber-400 shrink-0" />
+            <div className="space-y-1 min-w-0">
+              <div className="flex items-center gap-2 text-[#00F5A0] font-mono text-[11px] font-bold tracking-wider uppercase">
+                <Trophy className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                 <span>O&apos;zbekiston Eko-Chempionati · Jonli Reyting</span>
               </div>
-              <h1 className="font-display text-2xl sm:text-4xl font-black text-white tracking-tight">
+              <h1 className="font-display text-xl sm:text-3xl font-black text-white tracking-tight">
                 ECO Reyting & Milliy Peshqadamlar
               </h1>
-              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+              <p className="text-xs sm:text-sm text-slate-300 leading-snug">
                 Tasdiqlangan ekologik faoliyatlar asosida shakllanadigan ko‘p darajali jonli liga.
               </p>
             </div>
@@ -187,14 +187,14 @@ export const EcoRatingPage: React.FC = () => {
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
             <button
               onClick={() => setShowFormulaModal(true)}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold border border-white/15 cursor-pointer"
+              className="inline-flex items-center gap-2 px-3.5 py-2.5 min-h-[44px] rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold border border-white/15 cursor-pointer"
             >
-              <Info className="w-4 h-4 text-emerald-400" />
+              <Info className="w-4 h-4 text-[#00F5A0]" />
               <span>Ball Formulasi</span>
             </button>
             <button
               onClick={() => setActiveTab('championship')}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-400 to-teal-300 hover:brightness-105 text-[#040D0A] text-xs font-black shadow-lg shadow-emerald-500/25 cursor-pointer"
+              className="inline-flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl bg-gradient-to-r from-[#00F5A0] to-[#10B981] hover:brightness-105 text-[#04110B] text-xs font-black border-b-[3px] border-emerald-700 active:translate-y-[1px] shadow-lg shadow-emerald-500/25 cursor-pointer"
             >
               <Crown className="w-4 h-4" />
               <span>3 Bosqichli Chempionat</span>
@@ -203,7 +203,7 @@ export const EcoRatingPage: React.FC = () => {
         </div>
 
         {/* Tier Switcher */}
-        <div className="mt-6 pt-5 border-t border-emerald-500/20 flex flex-wrap gap-2 relative z-10">
+        <div className="mt-4 pt-4 border-t border-emerald-500/20 flex flex-wrap gap-2 relative z-10">
           {tierTabs.map(t => (
             <button
               key={t.id}
@@ -211,10 +211,10 @@ export const EcoRatingPage: React.FC = () => {
                 setTier(t.id);
                 setPage(1);
               }}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`flex items-center gap-2 px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 tier === t.id
-                  ? 'bg-gradient-to-r from-emerald-400 to-teal-300 text-[#040D0A] shadow-md shadow-emerald-500/25'
-                  : 'bg-[#040D0A]/70 border border-emerald-500/20 text-slate-300 hover:text-white hover:border-emerald-400/40'
+                  ? 'bg-gradient-to-r from-[#00F5A0] to-[#10B981] text-[#04110B] font-black border-b-[3px] border-emerald-700 shadow-md shadow-emerald-500/25'
+                  : 'bg-[#040D0A]/80 border border-emerald-500/20 text-slate-300 hover:text-white hover:border-emerald-400/40'
               }`}
             >
               <t.icon className="w-4 h-4" />
@@ -344,16 +344,16 @@ export const EcoRatingPage: React.FC = () => {
 
       {/* Illuminated Top 3 Podium */}
       {top3.length >= 1 && (
-        <div className="relative rounded-[32px] p-5 sm:p-8 bg-gradient-to-b from-[#071D15] via-[#05120D] to-[#040D0A] border border-emerald-500/25 shadow-2xl overflow-hidden">
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-44 bg-[radial-gradient(ellipse_at_top,rgba(52,211,153,0.18),transparent_70%)]" />
+        <div className="relative rounded-3xl p-4 sm:p-6 bg-gradient-to-b from-[#071D15] via-[#05120D] to-[#040D0A] border border-emerald-500/25 shadow-2xl overflow-hidden">
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-[radial-gradient(ellipse_at_top,rgba(0,245,160,0.16),transparent_70%)]" />
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-end pt-4 relative z-10">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end pt-3 relative z-10">
             {/* #2 Silver Pedestal */}
             {top3[1] && (
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="order-2 md:order-1 relative rounded-3xl bg-[#092118]/90 border border-slate-300/30 p-6 text-center space-y-3 shadow-xl"
+                className="order-2 md:order-1 relative rounded-2xl bg-[#061812]/95 border border-slate-300/30 p-5 text-center space-y-2.5 shadow-xl"
               >
                 <div className="relative mx-auto w-16 h-16">
                   <img
@@ -657,13 +657,11 @@ export const EcoRatingPage: React.FC = () => {
                             </td>
                             <td className="py-4 px-4">
                               <div className="flex items-center gap-3">
-                                {item.avatarUrl && (
-                                  <img
-                                    src={item.avatarUrl}
-                                    alt={getItemTitle(item)}
-                                    className="w-8 h-8 rounded-full object-cover border border-emerald-500/30"
-                                  />
-                                )}
+                                <img
+                                  src={getPodiumAvatar(item)}
+                                  alt={getItemTitle(item)}
+                                  className="w-8 h-8 rounded-xl object-cover border border-emerald-500/30 bg-[#040D0A] shrink-0"
+                                />
                                 <div>
                                   <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                                     <span>{getItemTitle(item)}</span>

@@ -86,42 +86,42 @@ export const VoucherVerifierPanel: React.FC = () => {
     .slice(0, 6);
 
   return (
-    <div className="space-y-6">
-      <div className="p-6 sm:p-8 rounded-3xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-4">
+      <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center shrink-0">
-              <QrCode className="w-6 h-6" />
+            <div className="w-11 h-11 rounded-2xl bg-emerald-500/15 border border-emerald-500/25 text-emerald-500 flex items-center justify-center shrink-0">
+              <QrCode className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-lg font-black uppercase tracking-tight">
+              <h3 className="text-base font-black uppercase tracking-tight">
                 Promokod & QR Vaucher Tekshirgich
               </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="text-xs text-slate-500 dark:text-emerald-200/70">
                 O'quvchi yutgan sovg'a promokodini yoki QR havolasini tekshiring, bazadan tasdiqlang va Super Adminga yuboring.
               </p>
             </div>
           </div>
-          <span className="self-start sm:self-center px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[10px] font-black uppercase tracking-wider">
+          <span className="self-start sm:self-center px-3 py-1 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 text-[10px] font-black uppercase tracking-wider">
             {isSuperOrMod ? 'Super Admin / HQ' : 'Maktab Admin Tekshiruvi'}
           </span>
         </div>
 
-        <form onSubmit={e => handleCheck(e)} className="flex flex-col sm:flex-row gap-3">
+        <form onSubmit={e => handleCheck(e)} className="flex flex-col sm:flex-row gap-2.5">
           <div className="flex-1 relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={codeInput}
               onChange={e => setCodeInput(e.target.value)}
               placeholder="Promokod (masalan: ECO-XXXX-1234) yoki QR URL kiriting..."
-              className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-mono font-bold outline-none focus:border-emerald-500"
+              className="w-full min-h-[44px] pl-10 pr-4 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-mono font-bold outline-none focus:border-emerald-500"
             />
           </div>
           <button
             type="submit"
             disabled={checking || !codeInput.trim()}
-            className="px-6 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer"
+            className="min-h-[44px] px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#00F5A0] to-[#10B981] hover:brightness-105 disabled:opacity-50 text-[#04110B] text-xs font-black uppercase tracking-wider border-b-[3px] border-emerald-700 active:translate-y-[1px] flex items-center justify-center gap-2 cursor-pointer"
           >
             {checking ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
             <span>{checking ? 'Tekshirilmoqda...' : 'Bazadan Tekshirish'}</span>
@@ -131,7 +131,7 @@ export const VoucherVerifierPanel: React.FC = () => {
         {/* Verification Result */}
         {result && (
           <div
-            className={`p-6 rounded-3xl border ${
+            className={`p-4 sm:p-5 rounded-2xl border ${
               result.valid && result.order
                 ? 'bg-emerald-500/5 border-emerald-500/30'
                 : 'bg-rose-500/5 border-rose-500/30'
@@ -146,15 +146,12 @@ export const VoucherVerifierPanel: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <div className="space-y-5">
-                <div className="flex flex-col md:flex-row gap-5 items-start">
+              <div className="space-y-4">
+                <div className="flex flex-col md:flex-row gap-4 items-start">
                   <img
-                    src={
-                      result.order.itemImageUrl ||
-                      'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=400&q=80'
-                    }
+                    src={result.order.itemImageUrl || '/assets/eco/gift_leaves.jpg'}
                     alt={result.order.itemTitle}
-                    className="w-24 h-24 rounded-2xl object-cover border border-slate-200 dark:border-slate-700 shrink-0"
+                    className="w-20 h-20 rounded-2xl object-cover border border-emerald-500/25 shrink-0"
                   />
                   <div className="flex-1 space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
@@ -177,7 +174,7 @@ export const VoucherVerifierPanel: React.FC = () => {
                           : 'Kutilmoqda'}
                       </span>
                     </div>
-                    <h4 className="text-lg font-black uppercase tracking-tight flex items-center gap-2">
+                    <h4 className="text-base font-black uppercase tracking-tight flex items-center gap-2">
                       <Gift className="w-4 h-4 text-amber-500" />
                       {result.order.itemTitle}
                     </h4>
@@ -197,7 +194,7 @@ export const VoucherVerifierPanel: React.FC = () => {
                   </div>
                   {qrPreviewUrl && (
                     <div className="p-2 rounded-2xl bg-white border border-slate-200 shrink-0 text-center space-y-1">
-                      <img src={qrPreviewUrl} alt="QR" className="w-24 h-24 rounded-xl" />
+                      <img src={qrPreviewUrl} alt="QR" className="w-20 h-20 rounded-xl" />
                       <a
                         href={`/voucher/${result.order.voucherCode}`}
                         target="_blank"
@@ -212,26 +209,26 @@ export const VoucherVerifierPanel: React.FC = () => {
                 </div>
 
                 {result.order.verifiedBySchoolAdmin && (
-                  <div className="p-3 rounded-2xl bg-sky-500/10 border border-sky-500/20 text-xs font-semibold text-sky-400">
+                  <div className="p-3 rounded-xl bg-sky-500/10 border border-sky-500/20 text-xs font-semibold text-sky-400">
                     Tekshirgan admin: <b>{result.order.verifiedByName || 'Maktab Admini'}</b> · Super Adminga xabar yuborilgan
                   </div>
                 )}
 
                 {result.order.status !== 'delivered' && (
-                  <div className="space-y-3 pt-2 border-t border-slate-200 dark:border-slate-800">
+                  <div className="space-y-3 pt-2 border-t border-slate-200 dark:border-emerald-500/15">
                     <input
                       type="text"
                       value={noteInput}
                       onChange={e => setNoteInput(e.target.value)}
                       placeholder="Izoh qo'shing (ixtiyoriy, masalan: o'quvchi guvohnomasi ko'rildi)..."
-                      className="w-full px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-semibold outline-none"
+                      className="w-full min-h-[44px] px-4 py-2.5 rounded-xl bg-white dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-semibold outline-none focus:border-emerald-500"
                     />
-                    <div className="flex flex-wrap gap-3">
+                    <div className="flex flex-wrap gap-2.5">
                       <button
                         type="button"
                         disabled={submitting}
                         onClick={() => handleAction('forward')}
-                        className="flex-1 py-3 px-4 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                        className="flex-1 min-h-[44px] py-2.5 px-4 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-black uppercase tracking-wider border-b-[3px] border-sky-800 active:translate-y-[1px] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                       >
                         {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                         <span>Tasdiqlash & Super Adminga Yuborish</span>
@@ -241,7 +238,7 @@ export const VoucherVerifierPanel: React.FC = () => {
                           type="button"
                           disabled={submitting}
                           onClick={() => handleAction('deliver')}
-                          className="flex-1 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                          className="flex-1 min-h-[44px] py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#00F5A0] to-[#10B981] hover:brightness-105 text-[#04110B] text-xs font-black uppercase tracking-wider border-b-[3px] border-emerald-700 active:translate-y-[1px] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                         >
                           <PackageCheck className="w-4 h-4" />
                           <span>Sovg'ani Topshirildi Deb Belgilash</span>
@@ -258,24 +255,24 @@ export const VoucherVerifierPanel: React.FC = () => {
 
       {/* Quick Recent School/Platform Orders List */}
       {pendingOrForwardedOrders.length > 0 && (
-        <div className="p-6 rounded-3xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-slate-800 space-y-4">
-          <h4 className="text-sm font-black uppercase tracking-wider text-slate-500">
+        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-3">
+          <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-emerald-300/80">
             So'nggi Vaucherlar (Tezkor Tekshirish)
           </h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
             {pendingOrForwardedOrders.map(order => (
               <button
                 key={order.id}
                 type="button"
                 onClick={() => handleCheck(undefined, order.voucherCode)}
-                className="text-left p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/70 hover:border-emerald-500/50 border border-slate-200 dark:border-slate-800 transition-all space-y-2 cursor-pointer"
+                className="text-left p-3.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] hover:border-emerald-500/50 border border-slate-200 dark:border-emerald-500/20 transition-all space-y-1.5 cursor-pointer"
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-mono text-xs font-black text-emerald-500">{order.voucherCode}</span>
                   <span className="text-[10px] font-bold uppercase text-slate-400">{order.status}</span>
                 </div>
                 <div className="text-xs font-bold truncate">{order.itemTitle}</div>
-                <div className="text-[11px] text-slate-500 truncate">
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
                   {order.userName} · {order.schoolName}
                 </div>
               </button>

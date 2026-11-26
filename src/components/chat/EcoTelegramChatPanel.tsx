@@ -362,13 +362,13 @@ export const EcoTelegramChatPanel: React.FC<EcoTelegramChatPanelProps> = ({
     activeThread.permissionStatus !== 'approved';
 
   return (
-    <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
+    <div className="rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 overflow-hidden">
       {/* Top Toolbar */}
-      <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+      <div className="px-4 py-3.5 border-b border-slate-200 dark:border-emerald-500/15 flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-emerald-500/[0.04] to-transparent">
         <div className="min-w-0">
           <div className="flex items-center gap-2.5">
-            <h3 className="text-base font-bold text-slate-900 dark:text-white truncate">{title}</h3>
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-mono tabular-nums text-slate-500 dark:text-slate-400 shrink-0">
+            <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white truncate">{title}</h3>
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-mono tabular-nums text-slate-500 dark:text-emerald-300/80 shrink-0">
               <span
                 className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-emerald-500' : 'bg-amber-500'}`}
                 aria-hidden="true"
@@ -387,10 +387,10 @@ export const EcoTelegramChatPanel: React.FC<EcoTelegramChatPanelProps> = ({
               <button
                 type="button"
                 onClick={handleToggleStudentSetting}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer whitespace-nowrap ${
+                className={`min-h-[36px] px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors cursor-pointer whitespace-nowrap ${
                   allowStudentMessages
                     ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                    : 'border-slate-200 dark:border-slate-700 text-slate-500'
+                    : 'border-slate-200 dark:border-emerald-500/20 text-slate-500'
                 }`}
               >
                 {allowStudentMessages ? 'Xabar so‘rovlari: Yoqilgan' : 'Xabar so‘rovlari: O‘chirilgan'}
@@ -398,7 +398,7 @@ export const EcoTelegramChatPanel: React.FC<EcoTelegramChatPanelProps> = ({
               <button
                 type="button"
                 onClick={() => setShowPeerFinder(v => !v)}
-                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                className="min-h-[36px] px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#00F5A0] to-[#10B981] text-[#04110B] border-b-2 border-emerald-700 text-xs font-black inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
               >
                 <UserPlus className="w-3.5 h-3.5" />
                 <span>O‘quvchi topish</span>
@@ -409,7 +409,7 @@ export const EcoTelegramChatPanel: React.FC<EcoTelegramChatPanelProps> = ({
             type="button"
             onClick={loadThreadsAndPerms}
             title="Yangilash"
-            className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+            className="p-2 rounded-xl border border-slate-200 dark:border-emerald-500/20 text-slate-500 hover:text-emerald-500 cursor-pointer"
           >
             <RefreshCw className={`w-4 h-4 ${threadsLoading ? 'animate-spin' : ''}`} />
           </button>
@@ -418,11 +418,11 @@ export const EcoTelegramChatPanel: React.FC<EcoTelegramChatPanelProps> = ({
 
       {/* Incoming Student Permission Requests Banner */}
       {incomingPendingPermissions.length > 0 && (
-        <div className="px-5 py-3 bg-amber-500/5 border-b border-slate-200 dark:border-slate-800 space-y-2">
+        <div className="px-4 py-3 bg-amber-500/5 border-b border-slate-200 dark:border-emerald-500/15 space-y-2">
           <div className="text-xs font-bold text-amber-600 dark:text-amber-400">
             Suhbatlashish uchun ruxsat so‘rovlari ({incomingPendingPermissions.length})
           </div>
-          <div className="divide-y divide-slate-200/70 dark:divide-slate-800">
+          <div className="divide-y divide-slate-200/70 dark:divide-emerald-500/15">
             {incomingPendingPermissions.map(perm => (
               <div key={perm.id} className="py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
                 <div className="min-w-0">
@@ -447,7 +447,7 @@ export const EcoTelegramChatPanel: React.FC<EcoTelegramChatPanelProps> = ({
                     type="button"
                     disabled={busyPermId === perm.id}
                     onClick={() => handleRespondPermission(perm.id, 'reject')}
-                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-semibold inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-emerald-500/20 text-slate-600 dark:text-slate-300 font-semibold inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
                   >
                     <XCircle className="w-3.5 h-3.5" /> Rad
                   </button>
@@ -468,7 +468,7 @@ export const EcoTelegramChatPanel: React.FC<EcoTelegramChatPanelProps> = ({
 
       {/* Peer Student Discovery Drawer */}
       {allowStudentDiscovery && showPeerFinder && (
-        <div className="p-5 bg-slate-50 dark:bg-slate-950/60 border-b border-slate-200 dark:border-slate-800 space-y-3">
+        <div className="p-4 bg-slate-50 dark:bg-[#040D0A] border-b border-slate-200 dark:border-emerald-500/15 space-y-3">
           <div className="flex items-center justify-between">
             <div>
               <div className="text-xs font-bold text-slate-900 dark:text-white">
@@ -492,7 +492,7 @@ export const EcoTelegramChatPanel: React.FC<EcoTelegramChatPanelProps> = ({
             value={permissionNote}
             onChange={e => setPermissionNote(e.target.value)}
             placeholder="Salomlashish yoki murojaat sababi (ixtiyoriy)..."
-            className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs outline-none focus:border-emerald-500"
+            className="w-full px-3 py-2 rounded-xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 text-xs outline-none focus:border-emerald-500"
           />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-56 overflow-y-auto pr-1">
@@ -506,7 +506,7 @@ export const EcoTelegramChatPanel: React.FC<EcoTelegramChatPanelProps> = ({
               return (
                 <div
                   key={peer.uid}
-                  className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 text-xs"
+                  className="p-3 rounded-xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 flex items-center justify-between gap-2 text-xs"
                 >
                   <div className="min-w-0">
                     <div className="font-bold text-slate-900 dark:text-white truncate">{peer.fullName}</div>
@@ -549,14 +549,14 @@ export const EcoTelegramChatPanel: React.FC<EcoTelegramChatPanelProps> = ({
       )}
 
       {/* 2-Pane Telegram-Style Split */}
-      <div className={`grid grid-cols-1 lg:grid-cols-12 ${compact ? 'min-h-[460px]' : 'min-h-[560px]'}`}>
+      <div className={`grid grid-cols-1 lg:grid-cols-12 ${compact ? 'min-h-[440px]' : 'min-h-[540px]'}`}>
         {/* Left Pane: Thread List */}
         <div
-          className={`lg:col-span-4 border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-800 flex flex-col ${
+          className={`lg:col-span-4 border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-emerald-500/15 flex flex-col ${
             mobileView === 'chat' ? 'hidden lg:flex' : 'flex'
           }`}
         >
-          <div className="p-3 border-b border-slate-200 dark:border-slate-800">
+          <div className="p-3 border-b border-slate-200 dark:border-emerald-500/15">
             <div className="relative">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
@@ -564,12 +564,12 @@ export const EcoTelegramChatPanel: React.FC<EcoTelegramChatPanelProps> = ({
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder="Suhbat yoki ism qidirish..."
-                className="w-full pl-8 pr-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs outline-none focus:border-emerald-500"
+                className="w-full pl-8 pr-3 py-2 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs outline-none focus:border-emerald-500"
               />
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 max-h-[520px]">
+          <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-emerald-500/10 max-h-[520px]">
             {threadsLoading && filteredThreads.length === 0 ? (
               <div className="p-6 text-center text-xs text-slate-500">Kanallar yuklanmoqda...</div>
             ) : filteredThreads.length === 0 ? (
@@ -599,10 +599,10 @@ export const EcoTelegramChatPanel: React.FC<EcoTelegramChatPanelProps> = ({
                     className={`w-full text-left px-4 py-3 flex items-start gap-3 transition-colors cursor-pointer ${
                       isSelected
                         ? 'bg-emerald-500/10 dark:bg-emerald-500/15'
-                        : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
+                        : 'hover:bg-slate-50 dark:hover:bg-emerald-500/5'
                     }`}
                   >
-                    <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0 overflow-hidden border border-slate-200 dark:border-slate-700">
+                    <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-[#040D0A] flex items-center justify-center shrink-0 overflow-hidden border border-slate-200 dark:border-emerald-500/25">
                       {thread.viaBot ? (
                         <Bot className="w-5 h-5 text-sky-500" />
                       ) : thread.isGroup ? (
@@ -675,7 +675,7 @@ export const EcoTelegramChatPanel: React.FC<EcoTelegramChatPanelProps> = ({
 
         {/* Right Pane: Active Telegram Conversation */}
         <div
-          className={`lg:col-span-8 flex flex-col bg-slate-50/50 dark:bg-slate-950/40 ${
+          className={`lg:col-span-8 flex flex-col bg-slate-50/50 dark:bg-[#040D0A] ${
             mobileView === 'list' ? 'hidden lg:flex' : 'flex'
           }`}
         >
@@ -688,12 +688,12 @@ export const EcoTelegramChatPanel: React.FC<EcoTelegramChatPanelProps> = ({
           ) : (
             <>
               {/* Active Thread Header */}
-              <div className="px-4 py-3 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3">
+              <div className="px-4 py-3 bg-white dark:bg-[#061812] border-b border-slate-200 dark:border-emerald-500/15 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
                   <button
                     type="button"
                     onClick={() => setMobileView('list')}
-                    className="lg:hidden p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 cursor-pointer"
+                    className="lg:hidden p-1.5 rounded-lg border border-slate-200 dark:border-emerald-500/20 text-slate-500 cursor-pointer"
                   >
                     <ArrowLeft className="w-4 h-4" />
                   </button>
@@ -737,8 +737,8 @@ export const EcoTelegramChatPanel: React.FC<EcoTelegramChatPanelProps> = ({
                               : isCommand
                               ? 'bg-amber-500/10 text-slate-900 dark:text-white border-amber-500/40'
                               : isIdea
-                              ? 'bg-indigo-500/10 text-slate-900 dark:text-white border-indigo-500/30'
-                              : 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white border-slate-200 dark:border-slate-800'
+                              ? 'bg-sky-500/10 text-slate-900 dark:text-white border-sky-500/30'
+                              : 'bg-white dark:bg-[#061812] text-slate-900 dark:text-white border-slate-200 dark:border-emerald-500/20'
                           }`}
                         >
                           {/* Sender & Kind Line (Zero-pill clean typography) */}
@@ -777,7 +777,7 @@ export const EcoTelegramChatPanel: React.FC<EcoTelegramChatPanelProps> = ({
                             {isIdea && (
                               <>
                                 <span aria-hidden="true">·</span>
-                                <span className={`font-bold ${isMine ? 'text-indigo-100' : 'text-indigo-500'}`}>
+                                <span className={`font-bold ${isMine ? 'text-sky-100' : 'text-sky-500'}`}>
                                   G‘oya
                                 </span>
                               </>
@@ -788,7 +788,7 @@ export const EcoTelegramChatPanel: React.FC<EcoTelegramChatPanelProps> = ({
                           {msg.replyPreview && (
                             <div
                               className={`px-2.5 py-1.5 rounded-lg text-[11px] ${
-                                isMine ? 'bg-black/20 text-emerald-50' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                                isMine ? 'bg-black/20 text-emerald-50' : 'bg-slate-100 dark:bg-[#040D0A] text-slate-600 dark:text-slate-300'
                               }`}
                             >
                               <div className="font-bold">{msg.replyPreview.senderName}</div>
@@ -867,9 +867,9 @@ export const EcoTelegramChatPanel: React.FC<EcoTelegramChatPanelProps> = ({
               </div>
 
               {/* Composer or Student Permission Gate */}
-              <div className="p-3 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 space-y-2.5">
+              <div className="p-3 bg-white dark:bg-[#061812] border-t border-slate-200 dark:border-emerald-500/15 space-y-2.5">
                 {studentDmLocked ? (
-                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                     <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
                       <Lock className="w-4 h-4 text-amber-500 shrink-0" />
                       <span>
@@ -900,7 +900,7 @@ export const EcoTelegramChatPanel: React.FC<EcoTelegramChatPanelProps> = ({
                   <form onSubmit={handleSend} className="space-y-2">
                     {/* Message Kind Segmented Switch */}
                     {activeThread.allowedMessageKinds.length > 1 && (
-                      <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-100 dark:bg-slate-950 rounded-xl w-fit">
+                      <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-100 dark:bg-[#040D0A] rounded-xl w-fit border border-transparent dark:border-emerald-500/15">
                         {activeThread.allowedMessageKinds.map(kind => (
                           <button
                             key={kind}
@@ -908,12 +908,12 @@ export const EcoTelegramChatPanel: React.FC<EcoTelegramChatPanelProps> = ({
                             onClick={() => setMessageKind(kind)}
                             className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                               messageKind === kind
-                                ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm'
+                                ? 'bg-white dark:bg-[#061812] text-slate-900 dark:text-emerald-300 shadow-sm border border-emerald-500/20'
                                 : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
                             }`}
                           >
                             {kind === 'command' && <Megaphone className="w-3 h-3 text-amber-500" />}
-                            {kind === 'idea' && <Lightbulb className="w-3 h-3 text-indigo-500" />}
+                            {kind === 'idea' && <Lightbulb className="w-3 h-3 text-sky-500" />}
                             {kind === 'bot_notice' && <Bot className="w-3 h-3 text-sky-500" />}
                             <span>{KIND_LABELS[kind]}</span>
                           </button>
@@ -923,7 +923,7 @@ export const EcoTelegramChatPanel: React.FC<EcoTelegramChatPanelProps> = ({
 
                     {/* Reply Banner */}
                     {replyTo && (
-                      <div className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-between gap-2 text-[11px]">
+                      <div className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-[#040D0A] flex items-center justify-between gap-2 text-[11px]">
                         <div className="min-w-0 truncate">
                           <span className="font-bold text-emerald-600 dark:text-emerald-400">{replyTo.senderName}: </span>
                           <span className="text-slate-600 dark:text-slate-300">{replyTo.text || 'Rasm'}</span>
@@ -936,7 +936,7 @@ export const EcoTelegramChatPanel: React.FC<EcoTelegramChatPanelProps> = ({
 
                     {/* Image Attachment Preview */}
                     {attachedImageUrl && (
-                      <div className="flex items-center gap-3 p-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+                      <div className="flex items-center gap-3 p-2 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20">
                         <img
                           src={attachedImageUrl}
                           alt="Yuklangan rasm"
@@ -967,7 +967,7 @@ export const EcoTelegramChatPanel: React.FC<EcoTelegramChatPanelProps> = ({
                         disabled={isUploadingImage}
                         onClick={() => fileInputRef.current?.click()}
                         title="Rasm biriktirish"
-                        className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0 cursor-pointer disabled:opacity-50"
+                        className="p-2.5 rounded-xl border border-slate-200 dark:border-emerald-500/20 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-emerald-500/10 shrink-0 cursor-pointer disabled:opacity-50"
                       >
                         <ImageIcon className="w-4 h-4" />
                       </button>
@@ -993,13 +993,13 @@ export const EcoTelegramChatPanel: React.FC<EcoTelegramChatPanelProps> = ({
                             ? 'G‘oyangiz yoki taklifingizni yozing...'
                             : 'Xabar yozing...'
                         }
-                        className="flex-1 px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs outline-none focus:border-emerald-500 resize-none"
+                        className="flex-1 px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs outline-none focus:border-emerald-500 resize-none"
                       />
 
                       <button
                         type="submit"
                         disabled={isSending || isUploadingImage || (!draftText.trim() && !attachedImageUrl)}
-                        className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold inline-flex items-center gap-1.5 shrink-0 cursor-pointer"
+                        className="min-h-[40px] px-4 py-2 rounded-xl bg-gradient-to-r from-[#00F5A0] to-[#10B981] hover:brightness-105 disabled:opacity-50 text-[#04110B] text-xs font-black border-b-2 border-emerald-700 inline-flex items-center gap-1.5 shrink-0 cursor-pointer"
                       >
                         <Send className="w-4 h-4" />
                         <span className="hidden sm:inline">{isSending ? 'Yuborilmoqda' : 'Yuborish'}</span>

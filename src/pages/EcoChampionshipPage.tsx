@@ -28,6 +28,7 @@ import {
 } from '../types/eco';
 import { resolveMediaUrl } from '../utils/api';
 import { useLiveCountdown } from '../utils/countdown';
+import homeChampionshipCupImg from '../assets/images/home_championship_cup_1795602397115.jpg';
 
 const getInitials = (name: string) =>
   String(name || 'E')
@@ -157,27 +158,34 @@ export const EcoChampionshipPage: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-5 sm:space-y-7 pb-24">
       {/* 1. Compact Vivid Emerald Arena Header */}
-      <section className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-[#06241B] via-[#041510] to-[#020A08] border border-emerald-500/30 p-5 sm:p-7 text-white shadow-xl">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-          <div className="space-y-2 max-w-2xl">
-            <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400">
-              <Trophy className="w-4 h-4 shrink-0" />
-              <span>EcoHero Milliy Chempionati · Jonli natijalar</span>
+      <section className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-[#06241B] via-[#041510] to-[#020A08] border border-emerald-500/30 p-4 sm:p-6 text-white shadow-xl">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5 max-w-2xl">
+            <img
+              src={homeChampionshipCupImg}
+              alt="EcoHero Chempionat"
+              className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border border-amber-400/40 shadow-lg shrink-0"
+            />
+            <div className="space-y-1 min-w-0">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
+                <Trophy className="w-3.5 h-3.5 shrink-0" />
+                <span>EcoHero Milliy Chempionati · Jonli</span>
+              </div>
+              <h1 className="text-xl sm:text-3xl font-extrabold tracking-tight text-balance">
+                3 Bosqichli Ekologik Liga
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-300 leading-snug">
+                Tuman <span className="text-emerald-300 font-semibold">oylik</span>, Viloyat va Respublika{' '}
+                <span className="text-amber-300 font-semibold">3 oylik</span> bosqich. Viloyatga faqat TOP-3 g&apos;oliblar chiqadi.
+              </p>
             </div>
-            <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-balance">
-              3 Bosqichli Ekologik Liga
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              Tuman bosqichi <span className="text-emerald-300 font-semibold">har oyda 1 marta</span>, Viloyat va Respublika bosqichlari{' '}
-              <span className="text-amber-300 font-semibold">3 oyda 1 marta</span> o'tkaziladi. Viloyat bosqichiga faqat tuman TOP-3 g'oliblari chiqadi.
-            </p>
           </div>
 
           {/* Live Stage Countdown + Real Totals */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3 shrink-0">
             <div className="col-span-2 sm:col-span-1 p-3 rounded-2xl bg-black/40 border border-emerald-500/20 text-center">
               <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-400">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <Clock className="w-3 h-3 text-emerald-400" />
                 <span>Tugashiga</span>
               </div>
               <div className="text-sm sm:text-base font-extrabold font-mono tabular-nums text-emerald-400 mt-0.5 whitespace-nowrap">

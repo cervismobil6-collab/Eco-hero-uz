@@ -30,6 +30,7 @@ import {
   onSnapshot,
   getDocFromServer,
 } from 'firebase/firestore';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import {
   UserProfile,
   School,
@@ -154,8 +155,8 @@ export async function registerWithEmail(
       uid: fbUser.uid,
       fullName: profileData.fullName || 'Eko Qahramon',
       email: fbUser.email || email,
-      profileImage: profileData.profileImage || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
-      avatarUrl: profileData.profileImage || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
+      profileImage: profileData.profileImage || '/assets/eco/avatar_default.jpg',
+      avatarUrl: profileData.profileImage || '/assets/eco/avatar_default.jpg',
       schoolId: profileData.schoolId || 'school_tashkent_17',
       schoolName: profileData.schoolName || 'Toshkent sh. 17-maktab',
       schoolNumber: profileData.schoolNumber || '17',
@@ -222,8 +223,6 @@ export async function logOutFirebase() {
     await fbSignOut(auth);
   }
 }
-
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 // Audit Logger
 export async function recordAuditLog(

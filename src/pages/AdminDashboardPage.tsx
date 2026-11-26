@@ -67,6 +67,8 @@ import { GiftGateConfigEditor } from '../components/shop/GiftGateConfigEditor';
 import { HomePostsManagerPanel } from '../components/dashboard/HomePostsManagerPanel';
 import { DailyMissionsManagerPanel } from '../components/dashboard/DailyMissionsManagerPanel';
 import heroEcoForestImg from '../assets/images/hero_eco_forest_1795179384249.jpg';
+import realisticAvatarImg from '../assets/images/profile_avatar_realistic_1795605008121.jpg';
+import homeGiftLeavesImg from '../assets/images/home_gift_leaves_1795602395449.jpg';
 
 function getDefaultTabForRole(role: string): string {
   switch (role) {
@@ -143,7 +145,7 @@ export const AdminDashboardPage: React.FC = () => {
   const [newShopStock, setNewShopStock] = useState('20');
   const [newShopCategory, setNewShopCategory] = useState<'accessories' | 'stationery' | 'eco_home' | 'education'>('accessories');
   const [newShopSponsor, setNewShopSponsor] = useState('ECO HERO');
-  const [newShopImageUrl, setNewShopImageUrl] = useState('https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&q=80&w=600');
+  const [newShopImageUrl, setNewShopImageUrl] = useState('/assets/eco/gift_leaves.jpg');
   const [newShopGate, setNewShopGate] = useState<ShopRedemptionGate>({
     mode: 'none',
     adId: 'auto',
@@ -180,7 +182,7 @@ export const AdminDashboardPage: React.FC = () => {
     setNewShopStock('20');
     setNewShopCategory('accessories');
     setNewShopSponsor('ECO HERO');
-    setNewShopImageUrl('https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&q=80&w=600');
+    setNewShopImageUrl('/assets/eco/gift_leaves.jpg');
     setNewShopGate({ mode: 'none', adId: 'auto', requiredSubscriptions: [] });
     setShowShopCreateModal(true);
   };
@@ -521,7 +523,7 @@ export const AdminDashboardPage: React.FC = () => {
 
   const menuItems = [
     { id: 'student_dashboard', label: "O'quvchi Kabineti", icon: LayoutDashboard, roles: ['student'] },
-    { id: 'role_apply', label: 'Lavozimga Ariza', icon: UserCheck, roles: ['student', 'ambassador'] },
+    { id: 'role_apply', label: 'Lavozimga Ariza', icon: UserCheck, roles: ['student'] },
     { id: 'role_requests', label: 'Arizalar & Tasdiqlash', icon: ShieldCheck, roles: ['super_admin'], badge: pendingAppsCount },
     { id: 'moderator_dashboard', label: 'Moderator Kabineti', icon: ShieldAlert, roles: ['super_admin', 'moderator'] },
     { id: 'media_moderation', label: 'Media Moderatsiya', icon: Camera, roles: ['super_admin', 'moderator'], badge: pendingMediaCount },
@@ -613,33 +615,33 @@ export const AdminDashboardPage: React.FC = () => {
   });
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] dark:bg-[#020617] flex text-slate-900 dark:text-white">
+    <div className="min-h-screen bg-[#f2f7f4] dark:bg-[#040D0A] flex text-slate-900 dark:text-white">
       {/* Mobile Sidebar Backdrop */}
       {isSidebarOpen && (
         <div
           onClick={() => setIsSidebarOpen(false)}
-          className="fixed inset-0 z-40 bg-slate-950/60 lg:hidden"
+          className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm lg:hidden"
         />
       )}
 
       {/* Sidebar */}
-      <aside className={`fixed inset-y-0 left-0 z-50 w-72 bg-white dark:bg-[#0f172a] border-r border-slate-200 dark:border-slate-800 transition-transform duration-300 lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="h-full flex flex-col p-6 space-y-6 overflow-y-auto scrollbar-hide">
-          <div className="flex items-center justify-between px-2">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-emerald-600 flex items-center justify-center text-white shadow-lg shadow-emerald-600/20">
-                <Shield className="w-6 h-6" />
+      <aside className={`fixed inset-y-0 left-0 z-50 w-68 bg-white dark:bg-[#061812] border-r border-slate-200 dark:border-emerald-500/20 transition-transform duration-300 lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="h-full flex flex-col p-4 space-y-4 overflow-y-auto scrollbar-hide">
+          <div className="flex items-center justify-between px-1">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#00F5A0] to-[#10B981] flex items-center justify-center text-[#04110B] border-b-2 border-emerald-700 shrink-0">
+                <Shield className="w-5 h-5" />
               </div>
               <div className="space-y-0.5">
-                <h2 className="text-lg font-black uppercase tracking-tighter">EcoHero Kabinet</h2>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none">
+                <h2 className="text-base font-black uppercase tracking-tight">EcoHero Kabinet</h2>
+                <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-widest leading-none">
                   {user.role.replace('_', ' ')}
                 </p>
               </div>
             </div>
             <button
               onClick={() => setIsSidebarOpen(false)}
-              className="lg:hidden p-2 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+              className="lg:hidden p-2 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-emerald-500/10 min-h-[40px] min-w-[40px] flex items-center justify-center"
             >
               <X className="w-4 h-4" />
             </button>
@@ -653,19 +655,19 @@ export const AdminDashboardPage: React.FC = () => {
                   setActiveTab(item.id);
                   setIsSidebarOpen(false);
                 }}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer ${
+                className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-[11px] font-extrabold tracking-wide transition-all cursor-pointer min-h-[42px] ${
                   activeTab === item.id
-                    ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5'
+                    ? 'bg-gradient-to-r from-[#00F5A0] to-[#10B981] text-[#04110B] border-b-[3px] border-emerald-700'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-emerald-500/10'
                 }`}
               >
                 <item.icon className="w-4 h-4 shrink-0" />
                 <span className="truncate">{item.label}</span>
                 {typeof item.badge === 'number' && item.badge > 0 && (
-                  <span className={`ml-auto px-2 py-0.5 rounded-lg text-[10px] font-bold tabular-nums ${
+                  <span className={`ml-auto px-2 py-0.5 rounded-lg text-[10px] font-black tabular-nums ${
                     activeTab === item.id
-                      ? 'bg-white/20 text-white'
-                      : 'bg-amber-500 text-white'
+                      ? 'bg-[#04110B]/15 text-[#04110B]'
+                      : 'bg-amber-500 text-[#04110B]'
                   }`}>
                     {item.badge}
                   </span>
@@ -674,11 +676,17 @@ export const AdminDashboardPage: React.FC = () => {
             ))}
           </nav>
 
-          <div className="p-4 bg-slate-50 dark:bg-slate-900/70 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full border-2 border-emerald-500 overflow-hidden bg-slate-200 shrink-0">
+          <div className="p-3.5 bg-slate-50 dark:bg-[#040D0A] rounded-2xl border border-slate-200 dark:border-emerald-500/20 space-y-2.5">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-full border-2 border-emerald-400 overflow-hidden bg-[#061812] shrink-0">
                 <img
-                  src={user.profileImage || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.fullName || 'eco')}`}
+                  src={
+                    user.profileImage && !user.profileImage.includes('dicebear.com')
+                      ? user.profileImage
+                      : user.avatarUrl && !user.avatarUrl.includes('dicebear.com')
+                      ? user.avatarUrl
+                      : realisticAvatarImg
+                  }
                   alt={user.fullName}
                   className="w-full h-full object-cover"
                 />
@@ -695,7 +703,7 @@ export const AdminDashboardPage: React.FC = () => {
                 logoutUser();
                 setGlobalTab('home');
               }}
-              className="w-full py-2 bg-rose-500/10 text-rose-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all cursor-pointer"
+              className="w-full py-2 min-h-[40px] bg-rose-500/15 text-rose-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all cursor-pointer"
             >
               Chiqish
             </button>
@@ -704,26 +712,26 @@ export const AdminDashboardPage: React.FC = () => {
       </aside>
 
       {/* Content Area */}
-      <main className="flex-1 lg:ml-72 min-h-screen p-5 md:p-8 space-y-8 max-w-full overflow-x-hidden">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <main className="flex-1 lg:ml-68 min-h-screen p-4 md:p-6 space-y-5 max-w-full overflow-x-hidden">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="lg:hidden p-3 bg-white dark:bg-[#0f172a] rounded-2xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 shadow-sm"
+              className="lg:hidden p-2.5 bg-white dark:bg-[#061812] rounded-xl border border-slate-200 dark:border-emerald-500/20 text-slate-600 dark:text-emerald-300 min-h-[44px] min-w-[44px] flex items-center justify-center"
             >
               {isSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
             <div className="space-y-0.5">
-              <h1 className="text-2xl md:text-3xl font-black uppercase tracking-tight">
+              <h1 className="text-xl md:text-2xl font-black tracking-tight">
                 {menuItems.find(m => m.id === activeTab)?.label || 'Kabinet'}
               </h1>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold">
+              <p className="text-[11px] text-slate-500 dark:text-emerald-300/70 font-semibold">
                 {user.region} · {user.district} · {user.schoolName || 'EcoHero Platformasi'}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 w-full md:w-auto">
+          <div className="flex items-center gap-2.5 w-full md:w-auto">
             <div className="relative flex-1 md:flex-none">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
@@ -731,18 +739,20 @@ export const AdminDashboardPage: React.FC = () => {
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder="Qidiruv..."
-                className="pl-10 pr-4 py-2.5 bg-white dark:bg-[#0f172a] rounded-2xl border border-slate-200 dark:border-slate-800 text-xs font-semibold outline-none focus:border-emerald-500 w-full md:w-60 shadow-sm"
+                className="pl-10 pr-4 py-2.5 min-h-[44px] bg-white dark:bg-[#061812] rounded-xl border border-slate-200 dark:border-emerald-500/20 text-xs font-semibold outline-none focus:border-emerald-400 w-full md:w-60"
               />
             </div>
             {user.role === 'super_admin' && (
               <button
                 onClick={() => setActiveTab('role_requests')}
                 title="Yangi arizalar"
-                className="p-2.5 bg-white dark:bg-[#0f172a] rounded-2xl border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-emerald-600 shadow-sm relative cursor-pointer"
+                className="px-3 py-2.5 min-h-[44px] bg-white dark:bg-[#061812] rounded-xl border border-slate-200 dark:border-emerald-500/20 text-slate-500 dark:text-emerald-300 hover:border-emerald-400 inline-flex items-center gap-1.5 cursor-pointer"
               >
-                <BellRing className="w-5 h-5" />
+                <BellRing className="w-4 h-4" />
                 {pendingAppsCount > 0 && (
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full" />
+                  <span className="px-1.5 py-0.5 rounded-md bg-rose-500 text-white text-[10px] font-black tabular-nums">
+                    {pendingAppsCount}
+                  </span>
                 )}
               </button>
             )}
@@ -752,25 +762,25 @@ export const AdminDashboardPage: React.FC = () => {
         {user.role === 'super_admin' && (
           <section
             aria-label="Jonli platforma ko'rsatkichlari"
-            className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3"
+            className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5"
           >
-            <div className="p-4 rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-slate-800 space-y-1">
+            <div className="p-3.5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-0.5">
               <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                Botdan foydalanuvchilar
+                Bot foydalanuvchilari
               </div>
-              <div className="text-2xl font-black font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
+              <div className="text-xl font-black font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
                 {liveMetrics.botUsersCount.toLocaleString()}
               </div>
               <div className="text-[10px] text-slate-400 tabular-nums">
-                Jami a&apos;zolar: {liveMetrics.totalUsers}
+                Jami: {liveMetrics.totalUsers}
               </div>
             </div>
 
-            <div className="p-4 rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-slate-800 space-y-1">
+            <div className="p-3.5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-0.5">
               <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                 Maktablar
               </div>
-              <div className="text-2xl font-black font-mono tabular-nums text-slate-900 dark:text-white">
+              <div className="text-xl font-black font-mono tabular-nums text-slate-900 dark:text-white">
                 {(liveMetrics.totalSchools || schools.length).toLocaleString()}
               </div>
               <div className="text-[10px] text-slate-400 tabular-nums">
@@ -778,11 +788,11 @@ export const AdminDashboardPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="p-4 rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-slate-800 space-y-1">
+            <div className="p-3.5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-0.5">
               <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                 Tumanlar
               </div>
-              <div className="text-2xl font-black font-mono tabular-nums text-slate-900 dark:text-white">
+              <div className="text-xl font-black font-mono tabular-nums text-slate-900 dark:text-white">
                 {liveMetrics.totalDistricts.toLocaleString()}
               </div>
               <div className="text-[10px] text-slate-400 tabular-nums">
@@ -790,11 +800,11 @@ export const AdminDashboardPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="p-4 rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-slate-800 space-y-1">
+            <div className="p-3.5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-0.5">
               <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                 Eko-Elchilar
               </div>
-              <div className="text-2xl font-black font-mono tabular-nums text-slate-900 dark:text-white">
+              <div className="text-xl font-black font-mono tabular-nums text-slate-900 dark:text-white">
                 {liveMetrics.activeAmbassadors.toLocaleString()}
               </div>
               <div className="text-[10px] text-slate-400 tabular-nums">
@@ -802,11 +812,11 @@ export const AdminDashboardPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="p-4 rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-slate-800 space-y-1">
+            <div className="p-3.5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-0.5">
               <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                 Ekologik holatlar
               </div>
-              <div className="text-2xl font-black font-mono tabular-nums text-slate-900 dark:text-white">
+              <div className="text-xl font-black font-mono tabular-nums text-slate-900 dark:text-white">
                 {liveMetrics.totalReports.toLocaleString()}
               </div>
               <div className="text-[10px] text-slate-400 tabular-nums">
@@ -814,15 +824,15 @@ export const AdminDashboardPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="p-4 rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-slate-800 space-y-1">
+            <div className="p-3.5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-0.5">
               <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                Sovg&apos;a buyurtmalari
+                Buyurtmalar
               </div>
-              <div className="text-2xl font-black font-mono tabular-nums text-amber-600 dark:text-amber-400">
+              <div className="text-xl font-black font-mono tabular-nums text-amber-600 dark:text-amber-400">
                 {(liveMetrics.shopOrdersCount || shopOrders.length).toLocaleString()}
               </div>
               <div className="text-[10px] text-slate-400 tabular-nums">
-                Kutilayotgan arizalar: {liveMetrics.pendingApplicationsCount}
+                Arizalar: {liveMetrics.pendingApplicationsCount}
               </div>
             </div>
           </section>
@@ -834,16 +844,16 @@ export const AdminDashboardPage: React.FC = () => {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
-            className="space-y-8"
+            className="space-y-5"
           >
             {/* ROLE-SPECIFIC DASHBOARDS */}
             {activeTab === 'student_dashboard' && <StudentDashboardView />}
 
             {activeTab === 'role_apply' && (
-              <div className="space-y-6">
-                <div className="p-6 md:p-8 rounded-3xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-slate-800 space-y-5">
+              <div className="space-y-4">
+                <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-4">
                   <div>
-                    <h2 className="text-xl font-black uppercase tracking-tight">Boshqaruv Lavozimiga Ariza Topshirish</h2>
+                    <h2 className="text-lg font-black tracking-tight">Boshqaruv Lavozimiga Ariza Topshirish</h2>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                       Eko-Elchi arizasi ko‘rsatilgan maktab sardoriga, Maktab Sardori arizasi tuman koordinatoriga, Tuman Koordinatori arizasi esa viloyat koordinatoriga va Super Adminga borib tushadi.
                     </p>
@@ -856,11 +866,13 @@ export const AdminDashboardPage: React.FC = () => {
                       { role: 'regional_coordinator' as const, title: 'Viloyat Koordinatori', desc: 'Viloyat tumanlari reytingi va nazorati' },
                       { role: 'moderator' as const, title: 'Moderator', desc: 'Ekologik hisobot va medialarni tekshirish' },
                       { role: 'sponsor' as const, title: 'Homiy Tashkilot', desc: "Sovg'alar va ekologik aksiyalarni moliyalashtirish" },
-                    ].map(opt => (
+                    ]
+                      .filter(opt => !(user.role === 'ambassador' && opt.role === 'ambassador'))
+                      .map(opt => (
                       <button
                         key={opt.role}
                         onClick={() => openRoleRequestModal(opt.role)}
-                        className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-left hover:border-emerald-500 transition-all cursor-pointer space-y-1.5"
+                        className="p-4 rounded-2xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-left hover:border-emerald-400 transition-all cursor-pointer space-y-1.5 min-h-[44px]"
                       >
                         <div className="text-xs font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
                           {opt.title}
@@ -872,15 +884,15 @@ export const AdminDashboardPage: React.FC = () => {
                 </div>
 
                 {registrationApplications.filter(a => a.userId === user.uid).length > 0 && (
-                  <div className="p-6 rounded-3xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-slate-800 space-y-4">
+                  <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-3">
                     <h3 className="text-sm font-black uppercase tracking-wider">Yuborgan Arizalaringiz Holati</h3>
-                    <div className="space-y-3">
+                    <div className="space-y-2.5">
                       {registrationApplications
                         .filter(a => a.userId === user.uid)
                         .map(app => (
                           <div
                             key={app.id}
-                            className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                            className="p-3.5 rounded-2xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                           >
                             <div className="space-y-1">
                               <div className="text-sm font-bold">
@@ -923,7 +935,7 @@ export const AdminDashboardPage: React.FC = () => {
             {activeTab === 'regional_dashboard' && <RegionalCoordinatorDashboardView />}
             {activeTab === 'district_dashboard' && <DistrictCoordinatorDashboardView />}
             {activeTab === 'district_growth_race' && (
-              <div className="p-6 md:p-8 rounded-3xl bg-white dark:bg-slate-900 border border-amber-500/40 space-y-5">
+              <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#061812] border border-amber-500/40 space-y-4">
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 text-xs font-bold text-amber-500">
@@ -969,8 +981,8 @@ export const AdminDashboardPage: React.FC = () => {
                             row.isMyDistrict
                               ? 'bg-emerald-500/10 border-emerald-500/40'
                               : row.isTop3
-                              ? 'bg-amber-500/5 border-amber-500/30'
-                              : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800'
+                              ? 'bg-amber-500/10 border-amber-500/35'
+                              : 'bg-slate-50 dark:bg-[#040D0A] border-slate-200 dark:border-emerald-500/20'
                           }`}
                         >
                           <div className="flex items-start justify-between gap-2">
@@ -1078,15 +1090,17 @@ export const AdminDashboardPage: React.FC = () => {
 
             {/* SPONSOR DASHBOARD (Distinct Cabinet with KPIs & Campaigns) */}
             {activeTab === 'sponsor_dashboard' && (
-              <div className="space-y-8">
-                <div className="p-8 rounded-[32px] bg-slate-900 text-white border border-slate-800 shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
-                  <div className="flex items-center gap-5">
-                    <div className="w-16 h-16 rounded-2xl bg-amber-500 flex items-center justify-center text-white shadow-lg shadow-amber-500/20">
-                      <Briefcase className="w-8 h-8" />
-                    </div>
+              <div className="space-y-5">
+                <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-br from-[#072419] via-[#051811] to-[#040D0A] text-white border border-emerald-500/30 flex flex-col md:flex-row items-center justify-between gap-4">
+                  <div className="flex items-center gap-3.5">
+                    <img
+                      src={homeGiftLeavesImg}
+                      alt="Homiy Kabineti"
+                      className="w-14 h-14 rounded-2xl object-cover border border-emerald-400/35 shrink-0"
+                    />
                     <div>
-                      <h2 className="text-2xl md:text-3xl font-black uppercase tracking-tight">Homiy Kabineti</h2>
-                      <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider">
+                      <h2 className="text-xl md:text-2xl font-black tracking-tight">Homiy Kabineti</h2>
+                      <p className="text-xs font-semibold text-amber-400">
                         Ijtimoiy Mas'uliyat, Reklama & Sovg‘a Vaucherlari Boshqaruvi
                       </p>
                     </div>
@@ -1094,48 +1108,48 @@ export const AdminDashboardPage: React.FC = () => {
                   <div className="flex flex-wrap gap-2">
                     <button
                       onClick={() => setActiveTab('ads')}
-                      className="px-5 py-3 bg-white/10 hover:bg-white/20 text-white rounded-2xl font-black text-xs uppercase tracking-wider transition-all cursor-pointer"
+                      className="px-4 py-2.5 min-h-[44px] bg-white/10 hover:bg-white/20 text-white rounded-xl font-black text-xs transition-all cursor-pointer"
                     >
                       Reklama Kampaniyalari
                     </button>
                     <button
                       onClick={() => setGlobalTab('partners')}
-                      className="px-6 py-3 bg-amber-500 hover:bg-amber-400 text-white rounded-2xl font-black text-xs uppercase tracking-wider transition-all cursor-pointer"
+                      className="px-5 py-2.5 min-h-[44px] bg-gradient-to-r from-[#00F5A0] to-[#10B981] hover:brightness-105 text-[#04110B] border-b-[3px] border-emerald-700 active:translate-y-[1px] rounded-xl font-black text-xs transition-all cursor-pointer"
                     >
                       Yangi Homiylik Taklifi +
                     </button>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
-                    <div className="text-xs text-slate-500">Homiylik loyihalari</div>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="p-4 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-1">
+                    <div className="text-xs text-slate-500 dark:text-slate-400">Homiylik loyihalari</div>
                     <div className="text-2xl font-black font-mono tabular-nums">{sponsorshipProjects.length}</div>
                   </div>
-                  <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
-                    <div className="text-xs text-slate-500">Faol ADS kampaniyalar</div>
+                  <div className="p-4 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-1">
+                    <div className="text-xs text-slate-500 dark:text-slate-400">Faol ADS kampaniyalar</div>
                     <div className="text-2xl font-black font-mono tabular-nums text-emerald-500">
                       {ecoAds.filter(a => a.status === 'active').length}
                     </div>
                   </div>
-                  <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
-                    <div className="text-xs text-slate-500">Sovg‘a buyurtmalari</div>
+                  <div className="p-4 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-1">
+                    <div className="text-xs text-slate-500 dark:text-slate-400">Sovg‘a buyurtmalari</div>
                     <div className="text-2xl font-black font-mono tabular-nums text-amber-500">{shopOrders.length}</div>
                   </div>
-                  <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
-                    <div className="text-xs text-slate-500">Do‘kon zaxirasi</div>
+                  <div className="p-4 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-1">
+                    <div className="text-xs text-slate-500 dark:text-slate-400">Do‘kon zaxirasi</div>
                     <div className="text-2xl font-black font-mono tabular-nums text-sky-500">
                       {shopItems.reduce((sum, it) => sum + (it.stock || 0), 0)} ta
                     </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  <div className="lg:col-span-2 space-y-4">
-                    <h3 className="text-lg font-black uppercase tracking-tight">Faol Homiylik Loyihalari</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                  <div className="lg:col-span-2 space-y-3">
+                    <h3 className="text-base font-black tracking-tight">Faol Homiylik Loyihalari</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {sponsorshipProjects.slice(0, 4).map(proj => (
-                        <div key={proj.id} className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+                        <div key={proj.id} className="bg-white dark:bg-[#061812] rounded-2xl border border-slate-200 dark:border-emerald-500/20 overflow-hidden">
                           <div className="h-32 relative">
                             <img src={proj.imageUrl} className="w-full h-full object-cover" alt={proj.title} />
                             <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
@@ -1144,9 +1158,9 @@ export const AdminDashboardPage: React.FC = () => {
                               </span>
                             </div>
                           </div>
-                          <div className="p-5 space-y-3">
-                            <h4 className="text-sm font-black uppercase tracking-tight line-clamp-1">{proj.title}</h4>
-                            <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                          <div className="p-4 space-y-2.5">
+                            <h4 className="text-sm font-black tracking-tight line-clamp-1">{proj.title}</h4>
+                            <div className="w-full h-1.5 bg-slate-100 dark:bg-[#040D0A] rounded-full overflow-hidden">
                               <div
                                 className="h-full bg-emerald-500"
                                 style={{ width: `${Math.min(100, (proj.raisedAmountUZS / Math.max(1, proj.targetAmountUZS)) * 100)}%` }}
@@ -1161,13 +1175,13 @@ export const AdminDashboardPage: React.FC = () => {
                       ))}
                     </div>
                   </div>
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-black uppercase tracking-tight">Taqdim Etilgan Sovg'alar</h3>
-                    <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-6 space-y-5">
-                      <div className="space-y-4">
+                  <div className="space-y-3">
+                    <h3 className="text-base font-black tracking-tight">Taqdim Etilgan Sovg'alar</h3>
+                    <div className="bg-white dark:bg-[#061812] rounded-2xl border border-slate-200 dark:border-emerald-500/20 p-4 space-y-4">
+                      <div className="space-y-3">
                         {shopItems.slice(0, 4).map(item => (
                           <div key={item.id} className="flex items-center gap-3">
-                            <img src={item.imageUrl} className="w-10 h-10 rounded-xl object-cover" alt={item.title} />
+                            <img src={resolveMediaUrl(item.imageUrl) || homeGiftLeavesImg} className="w-10 h-10 rounded-xl object-cover" alt={item.title} />
                             <div className="flex-1 min-w-0">
                               <div className="text-xs font-bold truncate">{item.title}</div>
                               <div className="text-[10px] font-semibold text-slate-400 tabular-nums">Zaxira: {item.stock} ta</div>
@@ -1177,7 +1191,7 @@ export const AdminDashboardPage: React.FC = () => {
                       </div>
                       <button
                         onClick={() => setGlobalTab('shop')}
-                        className="w-full py-3 bg-slate-100 dark:bg-slate-800 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-colors cursor-pointer"
+                        className="w-full py-2.5 min-h-[44px] bg-slate-100 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-colors cursor-pointer"
                       >
                         Barcha Sovg'alarni Ko'rish
                       </button>
@@ -1189,7 +1203,7 @@ export const AdminDashboardPage: React.FC = () => {
 
             {/* REPORTS ARCHIVE */}
             {activeTab === 'reports' && (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex flex-wrap gap-2">
                     {([
@@ -1201,10 +1215,10 @@ export const AdminDashboardPage: React.FC = () => {
                       <button
                         key={s.id}
                         onClick={() => setReportFilterStatus(s.id)}
-                        className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border cursor-pointer transition-all ${
+                        className={`px-4 py-2 min-h-[40px] rounded-xl text-[11px] font-black border cursor-pointer transition-all ${
                           reportFilterStatus === s.id
-                            ? 'bg-emerald-600 text-white border-emerald-600'
-                            : 'bg-white dark:bg-[#0f172a] border-slate-200 dark:border-slate-800 text-slate-500'
+                            ? 'bg-gradient-to-r from-[#00F5A0] to-[#10B981] text-[#04110B] border-emerald-700 border-b-[3px]'
+                            : 'bg-white dark:bg-[#061812] border-slate-200 dark:border-emerald-500/20 text-slate-500 dark:text-slate-300'
                         }`}
                       >
                         {s.label}
@@ -1213,25 +1227,25 @@ export const AdminDashboardPage: React.FC = () => {
                   </div>
                   <button
                     onClick={() => setGlobalTab('report')}
-                    className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-600/20 cursor-pointer"
+                    className="px-4 py-2.5 min-h-[44px] bg-gradient-to-r from-[#00F5A0] to-[#10B981] text-[#04110B] border-b-[3px] border-emerald-700 rounded-xl text-xs font-black cursor-pointer"
                   >
                     + Yangi Hisobot
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {filteredReports.map(report => (
                     <div
                       key={report.id}
-                      className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm flex flex-col"
+                      className="bg-white dark:bg-[#061812] rounded-2xl border border-slate-200 dark:border-emerald-500/20 overflow-hidden flex flex-col"
                     >
-                      <div className="relative aspect-video bg-slate-100 dark:bg-slate-900">
+                      <div className="relative aspect-video bg-slate-100 dark:bg-[#040D0A]">
                         {report.videoUrl ? (
                           <video src={resolveMediaUrl(report.videoUrl)} controls className="w-full h-full object-cover" />
                         ) : (
                           <img src={resolveMediaUrl(report.imageUrl)} className="w-full h-full object-cover" alt={report.title} />
                         )}
-                        <div className="absolute top-3 left-3 px-2.5 py-1 bg-black/60 rounded-lg text-[9px] font-black text-white uppercase tracking-wider">
+                        <div className="absolute top-3 left-3 px-2.5 py-1 bg-black/65 rounded-lg text-[9px] font-black text-white uppercase tracking-wider">
                           {report.category}
                         </div>
                         <div className={`absolute top-3 right-3 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider ${
@@ -1246,7 +1260,7 @@ export const AdminDashboardPage: React.FC = () => {
                           {report.status}
                         </div>
                       </div>
-                      <div className="p-6 space-y-4 flex-1 flex flex-col">
+                      <div className="p-4 space-y-3 flex-1 flex flex-col">
                         {report.isHazardous && (
                           <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-500 text-[10px] font-bold flex items-center gap-2">
                             <AlertTriangle className="w-4 h-4 shrink-0" />
@@ -1254,10 +1268,10 @@ export const AdminDashboardPage: React.FC = () => {
                           </div>
                         )}
                         <div className="space-y-1">
-                          <h4 className="text-base font-black line-clamp-1">{report.title}</h4>
+                          <h4 className="text-sm font-black line-clamp-1">{report.title}</h4>
                           <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">{report.description}</p>
                         </div>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold pt-2 border-t border-slate-100 dark:border-slate-800 mt-auto">
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold pt-2 border-t border-slate-100 dark:border-emerald-500/15 mt-auto">
                           {report.schoolName} · {report.region}
                         </div>
                         {(user.role === 'super_admin' || user.role === 'moderator') && (
@@ -1265,14 +1279,14 @@ export const AdminDashboardPage: React.FC = () => {
                             <button
                               onClick={() => updateReportStatus(report.id, 'resolved')}
                               disabled={report.status.toLowerCase() === 'resolved' || report.isHazardous}
-                              className="flex-1 py-2.5 bg-emerald-600 disabled:opacity-40 text-white rounded-xl text-[10px] font-black uppercase tracking-widest cursor-pointer"
+                              className="flex-1 py-2.5 min-h-[42px] bg-gradient-to-r from-[#00F5A0] to-[#10B981] disabled:opacity-40 text-[#04110B] border-b-[3px] border-emerald-700 rounded-xl text-[11px] font-black cursor-pointer"
                             >
                               {report.status.toLowerCase() === 'resolved' ? 'Hal etilgan' : 'Tasdiqlash'}
                             </button>
                             <button
                               onClick={() => updateReportStatus(report.id, 'rejected')}
                               disabled={report.status.toLowerCase() === 'rejected'}
-                              className="px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-500 hover:bg-rose-500 hover:text-white transition-colors cursor-pointer disabled:opacity-40"
+                              className="px-3.5 py-2.5 min-h-[42px] bg-slate-100 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 rounded-xl text-slate-500 hover:bg-rose-500 hover:text-white transition-colors cursor-pointer disabled:opacity-40"
                             >
                               <XCircle className="w-4 h-4" />
                             </button>
@@ -1287,30 +1301,37 @@ export const AdminDashboardPage: React.FC = () => {
 
             {/* SHOP MANAGEMENT */}
             {activeTab === 'shop_management' && (
-              <div className="space-y-6">
-                <div className="p-8 bg-gradient-to-br from-emerald-600 to-teal-500 rounded-[32px] text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl">
-                  <div className="space-y-1">
-                    <h2 className="text-2xl md:text-3xl font-black uppercase tracking-tight">Eko-Bozor Boshqaruvi</h2>
-                    <p className="text-xs font-semibold opacity-90">Sovg'alar katalogini yangilang va zaxirani nazorat qiling</p>
+              <div className="space-y-4">
+                <div className="p-4 sm:p-5 bg-gradient-to-br from-[#072419] via-[#051811] to-[#040D0A] rounded-3xl border border-emerald-500/30 text-white flex flex-col md:flex-row items-center justify-between gap-4">
+                  <div className="flex items-center gap-3.5">
+                    <img
+                      src={homeGiftLeavesImg}
+                      alt="Eko-Bozor"
+                      className="w-14 h-14 rounded-2xl object-cover border border-emerald-400/35 shrink-0"
+                    />
+                    <div className="space-y-0.5">
+                      <h2 className="text-xl md:text-2xl font-black tracking-tight">Eko-Bozor Boshqaruvi</h2>
+                      <p className="text-xs font-semibold text-emerald-300/80">Sovg'alar katalogini yangilang va zaxirani nazorat qiling</p>
+                    </div>
                   </div>
                   <button
                     onClick={openCreateShopModal}
-                    className="px-6 py-3.5 bg-white text-emerald-700 rounded-2xl font-black text-xs uppercase tracking-wider shadow-lg cursor-pointer"
+                    className="px-5 py-2.5 min-h-[44px] bg-gradient-to-r from-[#00F5A0] to-[#10B981] text-[#04110B] border-b-[3px] border-emerald-700 active:translate-y-[1px] rounded-xl font-black text-xs cursor-pointer shrink-0"
                   >
                     + Yangi Sovg'a
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   {shopItems.map(item => (
-                    <div key={item.id} className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+                    <div key={item.id} className="bg-white dark:bg-[#061812] rounded-2xl border border-slate-200 dark:border-emerald-500/20 overflow-hidden">
                       <div className="relative aspect-square">
-                        <img src={resolveMediaUrl(item.imageUrl)} className="w-full h-full object-cover" alt={item.title} />
-                        <div className="absolute top-3 right-3 px-2.5 py-1 bg-amber-500 text-white rounded-lg text-xs font-black font-mono tabular-nums">
+                        <img src={resolveMediaUrl(item.imageUrl) || homeGiftLeavesImg} className="w-full h-full object-cover" alt={item.title} />
+                        <div className="absolute top-2.5 right-2.5 px-2.5 py-1 bg-amber-500 text-[#04110B] rounded-lg text-xs font-black font-mono tabular-nums">
                           {item.priceCoins} ECO
                         </div>
                       </div>
-                      <div className="p-5 space-y-3">
+                      <div className="p-4 space-y-3">
                         <div>
                           <h4 className="text-sm font-black truncate">{item.title}</h4>
                           <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase mt-1 tabular-nums">
@@ -1330,13 +1351,13 @@ export const AdminDashboardPage: React.FC = () => {
                         <div className="flex gap-2">
                           <button
                             onClick={() => openEditShopModal(item)}
-                            className="flex-1 py-2.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-emerald-600 hover:text-white transition-all cursor-pointer flex items-center justify-center gap-1"
+                            className="flex-1 py-2.5 min-h-[40px] bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 rounded-xl text-[11px] font-black hover:bg-emerald-600 hover:text-white transition-all cursor-pointer flex items-center justify-center gap-1"
                           >
                             <Edit2 className="w-3.5 h-3.5" /> Tahrirlash
                           </button>
                           <button
                             onClick={() => updateShopItem(item.id, { stock: item.stock + 10 })}
-                            className="px-3 py-2.5 bg-slate-100 dark:bg-slate-800 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-emerald-600 hover:text-white transition-all cursor-pointer tabular-nums"
+                            className="px-3 py-2.5 min-h-[40px] bg-slate-100 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 rounded-xl text-[11px] font-black hover:bg-emerald-600 hover:text-white transition-all cursor-pointer tabular-nums"
                           >
                             +10
                           </button>
@@ -1350,38 +1371,38 @@ export const AdminDashboardPage: React.FC = () => {
 
             {/* AUDIT LOG */}
             {activeTab === 'audit' && (
-              <div className="bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-                <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                  <h3 className="text-lg font-black uppercase tracking-tight">Xavfsizlik Audit Jurnali</h3>
+              <div className="bg-white dark:bg-[#061812] rounded-2xl border border-slate-200 dark:border-emerald-500/20 overflow-hidden">
+                <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-emerald-500/15 flex items-center justify-between">
+                  <h3 className="text-base font-black tracking-tight">Xavfsizlik Audit Jurnali</h3>
                   <div className="flex items-center gap-2 text-xs font-bold text-slate-500 tabular-nums">
-                    <History className="w-4 h-4" /> {auditLogs.length} yozuvlar
+                    <History className="w-4 h-4 text-emerald-400" /> {auditLogs.length} yozuvlar
                   </div>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-50 dark:bg-slate-900">
+                    <thead className="bg-slate-50 dark:bg-[#040D0A]">
                       <tr>
-                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-wider">Sana / Vaqt</th>
-                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-wider">Administrator</th>
-                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-wider">Harakat</th>
-                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-wider">Tafsilotlar</th>
+                        <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-wider">Sana / Vaqt</th>
+                        <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-wider">Administrator</th>
+                        <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-wider">Harakat</th>
+                        <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-wider">Tafsilotlar</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    <tbody className="divide-y divide-slate-100 dark:divide-emerald-500/15">
                       {auditLogs.map((log, i) => (
-                        <tr key={log.id || i} className="hover:bg-slate-50 dark:hover:bg-slate-900/50">
-                          <td className="px-6 py-4 font-mono text-slate-500 whitespace-nowrap tabular-nums">
+                        <tr key={log.id || i} className="hover:bg-slate-50 dark:hover:bg-[#040D0A]/60">
+                          <td className="px-4 py-3 font-mono text-slate-500 whitespace-nowrap tabular-nums">
                             {new Date(log.timestamp).toLocaleString('uz-UZ')}
                           </td>
-                          <td className="px-6 py-4 font-bold">
+                          <td className="px-4 py-3 font-bold">
                             {log.actorName} <span className="text-[10px] text-slate-400">({log.actorRole})</span>
                           </td>
-                          <td className="px-6 py-4">
+                          <td className="px-4 py-3">
                             <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-black uppercase">
                               {log.action}
                             </span>
                           </td>
-                          <td className="px-6 py-4 text-slate-500 dark:text-slate-400 font-mono text-[11px] max-w-md truncate">
+                          <td className="px-4 py-3 text-slate-500 dark:text-slate-400 font-mono text-[11px] max-w-md truncate">
                             {JSON.stringify(log.details || {})}
                           </td>
                         </tr>
@@ -1394,21 +1415,21 @@ export const AdminDashboardPage: React.FC = () => {
 
             {/* TELEGRAM BOT & PERMANENT DOMAIN MANAGEMENT */}
             {activeTab === 'telegram' && (
-              <div className="max-w-4xl mx-auto space-y-8">
-                <div className="p-8 bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0f172a] rounded-[32px] border border-slate-800 text-white space-y-6 shadow-xl">
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                      <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-sky-500 to-indigo-600 text-white flex items-center justify-center">
-                        <Bot className="w-8 h-8" />
+              <div className="max-w-4xl mx-auto space-y-5">
+                <div className="p-4 sm:p-5 bg-gradient-to-br from-[#072419] via-[#051811] to-[#040D0A] rounded-3xl border border-emerald-500/30 text-white space-y-4">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#00F5A0] to-[#10B981] text-[#04110B] flex items-center justify-center shrink-0">
+                        <Bot className="w-6 h-6" />
                       </div>
                       <div>
-                        <h2 className="text-2xl font-black uppercase tracking-tight">Telegram Bot & Mini App</h2>
-                        <p className="text-xs font-semibold text-sky-400 uppercase tracking-wider mt-0.5">
+                        <h2 className="text-xl font-black tracking-tight">Telegram Bot & Mini App</h2>
+                        <p className="text-xs font-semibold text-emerald-300/80">
                           Doimiy HTTPS Domen va Avtonom Boshqaruv
                         </p>
                       </div>
                     </div>
-                    <span className="px-3.5 py-1.5 rounded-full text-xs font-black uppercase tracking-wider border bg-emerald-500/20 border-emerald-500/30 text-emerald-400 tabular-nums">
+                    <span className="px-3 py-1 rounded-lg text-xs font-black border bg-emerald-500/20 border-emerald-500/35 text-emerald-300 tabular-nums">
                       {telegramStatusInfo?.botUsername ? `@${telegramStatusInfo.botUsername} Faol` : 'Doimiy HTTPS Faol'}
                       {typeof telegramStatusInfo?.totalSubscribers === 'number' ? ` · ${telegramStatusInfo.totalSubscribers} obunachi` : ''}
                     </span>
@@ -1420,11 +1441,11 @@ export const AdminDashboardPage: React.FC = () => {
                         Faol Mini App HTTPS Manzili
                       </label>
                       {telegramStatusInfo?.isTemporaryTunnel ? (
-                        <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                        <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30">
                           Vaqtinchalik Tunnel (24/7 uchun deploy qiling)
                         </span>
                       ) : telegramStatusInfo?.isProduction247 ? (
-                        <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                           24/7 Doimiy Server Faol
                         </span>
                       ) : null}
@@ -1434,7 +1455,7 @@ export const AdminDashboardPage: React.FC = () => {
                         type="text"
                         readOnly
                         value={activeMiniAppUrl}
-                        className="flex-1 px-4 py-3 bg-black/40 border border-white/10 rounded-2xl text-xs font-mono text-emerald-400 outline-none select-all"
+                        className="flex-1 px-4 py-2.5 min-h-[44px] bg-[#040D0A] border border-emerald-500/25 rounded-xl text-xs font-mono text-emerald-400 outline-none select-all"
                       />
                       <button
                         onClick={() => {
@@ -1442,7 +1463,7 @@ export const AdminDashboardPage: React.FC = () => {
                           setCopiedUrl(true);
                           setTimeout(() => setCopiedUrl(false), 2000);
                         }}
-                        className="px-5 py-3 bg-white/10 hover:bg-white/20 rounded-2xl border border-white/10 text-xs font-bold flex items-center justify-center gap-2 cursor-pointer"
+                        className="px-4 py-2.5 min-h-[44px] bg-white/10 hover:bg-white/20 rounded-xl border border-white/15 text-xs font-bold flex items-center justify-center gap-2 cursor-pointer"
                       >
                         {copiedUrl ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                         {copiedUrl ? 'Nusxalandi!' : 'Nusxalash'}
@@ -1454,7 +1475,7 @@ export const AdminDashboardPage: React.FC = () => {
                     <button
                       onClick={handleSyncTelegramMenuButton}
                       disabled={syncLoading}
-                      className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                      className="w-full py-3 min-h-[44px] bg-gradient-to-r from-[#00F5A0] to-[#10B981] hover:brightness-105 text-[#04110B] border-b-[3px] border-emerald-700 active:translate-y-[1px] rounded-xl font-black text-xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                     >
                       <RefreshCw className={`w-4 h-4 ${syncLoading ? 'animate-spin' : ''}`} />
                       {syncLoading ? 'Telegramga yuborilmoqda...' : 'Telegram Menu Buttonini Doimiy HTTPS Manziliga Sinxronlash'}
@@ -1468,14 +1489,14 @@ export const AdminDashboardPage: React.FC = () => {
                 </div>
 
                 {/* Detected Bot Users & Ultra Persistence Backup/Restore */}
-                <div className="p-6 sm:p-8 bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 space-y-5 shadow-sm">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="p-4 sm:p-5 bg-white dark:bg-[#061812] rounded-2xl border border-slate-200 dark:border-emerald-500/20 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-11 h-11 rounded-2xl bg-emerald-500/15 text-emerald-500 flex items-center justify-center shrink-0">
-                        <Users className="w-6 h-6" />
+                      <div className="w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-500 flex items-center justify-center shrink-0">
+                        <Users className="w-5 h-5" />
                       </div>
                       <div>
-                        <h3 className="text-base font-black uppercase tracking-tight">
+                        <h3 className="text-sm font-black tracking-tight">
                           Botdan Jami Foydalanganlar &amp; Ultra Xotira
                         </h3>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -1488,7 +1509,7 @@ export const AdminDashboardPage: React.FC = () => {
                         type="button"
                         onClick={fetchDetectedBotUsers}
                         disabled={botUsersLoading}
-                        className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        className="px-3.5 py-2 min-h-[40px] rounded-xl bg-slate-100 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                       >
                         <RefreshCw className={`w-3.5 h-3.5 ${botUsersLoading ? 'animate-spin' : ''}`} />
                         <span>Yangilash</span>
@@ -1497,12 +1518,12 @@ export const AdminDashboardPage: React.FC = () => {
                         type="button"
                         onClick={handleDownloadUltraBackup}
                         disabled={backupBusy}
-                        className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        className="px-3.5 py-2 min-h-[40px] rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                       >
                         <Download className="w-3.5 h-3.5" />
                         <span>.JSON Zaxira</span>
                       </button>
-                      <label className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer">
+                      <label className="px-3.5 py-2 min-h-[40px] rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer">
                         <Upload className="w-3.5 h-3.5" />
                         <span>Tiklash (.JSON)</span>
                         <input
@@ -1517,7 +1538,7 @@ export const AdminDashboardPage: React.FC = () => {
                   </div>
 
                   {botUsersReport?.summary && !botUsersReport.summary.persistentVolumeActive && (
-                    <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3 text-xs text-amber-800 dark:text-amber-200">
+                    <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3 text-xs text-amber-800 dark:text-amber-200">
                       <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
                       <div className="space-y-1">
                         <p className="font-black uppercase tracking-wide text-[11px]">
@@ -1530,28 +1551,28 @@ export const AdminDashboardPage: React.FC = () => {
                     </div>
                   )}
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200/80 dark:border-emerald-500/20">
                       <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Bot &amp; Mini App</div>
                       <div className="text-xl font-black text-emerald-500 tabular-nums mt-0.5">
                         {botUsersReport?.summary?.botUsersCount ?? liveMetrics.botUsersCount}
                       </div>
                     </div>
-                    <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800">
+                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200/80 dark:border-emerald-500/20">
                       <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Jami hisoblar</div>
                       <div className="text-xl font-black tabular-nums mt-0.5">
                         {botUsersReport?.summary?.registeredUsersCount ?? liveMetrics.totalUsers}
                       </div>
                     </div>
-                    <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800">
+                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200/80 dark:border-emerald-500/20">
                       <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Yagona Maktablar</div>
-                      <div className="text-xl font-black text-indigo-500 tabular-nums mt-0.5">
+                      <div className="text-xl font-black text-indigo-400 tabular-nums mt-0.5">
                         {botUsersReport?.summary?.totalSchools ?? liveMetrics.totalSchools}
                       </div>
                     </div>
-                    <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800">
+                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200/80 dark:border-emerald-500/20">
                       <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Avto-Snapshotlar</div>
-                      <div className="text-xl font-black text-teal-500 tabular-nums mt-0.5">
+                      <div className="text-xl font-black text-teal-400 tabular-nums mt-0.5">
                         {botUsersReport?.summary?.snapshotsCount ?? 0}
                       </div>
                     </div>
@@ -1564,11 +1585,11 @@ export const AdminDashboardPage: React.FC = () => {
                       value={botUsersSearch}
                       onChange={e => setBotUsersSearch(e.target.value)}
                       placeholder="Ism, @username, Telegram ID yoki maktab bo'yicha qidirish..."
-                      className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs outline-none"
+                      className="w-full pl-10 pr-4 py-2.5 min-h-[44px] rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs outline-none focus:border-emerald-400"
                     />
                   </div>
 
-                  <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/80 rounded-2xl border border-slate-200/80 dark:border-slate-800">
+                  <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-emerald-500/15 rounded-xl border border-slate-200/80 dark:border-emerald-500/20">
                     {(botUsersReport?.users || [])
                       .filter((u) => {
                         const q = botUsersSearch.trim().toLowerCase();
@@ -1578,12 +1599,12 @@ export const AdminDashboardPage: React.FC = () => {
                           .includes(q);
                       })
                       .map((u) => (
-                        <div key={u.key} className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                        <div key={u.key} className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
                           <div className="min-w-0 space-y-0.5">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="font-black text-slate-900 dark:text-white truncate">{u.fullName}</span>
                               {u.username && (
-                                <span className="text-[11px] font-mono text-sky-500">{u.username}</span>
+                                <span className="text-[11px] font-mono text-sky-400">{u.username}</span>
                               )}
                               <span
                                 className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
@@ -1619,11 +1640,11 @@ export const AdminDashboardPage: React.FC = () => {
                 </div>
 
                 {/* Switch to New Bot Token Card */}
-                <div className="p-8 bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 space-y-4">
+                <div className="p-4 sm:p-5 bg-white dark:bg-[#061812] rounded-2xl border border-slate-200 dark:border-emerald-500/20 space-y-3">
                   <div className="flex items-center gap-3">
-                    <Key className="w-6 h-6 text-amber-500" />
+                    <Key className="w-5 h-5 text-amber-500" />
                     <div>
-                      <h3 className="text-base font-black uppercase">Yangi Bot Tokenni Ulash</h3>
+                      <h3 className="text-sm font-black uppercase">Yangi Bot Tokenni Ulash</h3>
                       <p className="text-xs text-slate-500">Yangi bot tokenini kiriting — server darhol ulanadi.</p>
                     </div>
                   </div>
@@ -1633,41 +1654,41 @@ export const AdminDashboardPage: React.FC = () => {
                       placeholder="123456789:ABCdefGHI..."
                       value={newTokenInput}
                       onChange={e => setNewTokenInput(e.target.value)}
-                      className="flex-1 px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs font-mono outline-none"
+                      className="flex-1 px-4 py-2.5 min-h-[44px] bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 rounded-xl text-xs font-mono outline-none"
                     />
                     <button
                       onClick={handleUpdateBotToken}
                       disabled={tokenLoading || !newTokenInput}
-                      className="px-6 py-3 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer"
+                      className="px-5 py-2.5 min-h-[44px] bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-[#04110B] rounded-xl font-black text-xs flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <RefreshCw className={`w-4 h-4 ${tokenLoading ? 'animate-spin' : ''}`} />
                       {tokenLoading ? 'Ulanmoqda...' : 'Botni Ulash'}
                     </button>
                   </div>
                   {tokenStatus && (
-                    <p className="text-xs font-bold p-3 rounded-xl bg-slate-100 dark:bg-slate-900">{tokenStatus}</p>
+                    <p className="text-xs font-bold p-3 rounded-xl bg-slate-100 dark:bg-[#040D0A]">{tokenStatus}</p>
                   )}
                 </div>
 
                 {/* 24/7 Webhook Card */}
-                <div className="p-8 bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 space-y-4">
+                <div className="p-4 sm:p-5 bg-white dark:bg-[#061812] rounded-2xl border border-slate-200 dark:border-emerald-500/20 space-y-3">
                   <div className="flex items-center gap-3">
-                    <Radio className="w-6 h-6 text-emerald-500" />
+                    <Radio className="w-5 h-5 text-emerald-500" />
                     <div>
-                      <h3 className="text-base font-black uppercase">24/7 Doimiy Webhook Rejimi</h3>
+                      <h3 className="text-sm font-black uppercase">24/7 Doimiy Webhook Rejimi</h3>
                       <p className="text-xs text-slate-500">Brauzer yopiq bo‘lganda ham Telegram bot uzluksiz ishlaydi.</p>
                     </div>
                   </div>
                   <button
                     onClick={handleActivateWebhook}
                     disabled={webhookLoading}
-                    className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-2xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full py-3 min-h-[44px] bg-gradient-to-r from-[#00F5A0] to-[#10B981] hover:brightness-105 disabled:opacity-50 text-[#04110B] border-b-[3px] border-emerald-700 rounded-xl text-xs font-black flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <RefreshCw className={`w-4 h-4 ${webhookLoading ? 'animate-spin' : ''}`} />
                     {webhookLoading ? 'Faollashtirilmoqda...' : 'Doimiy Webhookni Faollashtirish'}
                   </button>
                   {webhookStatus && (
-                    <p className="text-xs font-bold p-3 rounded-xl bg-slate-100 dark:bg-slate-900">{webhookStatus}</p>
+                    <p className="text-xs font-bold p-3 rounded-xl bg-slate-100 dark:bg-[#040D0A]">{webhookStatus}</p>
                   )}
                 </div>
               </div>
@@ -1675,30 +1696,30 @@ export const AdminDashboardPage: React.FC = () => {
 
             {/* SCHOOLS DIRECTORY */}
             {activeTab === 'schools' && (
-              <div className="space-y-6">
-                <div className="p-6 bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <div className="space-y-4">
+                <div className="p-4 sm:p-5 bg-white dark:bg-[#061812] rounded-2xl border border-slate-200 dark:border-emerald-500/20 flex items-center justify-between">
                   <div>
-                    <h3 className="text-lg font-black uppercase">Maktablar Ro'yxati</h3>
+                    <h3 className="text-base font-black uppercase">Maktablar Ro'yxati</h3>
                     <p className="text-xs font-semibold text-slate-400 tabular-nums">Jami {filteredSchools.length} ta maktab</p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
                   {filteredSchools.map(s => (
-                    <div key={s.id} className="p-6 bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 space-y-4">
+                    <div key={s.id} className="p-4 bg-white dark:bg-[#061812] rounded-2xl border border-slate-200 dark:border-emerald-500/20 space-y-3">
                       <div className="flex items-center justify-between">
-                        <span className="w-10 h-10 rounded-2xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center">
+                        <span className="w-9 h-9 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center">
                           <SchoolIcon className="w-5 h-5" />
                         </span>
-                        <span className="px-3 py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-lg text-[10px] font-black uppercase tabular-nums">
+                        <span className="px-2.5 py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-lg text-[10px] font-black uppercase tabular-nums">
                           {s.totalCoins || 0} ECO
                         </span>
                       </div>
                       <div>
-                        <h4 className="text-base font-black">{s.name}</h4>
+                        <h4 className="text-sm font-black">{s.name}</h4>
                         <p className="text-xs text-slate-400 font-semibold">{s.region} · {s.district}</p>
                       </div>
-                      <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500 tabular-nums">
+                      <div className="pt-2.5 border-t border-slate-100 dark:border-emerald-500/15 flex items-center justify-between text-xs text-slate-500 tabular-nums">
                         <span>O'quvchilar: <b>{s.registeredStudentsCount || s.studentsCount || 0}</b></span>
                         <span>Daraxtlar: <b>{s.treesPlanted || 0}</b></span>
                       </div>
@@ -1713,28 +1734,28 @@ export const AdminDashboardPage: React.FC = () => {
 
             {/* SHOP ORDERS MANAGEMENT */}
             {activeTab === 'shop_orders' && (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <VoucherVerifierPanel />
-                <div className="p-6 bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <div className="p-4 sm:p-5 bg-white dark:bg-[#061812] rounded-2xl border border-slate-200 dark:border-emerald-500/20 flex items-center justify-between">
                   <div>
-                    <h3 className="text-lg font-black uppercase">Sovg'a Buyurtmalari</h3>
+                    <h3 className="text-base font-black uppercase">Sovg'a Buyurtmalari</h3>
                     <p className="text-xs font-semibold text-slate-400 tabular-nums">Jami {filteredOrders.length} ta buyurtma</p>
                   </div>
                 </div>
                 {filteredOrders.length === 0 ? (
-                  <div className="p-12 text-center bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 text-slate-400 text-xs font-bold uppercase">
+                  <div className="p-10 text-center bg-white dark:bg-[#061812] rounded-2xl border border-slate-200 dark:border-emerald-500/20 text-slate-400 text-xs font-bold uppercase">
                     Hozircha buyurtmalar yo'q
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                     {filteredOrders.map(order => (
-                      <div key={order.id} className="p-6 bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 space-y-4">
+                      <div key={order.id} className="p-4 bg-white dark:bg-[#061812] rounded-2xl border border-slate-200 dark:border-emerald-500/20 space-y-3">
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <h4 className="text-base font-black">{order.itemTitle}</h4>
+                            <h4 className="text-sm font-black">{order.itemTitle}</h4>
                             <p className="text-xs text-slate-400 font-semibold">{order.userName} · {order.schoolName}</p>
                           </div>
-                          <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase ${
+                          <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase ${
                             order.status === 'delivered'
                               ? 'bg-emerald-500/10 text-emerald-500'
                               : order.status === 'cancelled'
@@ -1749,16 +1770,16 @@ export const AdminDashboardPage: React.FC = () => {
                           <span className="font-black text-amber-500">{order.priceCoins} ECO</span>
                         </div>
                         {order.status !== 'delivered' && order.status !== 'cancelled' && (
-                          <div className="flex gap-2 pt-2">
+                          <div className="flex gap-2 pt-1">
                             <button
                               onClick={() => updateShopOrderStatus(order.id, 'delivered')}
-                              className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest cursor-pointer"
+                              className="flex-1 py-2.5 min-h-[42px] bg-gradient-to-r from-[#00F5A0] to-[#10B981] text-[#04110B] border-b-[3px] border-emerald-700 rounded-xl text-[11px] font-black cursor-pointer"
                             >
                               Topshirildi
                             </button>
                             <button
                               onClick={() => updateShopOrderStatus(order.id, 'cancelled')}
-                              className="px-4 py-2.5 bg-rose-500/10 text-rose-500 rounded-xl text-[10px] font-black uppercase tracking-widest cursor-pointer"
+                              className="px-4 py-2.5 min-h-[42px] bg-rose-500/15 text-rose-500 rounded-xl text-[11px] font-black cursor-pointer"
                             >
                               Bekor qilish
                             </button>
@@ -1773,23 +1794,23 @@ export const AdminDashboardPage: React.FC = () => {
 
             {/* ECO ADS MANAGEMENT */}
             {activeTab === 'ads' && (
-              <div className="space-y-6">
-                <div className="p-6 bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <div className="space-y-4">
+                <div className="p-4 sm:p-5 bg-white dark:bg-[#061812] rounded-2xl border border-slate-200 dark:border-emerald-500/20 flex items-center justify-between gap-3">
                   <div>
-                    <h3 className="text-lg font-black uppercase">Hamkorlik Reklamalari</h3>
+                    <h3 className="text-base font-black uppercase">Hamkorlik Reklamalari</h3>
                     <p className="text-xs font-semibold text-slate-400 tabular-nums">Jami {ecoAds.length} ta kampaniya</p>
                   </div>
                   <button
                     onClick={openCreateAdModal}
-                    className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest cursor-pointer"
+                    className="px-4 py-2.5 min-h-[44px] bg-gradient-to-r from-[#00F5A0] to-[#10B981] text-[#04110B] border-b-[3px] border-emerald-700 rounded-xl text-xs font-black cursor-pointer"
                   >
                     + Yangi Reklama
                   </button>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {ecoAds.map(ad => (
-                    <div key={ad.id} className="p-5 bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 space-y-4">
-                      <div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-900">
+                    <div key={ad.id} className="p-4 bg-white dark:bg-[#061812] rounded-2xl border border-slate-200 dark:border-emerald-500/20 space-y-3">
+                      <div className="relative aspect-video rounded-xl overflow-hidden bg-slate-100 dark:bg-[#040D0A]">
                         <img
                           src={resolveMediaUrl(ad.imageUrl) || heroEcoForestImg}
                           alt={ad.title}
@@ -1844,7 +1865,7 @@ export const AdminDashboardPage: React.FC = () => {
                               )}
                             </div>
                             <div className="min-w-0">
-                              <h4 className="text-base font-black leading-tight truncate">{ad.title}</h4>
+                              <h4 className="text-sm font-black leading-tight truncate">{ad.title}</h4>
                               <div className="text-[11px] font-bold text-emerald-500 truncate">{ad.sponsorName}</div>
                             </div>
                           </div>
@@ -1866,23 +1887,23 @@ export const AdminDashboardPage: React.FC = () => {
                       <div className="flex flex-wrap gap-2">
                         <button
                           onClick={() => openEditAdModal(ad)}
-                          className="px-3.5 py-2.5 bg-sky-500/10 text-sky-500 border border-sky-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest cursor-pointer flex items-center gap-1"
+                          className="px-3.5 py-2.5 min-h-[40px] bg-sky-500/10 text-sky-400 border border-sky-500/20 rounded-xl text-[11px] font-black cursor-pointer flex items-center gap-1"
                         >
                           <Edit2 className="w-3.5 h-3.5" /> Tahrirlash
                         </button>
                         <button
                           onClick={() => updateEcoAdStatus(ad.id, ad.status === 'active' ? 'paused' : 'active')}
-                          className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest cursor-pointer ${
+                          className={`flex-1 py-2.5 min-h-[40px] rounded-xl text-[11px] font-black cursor-pointer ${
                             ad.status === 'active'
-                              ? 'bg-amber-500/10 text-amber-500'
-                              : 'bg-emerald-600 text-white'
+                              ? 'bg-amber-500/15 text-amber-400'
+                              : 'bg-gradient-to-r from-[#00F5A0] to-[#10B981] text-[#04110B] border-b-[3px] border-emerald-700'
                           }`}
                         >
                           {ad.status === 'active' ? "To'xtatish" : 'Faollashtirish'}
                         </button>
                         <button
                           onClick={() => deleteEcoAd(ad.id)}
-                          className="px-3 py-2.5 bg-rose-500/10 text-rose-500 rounded-xl text-[10px] font-black uppercase tracking-widest cursor-pointer"
+                          className="px-3 py-2.5 min-h-[40px] bg-rose-500/10 text-rose-500 rounded-xl text-[11px] font-black cursor-pointer"
                           title="O'chirish"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -1903,26 +1924,26 @@ export const AdminDashboardPage: React.FC = () => {
             {/* FIREBASE INFO GUIDE */}
             {activeTab === 'firebase_guide' && (
               <div className="max-w-4xl mx-auto">
-                <div className="p-8 bg-gradient-to-br from-indigo-950 to-slate-900 rounded-3xl border border-slate-800 text-white space-y-6 shadow-xl">
-                  <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-2xl bg-amber-500 text-white flex items-center justify-center">
-                      <Database className="w-8 h-8" />
+                <div className="p-4 sm:p-5 bg-gradient-to-br from-[#072419] via-[#051811] to-[#040D0A] rounded-3xl border border-emerald-500/30 text-white space-y-5">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-12 h-12 rounded-2xl bg-amber-500 text-[#04110B] flex items-center justify-center shrink-0">
+                      <Database className="w-6 h-6" />
                     </div>
                     <div>
-                      <h2 className="text-2xl font-black uppercase tracking-tight">Firebase & Firestore Security</h2>
-                      <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider">RBAC va Server-Tomon Himoyasi Faol</p>
+                      <h2 className="text-xl font-black tracking-tight">Firebase & Firestore Security</h2>
+                      <p className="text-xs font-semibold text-amber-400">RBAC va Server-Tomon Himoyasi Faol</p>
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-white/10 text-xs">
-                    <div className="p-5 bg-black/40 rounded-2xl border border-white/10 font-mono space-y-1.5 text-slate-300">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-emerald-500/20 text-xs">
+                    <div className="p-4 bg-[#040D0A] rounded-2xl border border-emerald-500/20 font-mono space-y-1.5 text-slate-300">
                       <div className="text-emerald-400 font-bold mb-2">Firestore Collections</div>
                       <div>/users · /registrationApplications</div>
                       <div>/schools · /reports · /mediaSubmissions</div>
                       <div>/ecoTasks · /rewardSettings</div>
                       <div>/coinTransactions · /auditLogs</div>
                     </div>
-                    <div className="p-5 bg-white/5 rounded-2xl border border-white/10 space-y-2 text-slate-300">
-                      <div className="text-sky-400 font-bold uppercase">Xavfsizlik Kafolatlari</div>
+                    <div className="p-4 bg-[#040D0A] rounded-2xl border border-emerald-500/20 space-y-2 text-slate-300">
+                      <div className="text-emerald-400 font-bold uppercase">Xavfsizlik Kafolatlari</div>
                       <p>HMAC-SHA256 Session Token · Role & Territory Scoping · SHA-256 Media Dedup · Hazard Safeguards</p>
                     </div>
                   </div>
@@ -1935,10 +1956,10 @@ export const AdminDashboardPage: React.FC = () => {
 
       {/* Create / Edit Shop Item Modal */}
       {showShopCreateModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-[#0f172a] w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 shadow-2xl my-4">
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-[#061812] w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl border border-slate-200 dark:border-emerald-500/30 p-5 space-y-4 my-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-black uppercase">
+              <h3 className="text-base font-black uppercase">
                 {editingShopItem ? "Sovg'ani Tahrirlash" : "Yangi Sovg'a Qo'shish"}
               </h3>
               <button
@@ -1957,14 +1978,14 @@ export const AdminDashboardPage: React.FC = () => {
                 placeholder="Sovg'a nomi"
                 value={newShopTitle}
                 onChange={e => setNewShopTitle(e.target.value)}
-                className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
+                className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none"
               />
               <textarea
                 rows={2}
                 placeholder="Sovg'a tavsifi"
                 value={newShopDesc}
                 onChange={e => setNewShopDesc(e.target.value)}
-                className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none resize-none"
+                className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none resize-none"
               />
               <div className="grid grid-cols-2 gap-3">
                 <input
@@ -1972,20 +1993,20 @@ export const AdminDashboardPage: React.FC = () => {
                   placeholder="Narxi (EcoCoin)"
                   value={newShopPrice}
                   onChange={e => setNewShopPrice(e.target.value)}
-                  className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none"
                 />
                 <input
                   type="number"
                   placeholder="Zaxira soni"
                   value={newShopStock}
                   onChange={e => setNewShopStock(e.target.value)}
-                  className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none"
                 />
               </div>
               <select
                 value={newShopCategory}
                 onChange={e => setNewShopCategory(e.target.value as any)}
-                className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
+                className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none"
               >
                 <option value="accessories">Aksessuarlar</option>
                 <option value="stationery">O'quv qurollari</option>
@@ -1997,9 +2018,9 @@ export const AdminDashboardPage: React.FC = () => {
                 placeholder="Homiy nomi"
                 value={newShopSponsor}
                 onChange={e => setNewShopSponsor(e.target.value)}
-                className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
+                className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none"
               />
-              <label className="w-full px-4 py-3 rounded-2xl bg-emerald-500/10 border border-dashed border-emerald-500/40 text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center justify-center gap-2 cursor-pointer">
+              <label className="w-full px-4 py-2.5 rounded-xl bg-emerald-500/10 border border-dashed border-emerald-500/40 text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center justify-center gap-2 cursor-pointer">
                 <ImageIcon className="w-4 h-4" />
                 <span>{uploadingShopImg ? 'Rasm yuklanmoqda...' : "Qurilmadan rasm yuklash"}</span>
                 <input
@@ -2010,7 +2031,7 @@ export const AdminDashboardPage: React.FC = () => {
                 />
               </label>
               {newShopImageUrl && (
-                <div className="flex items-center gap-3 p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                <div className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20">
                   <img
                     src={resolveMediaUrl(newShopImageUrl)}
                     alt="Preview"
@@ -2024,7 +2045,7 @@ export const AdminDashboardPage: React.FC = () => {
                 placeholder="Yoki rasm havolasi (ixtiyoriy)"
                 value={newShopImageUrl}
                 onChange={e => setNewShopImageUrl(e.target.value)}
-                className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
+                className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none"
               />
               <GiftGateConfigEditor
                 gate={newShopGate}
@@ -2047,7 +2068,7 @@ export const AdminDashboardPage: React.FC = () => {
                     sponsorName: newShopSponsor.trim() || 'ECO HERO',
                     imageUrl:
                       newShopImageUrl.trim() ||
-                      'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&q=80&w=600',
+                      '/assets/eco/gift_leaves.jpg',
                     redemptionGate: newShopGate,
                   };
                   if (editingShopItem) {
@@ -2064,7 +2085,7 @@ export const AdminDashboardPage: React.FC = () => {
                   setSavingShopItem(false);
                 }
               }}
-              className="w-full py-3.5 bg-emerald-600 disabled:opacity-50 text-white rounded-2xl text-xs font-black uppercase tracking-widest cursor-pointer"
+              className="w-full py-3 min-h-[44px] bg-gradient-to-r from-[#00F5A0] to-[#10B981] disabled:opacity-50 text-[#04110B] border-b-[3px] border-emerald-700 rounded-xl text-xs font-black uppercase tracking-widest cursor-pointer"
             >
               {savingShopItem ? 'Saqlanmoqda...' : 'Saqlash'}
             </button>
@@ -2074,8 +2095,8 @@ export const AdminDashboardPage: React.FC = () => {
 
       {/* Create / Edit EcoAd Modal */}
       {showAdCreateModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-[#0f172a] w-full max-w-lg rounded-3xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 shadow-2xl my-8 max-h-[92vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-[#061812] w-full max-w-lg rounded-3xl border border-slate-200 dark:border-emerald-500/30 p-5 space-y-4 my-8 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-black uppercase">
                 {editingAdItem ? 'Reklamani Tahrirlash' : 'Yangi Hamkorlik Reklamasi'}
@@ -2094,7 +2115,7 @@ export const AdminDashboardPage: React.FC = () => {
               <select
                 value={newAdPlacement}
                 onChange={e => setNewAdPlacement(e.target.value as any)}
-                className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
+                className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none"
               >
                 <option value="earn_coins">Reklama ko'rib EcoCoin olish</option>
                 <option value="post_purchase">Sovg'a sotib olgandan keyin</option>
@@ -2120,8 +2141,8 @@ export const AdminDashboardPage: React.FC = () => {
                       onClick={() => setNewAdSkipSeconds(preset.sec)}
                       className={`px-3 py-1.5 rounded-xl text-[11px] font-black cursor-pointer transition-all ${
                         newAdSkipSeconds === preset.sec
-                          ? 'bg-emerald-600 text-white'
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                          ? 'bg-emerald-500 text-[#04110B]'
+                          : 'bg-slate-100 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-slate-500'
                       }`}
                     >
                       {preset.label}
@@ -2134,7 +2155,7 @@ export const AdminDashboardPage: React.FC = () => {
                     placeholder="Soniyalar"
                     value={newAdSkipSeconds}
                     onChange={e => setNewAdSkipSeconds(e.target.value)}
-                    className="w-20 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none text-center tabular-nums"
+                    className="w-20 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none text-center tabular-nums"
                   />
                 </div>
               </div>
@@ -2155,8 +2176,8 @@ export const AdminDashboardPage: React.FC = () => {
                       onClick={() => setNewAdCtaType(item.id)}
                       className={`py-2 px-2 rounded-xl border text-[11px] font-black flex items-center justify-center gap-1.5 cursor-pointer ${
                         newAdCtaType === item.id
-                          ? 'bg-sky-500/15 border-sky-500 text-sky-500'
-                          : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-500'
+                          ? 'bg-sky-500/15 border-sky-500 text-sky-400'
+                          : 'bg-slate-50 dark:bg-[#040D0A] border-slate-200 dark:border-emerald-500/20 text-slate-500'
                       }`}
                     >
                       <Icon className="w-3.5 h-3.5" />
@@ -2171,31 +2192,31 @@ export const AdminDashboardPage: React.FC = () => {
                 placeholder="Reklama nomi"
                 value={newAdTitle}
                 onChange={e => setNewAdTitle(e.target.value)}
-                className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
+                className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none"
               />
               <input
                 type="text"
                 placeholder="Homiy tashkilot"
                 value={newAdSponsor}
                 onChange={e => setNewAdSponsor(e.target.value)}
-                className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
+                className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none"
               />
               <textarea
                 rows={2}
                 placeholder="Sarlavha (Headline)"
                 value={newAdHeadline}
                 onChange={e => setNewAdHeadline(e.target.value)}
-                className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none resize-none"
+                className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none resize-none"
               />
               <input
                 type="text"
                 placeholder="Qisqa tavsif (Subheadline)"
                 value={newAdSubheadline}
                 onChange={e => setNewAdSubheadline(e.target.value)}
-                className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
+                className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none"
               />
               {/* Primary Ad Cover / Screen Image (Always visible before video play) */}
-              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-emerald-500/30 space-y-2.5">
+              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-[#040D0A] border border-emerald-500/30 space-y-2.5">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[11px] font-extrabold text-emerald-700 dark:text-emerald-300">
                     Reklama ekran rasmi (Videodan oldin tashqaridan ko&apos;rinadi)
@@ -2210,7 +2231,7 @@ export const AdminDashboardPage: React.FC = () => {
                     </button>
                   )}
                 </div>
-                <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-slate-950 border border-slate-200 dark:border-slate-800">
+                <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20">
                   <img
                     src={resolveMediaUrl(newAdImageUrl) || heroEcoForestImg}
                     onError={e => {
@@ -2220,7 +2241,7 @@ export const AdminDashboardPage: React.FC = () => {
                     className="w-full h-full object-cover"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2.5">
                   <label className="px-3 py-2.5 rounded-xl bg-sky-500/15 border border-dashed border-sky-500/50 text-sky-600 dark:text-sky-300 text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer">
                     <ImageIcon className="w-4 h-4 shrink-0" />
                     <span>{uploadingAdImg ? 'Yuklanmoqda...' : 'Ekran rasmini yuklash'}</span>
@@ -2269,7 +2290,7 @@ export const AdminDashboardPage: React.FC = () => {
               </div>
 
               {/* Secondary Optional Small Sponsor Corner Logo */}
-              <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
+              <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 space-y-2">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-full overflow-hidden bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0">
                     {/^(https?:\/\/|\/uploads\/|\/assets\/|data:image\/)/i.test(newAdSponsorLogo.trim()) ? (
@@ -2286,7 +2307,7 @@ export const AdminDashboardPage: React.FC = () => {
                       </span>
                     )}
                   </div>
-                  <label className="flex-1 px-3 py-2 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer">
+                  <label className="flex-1 px-3 py-2 rounded-xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 text-slate-600 dark:text-slate-300 text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer">
                     <ImageIcon className="w-3.5 h-3.5 shrink-0" />
                     <span>{uploadingAdLogo ? 'Yuklanmoqda...' : 'Kichik homiy belgisi (ixtiyoriy)'}</span>
                     <input
@@ -2312,7 +2333,7 @@ export const AdminDashboardPage: React.FC = () => {
                 placeholder="Rasm havolasi (ixtiyoriy)"
                 value={newAdImageUrl}
                 onChange={e => setNewAdImageUrl(e.target.value)}
-                className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
+                className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none"
               />
               <input
                 type="text"
@@ -2322,7 +2343,7 @@ export const AdminDashboardPage: React.FC = () => {
                   setNewAdVideoUrl(e.target.value);
                   if (e.target.value.trim()) setNewAdType('video');
                 }}
-                className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
+                className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none"
               />
               <div className="grid grid-cols-2 gap-3">
                 <input
@@ -2330,14 +2351,14 @@ export const AdminDashboardPage: React.FC = () => {
                   placeholder="Tugma matni (Batafsil)"
                   value={newAdCtaText}
                   onChange={e => setNewAdCtaText(e.target.value)}
-                  className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none"
                 />
                 <input
                   type="text"
                   placeholder="Manzil URL (https://...)"
                   value={newAdUrl}
                   onChange={e => setNewAdUrl(e.target.value)}
-                  className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none"
                 />
               </div>
               {newAdPlacement === 'earn_coins' && (
@@ -2346,7 +2367,7 @@ export const AdminDashboardPage: React.FC = () => {
                   placeholder="Mukofot (100 EcoCoin)"
                   value={newAdRewardCoins}
                   onChange={e => setNewAdRewardCoins(e.target.value)}
-                  className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none"
                 />
               )}
               <label className="flex items-center gap-2.5 text-xs font-bold text-slate-600 dark:text-slate-300 cursor-pointer px-1">
@@ -2432,7 +2453,7 @@ export const AdminDashboardPage: React.FC = () => {
                   setSavingAdItem(false);
                 }
               }}
-              className="w-full py-3.5 bg-emerald-600 disabled:opacity-50 text-white rounded-2xl text-xs font-black uppercase tracking-widest cursor-pointer"
+              className="w-full py-3 min-h-[44px] bg-gradient-to-r from-[#00F5A0] to-[#10B981] disabled:opacity-50 text-[#04110B] border-b-[3px] border-emerald-700 rounded-xl text-xs font-black uppercase tracking-widest cursor-pointer"
             >
               {savingAdItem ? 'Saqlanmoqda...' : editingAdItem ? 'Yangilash' : 'Yaratish'}
             </button>

@@ -1107,6 +1107,64 @@ export interface QuizQuestionItem {
   options: string[];
   correctIndex?: number;
   explanation?: string;
+  imageUrl?: string;
+}
+
+export interface ProctoredQuizQuestionView {
+  id: string;
+  question: string;
+  options: string[];
+  imageUrl?: string;
+}
+
+export interface ProctoredQuizStartResponse {
+  success: boolean;
+  sessionId?: string;
+  totalQuestions?: number;
+  currentIndex?: number;
+  timeLimitSeconds?: number;
+  questionStartedAt?: string;
+  attemptsUsedToday?: number;
+  maxAttemptsPerDay?: number;
+  alreadyRewarded?: boolean;
+  noticeUz?: string;
+  question?: ProctoredQuizQuestionView;
+  error?: string;
+  limitReached?: boolean;
+}
+
+export interface ProctoredQuizAnswerResponse {
+  success: boolean;
+  finished?: boolean;
+  currentIndex?: number;
+  totalQuestions?: number;
+  timeLimitSeconds?: number;
+  questionStartedAt?: string;
+  question?: ProctoredQuizQuestionView;
+  lastQuestionTimedOut?: boolean;
+  lastQuestionSuspiciousFast?: boolean;
+  passed?: boolean;
+  scorePercent?: number;
+  correctCount?: number;
+  totalCount?: number;
+  passingPercent?: number;
+  awardedCoins?: number;
+  awardedXp?: number;
+  isSuspicious?: boolean;
+  suspiciousReason?: string;
+  alreadyRewarded?: boolean;
+  noticeUz?: string;
+  message?: string;
+  results?: {
+    questionId: string;
+    question: string;
+    selectedIndex: number;
+    correctIndex: number;
+    isCorrect: boolean;
+    timedOut?: boolean;
+    explanation?: string;
+  }[];
+  error?: string;
 }
 
 export interface EcoMission {
@@ -1118,6 +1176,7 @@ export interface EcoMission {
   status: 'active' | 'paused';
   category?: string;
   questions?: QuizQuestionItem[];
+  questionCount?: number;
   passingPercent?: number;
   question?: string;
   options?: string[];

@@ -32,6 +32,7 @@ import { useEco } from '../../context/EcoContext';
 import { UserRole } from '../../types/eco';
 import { PWAInstallButton } from '../common/PWAInstallButton';
 import { computeUserStreakState } from '../../utils/streak';
+import realisticAvatarImg from '../../assets/images/profile_avatar_realistic_1795605008121.jpg';
 
 export const Navbar: React.FC = () => {
   const {
@@ -248,7 +249,11 @@ export const Navbar: React.FC = () => {
               >
                 <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full overflow-hidden border-2 border-emerald-400/50 bg-[#040D0A]">
                   <img
-                    src={user.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.fullName || 'EcoHero')}`}
+                    src={
+                      user.avatarUrl && !user.avatarUrl.includes('dicebear.com')
+                        ? user.avatarUrl
+                        : realisticAvatarImg
+                    }
                     alt=""
                     className="w-full h-full object-cover"
                   />
@@ -460,7 +465,11 @@ export const Navbar: React.FC = () => {
                 <div className="pt-5 mt-5 border-t border-slate-100 dark:border-emerald-500/15">
                   <div className="flex items-center gap-3.5 mb-4">
                     <img
-                      src={user.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.fullName || 'EcoHero')}`}
+                      src={
+                        user.avatarUrl && !user.avatarUrl.includes('dicebear.com')
+                          ? user.avatarUrl
+                          : realisticAvatarImg
+                      }
                       className="w-11 h-11 rounded-2xl border-2 border-emerald-500/30 object-cover"
                       alt=""
                     />

@@ -61,6 +61,8 @@ import {
   DailyMission,
   DailyMissionSubmission,
   ChampionshipLiveResponse,
+  ProctoredQuizStartResponse,
+  ProctoredQuizAnswerResponse,
 } from '../types/eco';
 import {
   INITIAL_USER,
@@ -467,6 +469,7 @@ interface EcoContextType {
   fetchDistrictLeaderboardDetails: (params?: {
     region?: string;
     district?: string;
+    mode?: 'monthly' | 'overall';
   }) => Promise<DistrictLeaderboardDetailsResponse | null>;
   awardMonthlyTop3: (params?: {
     region?: string;
@@ -559,19 +562,50 @@ interface EcoContextType {
   deleteReport: (reportId: string) => Promise<{ success: boolean; error?: string }>;
   schoolReportAction: (
     reportId: string,
-    action: 'confirm_student_resolved' | 'assign_ambassador',
+    action:
+      | 'confirm_student_resolved'
+      | 'assign_ambassador'
+      | 'reject'
+      | 'final_approve'
+      | 'final_reject'
+      | 'final_request_reupload',
     payload?: { assignedAmbassadorUid?: string; note?: string }
-  ) => Promise<{ success: boolean; error?: string; message?: string }>;
+  ) => Promise<{ success: boolean; error?: string; message?: string; report?: EcoReport }>;
   resolveReportWithAiVerification: (
     reportId: string,
-    payload: { beforeImageUrl?: string; afterImageUrl: string; note?: string }
-  ) => Promise<{ success: boolean; error?: string; message?: string }>;
+    payload: {
+      action?: 'start_progress' | 'submit_evidence';
+      beforeImageUrl?: string;
+      afterImageUrl?: string;
+      afterVideoUrl?: string;
+      note?: string;
+    }
+  ) => Promise<{ success: boolean; error?: string; message?: string; report?: EcoReport }>;
   updateEcoAd: (adId: string, updates: Partial<EcoAd>) => Promise<{ success: boolean; error?: string }>;
   deleteEcoAd: (adId: string) => Promise<{ success: boolean; error?: string }>;
   deleteShopItem: (itemId: string) => Promise<{ success: boolean; error?: string }>;
   createMission: (payload: Omit<EcoMission, 'id' | 'createdAt' | 'status'>) => Promise<{ success: boolean; mission?: EcoMission; error?: string }>;
   updateMission: (id: string, updates: Partial<EcoMission>) => Promise<{ success: boolean; error?: string }>;
   deleteMission: (id: string) => Promise<{ success: boolean; error?: string }>;
+  fetchMissionAdminDetail: (
+    id: string
+  ) => Promise<{ success: boolean; mission?: EcoMission; error?: string }>;
+  startQuizSession: (missionId: string) => Promise<ProctoredQuizStartResponse>;
+  submitQuizAnswer: (
+    missionId: string,
+    payload: { sessionId: string; questionIndex: number; selectedIndex: number | null; timedOut?: boolean }
+  ) => Promise<ProctoredQuizAnswerResponse>;
+  reportQuizViolation: (
+    missionId: string,
+    payload: { sessionId: string; reason?: string }
+  ) => Promise<{
+    success: boolean;
+    cancelled?: boolean;
+    warningCount?: number;
+    message?: string;
+    noticeUz?: string;
+    error?: string;
+  }>;
   submitMission: (
     id: string,
     payload: { selectedOptionIndex?: number; answers?: number[]; proofText?: string; mediaUrl?: string }
@@ -3768,6 +3802,7 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const q = new URLSearchParams();
         if (params.region) q.set('region', params.region);
         if (params.district) q.set('district', params.district);
+        if (params.mode) q.set('mode', params.mode);
         const res = await apiFetch(`/api/leaderboards/district-details?${q.toString()}`);
         const data = await res.json();
         if (!res.ok || !data.success) return null;
@@ -3939,9 +3974,9 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return { success: false, error: data.error || 'Xatolik' };
         }
         await syncBootstrap();
-        if (action === 'confirm_student_resolved') triggerConfetti();
+        if (action === 'confirm_student_resolved' || action === 'final_approve') triggerConfetti();
         showNotification(data.message || 'Muvaffaqiyatli bajarildi!', 'success');
-        return { success: true, message: data.message };
+        return { success: true, message: data.message, report: data.report };
       } catch (err: any) {
         return { success: false, error: err?.message || 'Tarmoq xatoligi' };
       }
@@ -3959,19 +3994,22 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
         const data = await res.json();
         if (!res.ok || !data.success) {
-          showNotification(data.error || 'AI tekshiruvi rad etdi', 'warning');
-          return { success: false, error: data.error || 'AI tasdiqlamadi' };
+          showNotification(data.error || 'Dalilni yuborishda xatolik', 'warning');
+          return { success: false, error: data.error || 'Dalil tasdiqlanmadi' };
         }
         await syncBootstrap();
-        triggerConfetti();
-        showNotification(data.message || '+200 EcoCoin berildi!', 'success');
-        return { success: true, message: data.message };
+        const defaultMsg =
+          payload.action === 'start_progress'
+            ? "Holat 'Jarayonda' ga o'zgartirildi!"
+            : "Keyingi dalil yuklandi va maktab administratori tekshiruviga yuborildi!";
+        showNotification(data.message || defaultMsg, 'success');
+        return { success: true, message: data.message, report: data.report };
       } catch (err: any) {
         showNotification(err?.message || 'Tarmoq xatoligi', 'warning');
         return { success: false, error: err?.message || 'Tarmoq xatoligi' };
       }
     },
-    [apiFetch, showNotification, syncBootstrap, triggerConfetti]
+    [apiFetch, showNotification, syncBootstrap]
   );
 
   const updateEcoAd: EcoContextType['updateEcoAd'] = useCallback(
@@ -4301,6 +4339,109 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return null;
       } catch {
         return null;
+      }
+    },
+    [apiFetch]
+  );
+
+  const fetchMissionAdminDetail: EcoContextType['fetchMissionAdminDetail'] = useCallback(
+    async (id) => {
+      try {
+        const res = await apiFetch(`/api/missions/${id}/admin-detail`);
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          return { success: false, error: data.error || 'Test tafsilotlari yuklanmadi' };
+        }
+        return { success: true, mission: data.mission };
+      } catch (err: any) {
+        return { success: false, error: err?.message || 'Tarmoq xatoligi' };
+      }
+    },
+    [apiFetch]
+  );
+
+  const startQuizSession: EcoContextType['startQuizSession'] = useCallback(
+    async (missionId) => {
+      try {
+        const res = await apiFetch(`/api/missions/${missionId}/quiz/start`, {
+          method: 'POST',
+          body: JSON.stringify({}),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          showNotification(data.error || 'Testni boshlab bo‘lmadi', 'warning');
+          return {
+            success: false,
+            error: data.error || 'Xatolik',
+            limitReached: Boolean(data.limitReached),
+            attemptsUsedToday: data.attemptsUsedToday,
+            maxAttemptsPerDay: data.maxAttemptsPerDay,
+          };
+        }
+        return data as ProctoredQuizStartResponse;
+      } catch (err: any) {
+        const errMsg = err?.message || 'Tarmoq xatoligi';
+        showNotification(errMsg, 'warning');
+        return { success: false, error: errMsg };
+      }
+    },
+    [apiFetch, showNotification]
+  );
+
+  const submitQuizAnswer: EcoContextType['submitQuizAnswer'] = useCallback(
+    async (missionId, payload) => {
+      try {
+        const res = await apiFetch(`/api/missions/${missionId}/quiz/answer`, {
+          method: 'POST',
+          timeoutMs: 25000,
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          showNotification(data.error || 'Javobni tekshirishda xatolik', 'warning');
+          return { success: false, error: data.error || 'Xatolik' };
+        }
+        if (data.finished) {
+          await syncBootstrap();
+          if (Number(data.awardedCoins || 0) > 0) {
+            triggerConfetti();
+            showNotification(data.message || 'Tabriklaymiz! EcoCoin va XP berildi!', 'success');
+          } else if (data.isSuspicious) {
+            showNotification(data.message || 'Shubhali urinish — mukofot berilmadi.', 'warning');
+          } else if (data.passed) {
+            showNotification(data.message || 'Test yakunlandi!', 'info');
+          } else {
+            showNotification(data.message || "O'tish baliga yetmadi", 'warning');
+          }
+        }
+        return data as ProctoredQuizAnswerResponse;
+      } catch (err: any) {
+        return { success: false, error: err?.message || 'Tarmoq xatoligi' };
+      }
+    },
+    [apiFetch, showNotification, syncBootstrap, triggerConfetti]
+  );
+
+  const reportQuizViolation: EcoContextType['reportQuizViolation'] = useCallback(
+    async (missionId, payload) => {
+      try {
+        const res = await apiFetch(`/api/missions/${missionId}/quiz/violation`, {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          return { success: false, error: data.error || 'Xatolik' };
+        }
+        return {
+          success: true,
+          cancelled: Boolean(data.cancelled),
+          warningCount: Number(data.warningCount || 0),
+          message: data.message,
+          noticeUz: data.noticeUz,
+        };
+      } catch (err: any) {
+        return { success: false, error: err?.message || 'Tarmoq xatoligi' };
       }
     },
     [apiFetch]
@@ -4989,6 +5130,10 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createMission,
         updateMission,
         deleteMission,
+        fetchMissionAdminDetail,
+        startQuizSession,
+        submitQuizAnswer,
+        reportQuizViolation,
         submitMission,
         parseQuizFromText,
         reviewMissionSubmission,

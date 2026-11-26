@@ -43,6 +43,7 @@ import { AdPlayerModal } from '../components/AdPlayerModal';
 import { GiftGateConfigEditor } from '../components/shop/GiftGateConfigEditor';
 import { isInsideTelegramWebApp, normalizeAdTargetUrl, resolveMediaUrl, openAdTargetUrl } from '../utils/api';
 import heroEcoForestImg from '../assets/images/hero_eco_forest_1795179384249.jpg';
+import homeGiftLeavesImg from '../assets/images/home_gift_leaves_1795602395449.jpg';
 
 function isAdLogoImage(val?: string): boolean {
   if (!val) return false;
@@ -111,9 +112,7 @@ export const EcoShopPage: React.FC = () => {
   const [giftStock, setGiftStock] = useState('20');
   const [giftCategory, setGiftCategory] = useState<ShopItem['category']>('accessories');
   const [giftSponsor, setGiftSponsor] = useState('ECO HERO');
-  const [giftImageUrl, setGiftImageUrl] = useState(
-    'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&q=80&w=600'
-  );
+  const [giftImageUrl, setGiftImageUrl] = useState('/assets/eco/gift_leaves.jpg');
   const [giftGate, setGiftGate] = useState<ShopRedemptionGate>({
     mode: 'none',
     adId: 'auto',
@@ -290,7 +289,7 @@ export const EcoShopPage: React.FC = () => {
     setGiftStock('20');
     setGiftCategory('accessories');
     setGiftSponsor('ECO HERO');
-    setGiftImageUrl('https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&q=80&w=600');
+    setGiftImageUrl('/assets/eco/gift_leaves.jpg');
     setGiftGate({ mode: 'none', adId: 'auto', requiredSubscriptions: [] });
     setShowCreateModal(true);
   };
@@ -328,9 +327,7 @@ export const EcoShopPage: React.FC = () => {
         stock: Math.max(0, Number(giftStock) || 10),
         category: giftCategory,
         sponsorName: giftSponsor.trim() || 'ECO HERO',
-        imageUrl:
-          giftImageUrl.trim() ||
-          'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&q=80&w=600',
+        imageUrl: giftImageUrl.trim() || '/assets/eco/gift_leaves.jpg',
         redemptionGate: giftGate,
       };
       if (editingItem) {
@@ -556,101 +553,82 @@ export const EcoShopPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#020617] text-slate-900 dark:text-white pb-24">
-      {/* Cinematic Hero Section */}
-      <div className="relative h-[400px] w-full overflow-hidden">
-        <div className="absolute inset-0 z-0">
-          <img 
-            src="https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=2000&q=80" 
-            className="w-full h-full object-cover opacity-60 dark:opacity-40 scale-110"
-            alt="Eco Shop Hero"
+    <div className="min-h-screen bg-[#f2f7f4] dark:bg-[#040D0A] text-slate-900 dark:text-white pb-24">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 pt-4 sm:pt-6 space-y-5">
+        {/* Compact Duolingo Hero Header */}
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#072419] via-[#051811] to-[#040D0A] border border-emerald-500/30 p-4 sm:p-6 text-white shadow-sm">
+          <img
+            src={heroEcoForestImg}
+            alt="Eko-Bozor"
+            className="absolute inset-0 w-full h-full object-cover opacity-15 pointer-events-none"
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-slate-50/0 via-slate-50/50 to-slate-50 dark:from-[#020617]/0 dark:via-[#020617]/50 dark:to-[#020617]" />
-        </div>
+          <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5 min-w-0">
+              <img
+                src={homeGiftLeavesImg}
+                alt="Eko-Bozor sovg'alari"
+                className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border border-emerald-400/40 shrink-0 shadow-md"
+              />
+              <div className="min-w-0">
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#00F5A0] uppercase tracking-wider">
+                  <Sparkles className="w-3.5 h-3.5" /> Eksklyuziv Eko-Bozor
+                </span>
+                <h1 className="text-2xl sm:text-3xl font-black tracking-tight leading-tight">
+                  Eco <span className="text-[#00F5A0]">Shop</span>
+                </h1>
+                <p className="text-xs text-slate-300 mt-0.5 max-w-xl">
+                  EcoCoinlaringizni qimmatbaho sovg&apos;alar va vaucherlarga almashtiring.
+                </p>
+              </div>
+            </div>
 
-        <div className="relative z-10 max-w-7xl mx-auto px-4 h-full flex flex-col justify-center space-y-6 pt-12">
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[10px] font-black uppercase tracking-widest"
-          >
-            <Sparkles className="w-3 h-3" /> Eksklyuziv Eko-Bozor
-          </motion.div>
-          
-          <div className="space-y-2">
-            <motion.h1 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-              className="text-5xl md:text-7xl font-black uppercase tracking-tighter leading-none"
-            >
-              Eco <span className="text-emerald-500">Shop</span>
-            </motion.h1>
-            <motion.p 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              className="text-lg text-slate-600 dark:text-slate-400 font-medium max-w-2xl"
-            >
-              Ekologik faollik va daraxt ekish evaziga yig'ilgan EcoCoinlarni smartfon, planshet va boshqa qimmatbaho sovg'alarga almashtiring.
-            </motion.p>
-          </div>
-
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="flex items-center gap-4"
-          >
-            <div className="flex items-center gap-3 px-6 py-3 bg-white dark:bg-white/5 backdrop-blur-xl rounded-[24px] border border-slate-200 dark:border-white/10 shadow-xl">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center">
-                <Coins className="w-6 h-6 fill-amber-500" />
+            <div className="flex items-center gap-3 px-4 py-2.5 bg-[#040D0A]/85 rounded-2xl border border-emerald-500/30 shrink-0">
+              <div className="w-9 h-9 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center shrink-0">
+                <Coins className="w-5 h-5 fill-amber-400" />
               </div>
               <div>
-                <div className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Sizning Balansingiz</div>
-                <div className="text-xl font-black text-amber-500 font-mono tabular-nums leading-none">
-                  {user.ecoCoins} <span className="text-xs font-bold text-slate-500 ml-1">EcoCoin</span>
+                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Balansingiz</div>
+                <div className="text-lg font-black text-amber-400 font-mono tabular-nums leading-none">
+                  {user.ecoCoins.toLocaleString()} <span className="text-[11px] font-bold text-slate-400">ECO</span>
                 </div>
               </div>
             </div>
-          </motion.div>
+          </div>
         </div>
-      </div>
 
-      <div className="max-w-7xl mx-auto px-4 -mt-12 relative z-20 space-y-12">
         {/* Navigation & Search Bar */}
-        <div className="flex flex-col md:flex-row items-center justify-between gap-6 p-4 bg-white dark:bg-[#0f172a] rounded-[32px] border border-slate-200 dark:border-white/5 shadow-2xl">
-          <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/5">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 p-3 bg-white dark:bg-[#061812] rounded-2xl border border-slate-200 dark:border-emerald-500/20 shadow-sm">
+          <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-[#040D0A] rounded-xl border border-slate-200 dark:border-emerald-500/15">
             <button
               onClick={() => setActiveTabMode('catalog')}
-              className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                activeTabMode === 'catalog' 
-                  ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20' 
-                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+              className={`min-h-[38px] px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                activeTabMode === 'catalog'
+                  ? 'bg-gradient-to-r from-[#00F5A0] to-[#10B981] text-[#04110B] font-black'
+                  : 'text-slate-500 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               Katalog
             </button>
             <button
               onClick={() => setActiveTabMode('my_orders')}
-              className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                activeTabMode === 'my_orders' 
-                  ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20' 
-                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+              className={`min-h-[38px] px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer tabular-nums ${
+                activeTabMode === 'my_orders'
+                  ? 'bg-gradient-to-r from-[#00F5A0] to-[#10B981] text-[#04110B] font-black'
+                  : 'text-slate-500 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              Buyurtmalarim
+              Buyurtmalarim ({myOrders.length})
             </button>
           </div>
 
-          <div className="flex-1 max-w-md relative group">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
-            <input 
+          <div className="flex-1 md:max-w-sm relative">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
               type="text"
               placeholder="Sovg'alarni qidirish..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-11 pr-4 py-3 bg-slate-100 dark:bg-white/5 rounded-2xl text-xs font-bold outline-none border border-transparent focus:border-emerald-500/50 transition-all"
+              className="w-full min-h-[40px] pl-10 pr-3.5 py-2 bg-slate-100 dark:bg-[#040D0A] rounded-xl text-xs font-semibold outline-none border border-slate-200 dark:border-emerald-500/20 focus:border-emerald-500/60"
             />
           </div>
 
@@ -658,15 +636,15 @@ export const EcoShopPage: React.FC = () => {
             <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={openCreateGiftModal}
-                className="px-5 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-950 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:scale-105 active:scale-95 transition-all shadow-xl cursor-pointer"
+                className="min-h-[40px] px-4 py-2 bg-gradient-to-r from-[#00F5A0] to-[#10B981] text-[#04110B] border-b-[3px] border-emerald-700 rounded-xl text-xs font-black flex items-center gap-1.5 active:translate-y-[1px] transition-all cursor-pointer"
               >
-                <Plus className="w-4 h-4" /> Sovg'a Qo'shish
+                <Plus className="w-4 h-4" /> Sovg&apos;a Qo&apos;shish
               </button>
               <button
                 onClick={() => openCreateAdModal('earn_coins')}
-                className="px-5 py-3 bg-amber-500 text-slate-950 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:scale-105 active:scale-95 transition-all shadow-xl cursor-pointer"
+                className="min-h-[40px] px-4 py-2 bg-amber-400 hover:bg-amber-300 text-[#04110B] border-b-[3px] border-amber-600 rounded-xl text-xs font-black flex items-center gap-1.5 active:translate-y-[1px] transition-all cursor-pointer"
               >
-                <Tv className="w-4 h-4" /> Reklama Qo'shish
+                <Tv className="w-4 h-4" /> Reklama Qo&apos;shish
               </button>
             </div>
           )}
@@ -674,34 +652,34 @@ export const EcoShopPage: React.FC = () => {
 
         {/* Watch Ads to Earn +100 EcoCoin Service */}
         {(earnCoinAds.length > 0 || user.role === 'super_admin') && (
-          <div className="p-6 sm:p-8 rounded-[32px] bg-gradient-to-br from-amber-500/15 via-emerald-500/10 to-slate-900/5 dark:to-[#0f172a] border border-amber-500/30 shadow-xl space-y-5">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center shadow-lg shadow-amber-500/20 shrink-0">
-                  <PlayCircle className="w-7 h-7" />
+          <div className="p-4 sm:p-5 rounded-3xl bg-white dark:bg-[#061812] border border-amber-500/35 shadow-sm space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="flex items-center gap-3.5">
+                <div className="w-11 h-11 rounded-2xl bg-amber-400 text-[#04110B] flex items-center justify-center shrink-0 border-b-[3px] border-amber-600">
+                  <PlayCircle className="w-6 h-6" />
                 </div>
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-amber-500">
-                      <Sparkles className="w-3.5 h-3.5" /> Reklama Xizmati
+                    <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-amber-500">
+                      <Sparkles className="w-3 h-3" /> Reklama Xizmati
                     </span>
                     {cooldownRemainingSec > 0 ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-400 text-[10px] font-mono font-bold tabular-nums">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-400 text-[10px] font-mono font-bold tabular-nums">
                         <Lock className="w-3 h-3" />
                         <span>5 soatlik tanaffus: {formatCooldownHms(cooldownRemainingSec)}</span>
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-500 dark:text-[#00F5A0] text-[10px] font-bold">
                         <CheckCircle2 className="w-3 h-3" />
                         <span>Har {adWatchState?.cooldownHours || 5} soatda 1 ta reklama · Tayyor</span>
                       </span>
                     )}
                   </div>
-                  <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tight">
+                  <h2 className="text-base sm:text-lg font-black tracking-tight">
                     Reklama ko&lsquo;rib EcoCoin ishlab oling
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Har {adWatchState?.cooldownHours || 5} soatda 1 ta reklamani to&lsquo;liq tomosha qiling — yakunida avtomatik EcoCoin tushadi va keyingi safar boshqa reklama chiqadi.
+                    Har {adWatchState?.cooldownHours || 5} soatda 1 ta reklamani to&lsquo;liq tomosha qiling — yakunida avtomatik EcoCoin tushadi.
                   </p>
                 </div>
               </div>
@@ -709,7 +687,7 @@ export const EcoShopPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => openCreateAdModal('earn_coins')}
-                  className="px-4 py-2.5 rounded-2xl bg-slate-900 dark:bg-white text-white dark:text-slate-950 text-[10px] font-black uppercase tracking-widest cursor-pointer shrink-0"
+                  className="min-h-[40px] px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-[#04110B] border-b-[3px] border-amber-600 text-xs font-black cursor-pointer shrink-0"
                 >
                   + Yangi Reklama
                 </button>
@@ -721,7 +699,7 @@ export const EcoShopPage: React.FC = () => {
                 Hozircha faol mukofotli reklamalar mavjud emas. Super Admin reklama qo&lsquo;shishi mumkin.
               </p>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
                 {earnCoinAds.map(ad => {
                   const adSec = ad.skipAfterSeconds || 15;
                   const adDurationLabel = adSec >= 60 && adSec % 60 === 0 ? `${adSec / 60} min` : `${adSec}s`;
@@ -738,9 +716,9 @@ export const EcoShopPage: React.FC = () => {
                   return (
                     <div
                       key={ad.id}
-                      className="rounded-3xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-white/10 overflow-hidden shadow-md flex flex-col"
+                      className="rounded-2xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 overflow-hidden shadow-sm flex flex-col"
                     >
-                      <div className="relative h-44 bg-slate-900 overflow-hidden">
+                      <div className="relative h-40 bg-[#040D0A] overflow-hidden">
                         <img
                           src={resolveMediaUrl(ad.imageUrl) || heroEcoForestImg}
                           alt={ad.title}
@@ -1142,32 +1120,32 @@ export const EcoShopPage: React.FC = () => {
               </div>
 
               {myOrders.length === 0 ? (
-                <div className="p-20 text-center bg-white dark:bg-[#0f172a] rounded-[40px] border border-slate-200 dark:border-white/5 shadow-2xl space-y-6">
-                   <div className="w-20 h-20 rounded-3xl bg-slate-100 dark:bg-white/5 flex items-center justify-center mx-auto text-slate-300">
-                     <ShoppingBag className="w-10 h-10" />
+                <div className="p-10 text-center bg-white dark:bg-[#061812] rounded-3xl border border-slate-200 dark:border-emerald-500/20 shadow-sm space-y-4">
+                   <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 flex items-center justify-center mx-auto text-emerald-500">
+                     <ShoppingBag className="w-8 h-8" />
                    </div>
-                   <div className="space-y-2">
-                     <h3 className="text-xl font-black uppercase">Savatchangiz bo'sh</h3>
-                     <p className="text-xs text-slate-500 font-medium max-w-xs mx-auto">Hali hech qanday sovg'a sotib olmadingiz. EcoCoinlarni foydali narsalarga sarflang!</p>
+                   <div className="space-y-1.5">
+                     <h3 className="text-lg font-black">Savatchangiz bo'sh</h3>
+                     <p className="text-xs text-slate-500 dark:text-slate-400 font-medium max-w-xs mx-auto">Hali hech qanday sovg'a sotib olmadingiz. EcoCoinlarni foydali narsalarga sarflang!</p>
                    </div>
                    <button 
                      onClick={() => setActiveTabMode('catalog')}
-                     className="px-8 py-4 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-emerald-600/20"
+                     className="min-h-[44px] px-6 py-2.5 bg-gradient-to-r from-[#00F5A0] to-[#10B981] text-[#04110B] font-black border-b-[3px] border-emerald-700 rounded-xl text-xs cursor-pointer"
                    >
                      Katalogga o'tish
                    </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {myOrders.map(order => (
-                    <div key={order.id} className="bg-white dark:bg-[#0f172a] rounded-[32px] border border-slate-200 dark:border-white/5 p-6 shadow-xl flex flex-col sm:flex-row gap-5">
+                    <div key={order.id} className="bg-white dark:bg-[#061812] rounded-2xl border border-slate-200 dark:border-emerald-500/20 p-4 shadow-sm flex flex-col sm:flex-row gap-4">
                       <div className="flex items-center gap-3 shrink-0">
-                        <div className="w-24 h-24 rounded-2xl bg-slate-100 dark:bg-white/5 overflow-hidden border border-slate-200 dark:border-white/10">
+                        <div className="w-20 h-20 rounded-xl bg-slate-100 dark:bg-[#040D0A] overflow-hidden border border-slate-200 dark:border-emerald-500/20">
                           {order.itemImageUrl ? (
                             <img src={resolveMediaUrl(order.itemImageUrl)} alt={order.itemTitle} className="w-full h-full object-cover" />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center text-emerald-500">
-                              <Package className="w-8 h-8" />
+                              <Package className="w-7 h-7" />
                             </div>
                           )}
                         </div>
@@ -1177,22 +1155,22 @@ export const EcoShopPage: React.FC = () => {
                             target="_blank"
                             rel="noopener noreferrer"
                             title="QR kodni ochish"
-                            className="w-24 h-24 rounded-2xl bg-white p-1.5 border border-slate-200 flex items-center justify-center hover:scale-105 transition-transform"
+                            className="w-20 h-20 rounded-xl bg-white p-1.5 border border-slate-200 flex items-center justify-center hover:scale-105 transition-transform"
                           >
                             <img src={orderQrMap[order.id]} alt="QR" className="w-full h-full object-contain" />
                           </a>
                         )}
                       </div>
-                      <div className="flex-1 space-y-3 min-w-0">
+                      <div className="flex-1 space-y-2.5 min-w-0">
                         <div className="flex justify-between items-start gap-2">
-                          <div className="space-y-1 min-w-0">
-                             <h4 className="text-base font-black uppercase tracking-tight truncate">{order.itemTitle}</h4>
-                             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{order.sponsorName}</p>
+                          <div className="space-y-0.5 min-w-0">
+                             <h4 className="text-sm font-black truncate">{order.itemTitle}</h4>
+                             <p className="text-[10px] text-slate-400 font-bold uppercase">{order.sponsorName}</p>
                           </div>
-                          <div className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest shrink-0 ${
-                            order.status === 'delivered' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' :
-                            order.verifiedBySchoolAdmin ? 'bg-sky-500/10 text-sky-500 border border-sky-500/20' :
-                            'bg-amber-500/10 text-amber-500 border border-amber-500/20'
+                          <div className={`px-2 py-0.5 rounded-lg text-[10px] font-bold shrink-0 ${
+                            order.status === 'delivered' ? 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/25' :
+                            order.verifiedBySchoolAdmin ? 'bg-sky-500/15 text-sky-400 border border-sky-500/25' :
+                            'bg-amber-500/15 text-amber-400 border border-amber-500/25'
                           }`}>
                             {order.status === 'delivered'
                               ? 'Topshirilgan'
@@ -1202,10 +1180,10 @@ export const EcoShopPage: React.FC = () => {
                           </div>
                         </div>
 
-                        <div className="p-3 bg-slate-50 dark:bg-white/5 rounded-2xl border border-dashed border-emerald-500/30 flex items-center justify-between gap-2">
+                        <div className="p-2.5 bg-slate-50 dark:bg-[#040D0A] rounded-xl border border-dashed border-emerald-500/35 flex items-center justify-between gap-2">
                            <div className="min-w-0">
-                             <span className="text-[8px] font-black text-slate-400 uppercase block">Promokod & QR Vaucher</span>
-                             <span className="text-sm font-black font-mono text-emerald-500 tracking-wider">{order.voucherCode}</span>
+                             <span className="text-[9px] font-bold text-slate-400 uppercase block">Promokod & QR</span>
+                             <span className="text-sm font-black font-mono text-emerald-500 dark:text-[#00F5A0] tracking-wider">{order.voucherCode}</span>
                            </div>
                            <div className="flex items-center gap-1 shrink-0">
                              <button 
@@ -1231,9 +1209,9 @@ export const EcoShopPage: React.FC = () => {
                            </div>
                         </div>
 
-                        <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 tabular-nums">
                            <div className="flex items-center gap-1">
-                             <Coins className="w-3.5 h-3.5" />
+                             <Coins className="w-3.5 h-3.5 text-amber-400" />
                              <span>{order.priceCoins}</span>
                            </div>
                            <div className="flex items-center gap-1">
@@ -1260,30 +1238,30 @@ export const EcoShopPage: React.FC = () => {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setActiveModalItem(null)}
-              className="absolute inset-0 bg-black/60 backdrop-blur-xl"
+              className="absolute inset-0 bg-black/70 backdrop-blur-md"
             />
             <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              initial={{ opacity: 0, scale: 0.94, y: 16 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative w-full max-w-lg bg-white dark:bg-[#0f172a] rounded-[48px] border border-slate-200 dark:border-white/10 shadow-2xl overflow-hidden"
+              exit={{ opacity: 0, scale: 0.94, y: 16 }}
+              className="relative w-full max-w-md bg-white dark:bg-[#061812] rounded-3xl border border-slate-200 dark:border-emerald-500/25 shadow-2xl overflow-hidden"
             >
               <div className="relative aspect-video">
                 <img src={resolveMediaUrl(activeModalItem.imageUrl)} className="w-full h-full object-cover" alt="" />
-                <div className="absolute inset-0 bg-gradient-to-t from-white dark:from-[#0f172a] via-transparent to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-white dark:from-[#061812] via-transparent to-transparent" />
                 <button 
                   onClick={() => setActiveModalItem(null)}
-                  className="absolute top-6 right-6 p-3 bg-black/20 hover:bg-black/40 backdrop-blur-md rounded-full text-white transition-all"
+                  className="absolute top-3 right-3 p-2.5 bg-black/40 hover:bg-black/60 backdrop-blur-md rounded-xl text-white transition-all cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <div className="p-10 space-y-8">
-                <div className="space-y-2 text-center">
-                  <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">{activeModalItem.sponsorName}</span>
-                  <h3 className="text-3xl font-black uppercase tracking-tighter">{activeModalItem.title}</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
+              <div className="p-5 sm:p-6 space-y-5">
+                <div className="space-y-1.5 text-center">
+                  <span className="text-[11px] font-bold text-emerald-500 uppercase tracking-wider">{activeModalItem.sponsorName}</span>
+                  <h3 className="text-xl font-black tracking-tight">{activeModalItem.title}</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
                     {activeModalItem.redemptionGate?.mode === 'subscription'
                       ? "Ushbu sovg'a promokodini olish uchun belgilangan kanal yoki sahifalarga obuna bo'lish talab etiladi."
                       : activeModalItem.redemptionGate?.mode === 'ad'
@@ -1294,34 +1272,34 @@ export const EcoShopPage: React.FC = () => {
                   </p>
                 </div>
 
-                <div className="flex items-center justify-center gap-8 py-6 border-y border-slate-100 dark:border-white/5">
+                <div className="flex items-center justify-center gap-6 py-4 border-y border-slate-100 dark:border-emerald-500/15">
                   <div className="text-center">
-                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1">Narxi</span>
-                    <div className="flex items-center gap-2 text-amber-500 font-black font-mono">
-                      <Coins className="w-5 h-5 fill-amber-500" />
-                      <span className="text-2xl">{activeModalItem.priceCoins.toLocaleString()}</span>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block mb-0.5">Narxi</span>
+                    <div className="flex items-center gap-1.5 text-amber-500 font-black font-mono tabular-nums">
+                      <Coins className="w-4 h-4 fill-amber-500" />
+                      <span className="text-xl">{activeModalItem.priceCoins.toLocaleString()}</span>
                     </div>
                   </div>
-                  <div className="w-px h-12 bg-slate-100 dark:bg-white/5" />
+                  <div className="w-px h-10 bg-slate-100 dark:bg-emerald-500/15" />
                   <div className="text-center">
-                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1">Mavjud</span>
-                    <div className="flex items-center gap-2 text-emerald-500 font-black font-mono">
-                      <Package className="w-5 h-5" />
-                      <span className="text-2xl">{activeModalItem.stock} ta</span>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block mb-0.5">Mavjud</span>
+                    <div className="flex items-center gap-1.5 text-emerald-500 font-black font-mono tabular-nums">
+                      <Package className="w-4 h-4" />
+                      <span className="text-xl">{activeModalItem.stock} ta</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex gap-4">
+                <div className="flex gap-3">
                    <button 
                      onClick={() => setActiveModalItem(null)}
-                     className="flex-1 py-5 bg-slate-100 dark:bg-white/5 rounded-[24px] text-[10px] font-black uppercase tracking-widest text-slate-500 hover:bg-slate-200 transition-all"
+                     className="flex-1 min-h-[44px] py-2.5 bg-slate-100 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 transition-all cursor-pointer"
                    >
                      Bekor qilish
                    </button>
                    <button 
                      onClick={handleConfirmRedeem}
-                     className="flex-2 py-5 bg-emerald-600 text-white rounded-[24px] text-[10px] font-black uppercase tracking-widest shadow-xl shadow-emerald-600/20 hover:scale-105 active:scale-95 transition-all"
+                     className="flex-[2] min-h-[44px] py-2.5 bg-gradient-to-r from-[#00F5A0] to-[#10B981] text-[#04110B] font-black border-b-[3px] border-emerald-700 rounded-xl text-xs transition-all cursor-pointer"
                    >
                      Tasdiqlash & Olish
                    </button>
@@ -1340,71 +1318,71 @@ export const EcoShopPage: React.FC = () => {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-emerald-950/90 backdrop-blur-2xl"
+              className="absolute inset-0 bg-black/80 backdrop-blur-xl"
             />
             <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              initial={{ opacity: 0, scale: 0.94, y: 16 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative w-full max-w-lg bg-white dark:bg-[#0f172a] rounded-[40px] p-6 sm:p-8 text-center shadow-2xl space-y-6 my-8"
+              exit={{ opacity: 0, scale: 0.94, y: 16 }}
+              className="relative w-full max-w-md bg-white dark:bg-[#061812] rounded-3xl border border-slate-200 dark:border-emerald-500/30 p-5 sm:p-6 text-center shadow-2xl space-y-5 my-6"
             >
-              <div className="flex items-center justify-center gap-4">
+              <div className="flex items-center justify-center gap-3.5">
                 {voucherResult.itemImageUrl && (
                   <img
                     src={resolveMediaUrl(voucherResult.itemImageUrl)}
                     alt={voucherResult.title}
-                    className="w-20 h-20 rounded-2xl object-cover border-2 border-emerald-500 shadow-lg"
+                    className="w-18 h-18 rounded-2xl object-cover border-2 border-emerald-500 shadow-md"
                   />
                 )}
                 {voucherQrUrl && (
-                  <div className="p-2 bg-white rounded-2xl border border-slate-200 shadow-lg">
-                    <img src={voucherQrUrl} alt="Voucher QR" className="w-20 h-20 object-contain" />
+                  <div className="p-2 bg-white rounded-2xl border border-slate-200 shadow-md">
+                    <img src={voucherQrUrl} alt="Voucher QR" className="w-18 h-18 object-contain" />
                   </div>
                 )}
               </div>
 
-              <div className="space-y-1.5">
-                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-500 text-[10px] font-black uppercase tracking-widest">
+              <div className="space-y-1">
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-500 text-[10px] font-black uppercase">
                   <CheckCircle2 className="w-3.5 h-3.5" /> Bazaga Saqlandi
                 </span>
-                <h3 className="text-2xl sm:text-3xl font-black uppercase tracking-tighter">Muborak Bo'lsin!</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
+                <h3 className="text-xl sm:text-2xl font-black tracking-tight">Muborak Bo'lsin!</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
                   <b>{voucherResult.title}</b> sovg'asi uchun maxsus promokod va QR vaucheringiz yaratildi.
                 </p>
               </div>
 
-              <div className="p-6 bg-slate-50 dark:bg-white/5 rounded-[28px] border-2 border-dashed border-emerald-500/30 space-y-3">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Promokod</span>
-                <div className="text-3xl font-black font-mono text-emerald-500 tracking-widest uppercase">
+              <div className="p-4 bg-slate-50 dark:bg-[#040D0A] rounded-2xl border-2 border-dashed border-emerald-500/35 space-y-3">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Promokod</span>
+                <div className="text-2xl font-black font-mono text-emerald-500 dark:text-[#00F5A0] tracking-widest uppercase">
                   {voucherResult.code}
                 </div>
                 <div className="flex flex-wrap items-center justify-center gap-2">
                   <button
                     onClick={handleCopyVoucher}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:scale-105 active:scale-95 transition-all shadow-lg shadow-emerald-600/20 cursor-pointer"
+                    className="inline-flex items-center gap-1.5 min-h-[38px] px-4 py-2 bg-gradient-to-r from-[#00F5A0] to-[#10B981] text-[#04110B] text-xs font-black rounded-xl border-b-[2px] border-emerald-700 cursor-pointer"
                   >
-                    <Copy className="w-4 h-4" />
+                    <Copy className="w-3.5 h-3.5" />
                     <span>{copied ? 'Nusxalandi!' : 'Kodni nusxalash'}</span>
                   </button>
                   <a
                     href={`/voucher/${voucherResult.code}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-sky-500/10 text-sky-500 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-sky-500/20"
+                    className="inline-flex items-center gap-1.5 min-h-[38px] px-3.5 py-2 bg-sky-500/15 text-sky-400 text-xs font-bold rounded-xl hover:bg-sky-500/25"
                   >
-                    <QrCode className="w-4 h-4" />
+                    <QrCode className="w-3.5 h-3.5" />
                     <span>QR Tabrikni Ochish</span>
                   </a>
                 </div>
               </div>
 
-              <p className="text-[11px] text-slate-400 font-medium leading-relaxed max-w-sm mx-auto">
-                Sovg'ani olish uchun ushbu promokod yoki QR kodni maktab adminiga ko'rsating — admin bazadan tekshirib Super Adminga yuboradi. Telefondan skanerlansa EcoHero jamoasidan tabrik chiqadi!
+              <p className="text-[11px] text-slate-400 leading-relaxed max-w-sm mx-auto">
+                Sovg'ani olish uchun ushbu promokod yoki QR kodni maktab adminiga ko'rsating — admin bazadan tekshirib Super Adminga yuboradi.
               </p>
 
               <button
                 onClick={() => setVoucherResult(null)}
-                className="w-full py-4 bg-slate-900 dark:bg-white text-white dark:text-slate-950 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl transition-all active:scale-95 cursor-pointer"
+                className="w-full min-h-[44px] py-2.5 bg-slate-100 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/25 text-slate-900 dark:text-white rounded-xl text-xs font-black cursor-pointer"
               >
                 Yopish
               </button>
@@ -1459,14 +1437,14 @@ export const EcoShopPage: React.FC = () => {
               initial={{ opacity: 0, scale: 0.94, y: 16 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.94, y: 16 }}
-              className="relative w-full max-w-lg bg-white dark:bg-[#0f172a] rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-2xl space-y-5 my-6"
+              className="relative w-full max-w-lg bg-white dark:bg-[#061812] rounded-3xl border border-slate-200 dark:border-emerald-500/25 p-5 sm:p-6 shadow-2xl space-y-4 my-6"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="space-y-1">
-                  <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                  <span className="text-[11px] font-bold text-emerald-600 dark:text-[#00F5A0]">
                     Majburiy obuna sharti
                   </span>
-                  <h3 className="text-xl font-black tracking-tight text-slate-900 dark:text-white">
+                  <h3 className="text-lg font-black tracking-tight text-slate-900 dark:text-white">
                     {subscriptionGateItem.title}
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -1508,7 +1486,7 @@ export const EcoShopPage: React.FC = () => {
                   return (
                     <div
                       key={target.id}
-                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20"
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         {platformIcon}
@@ -1532,9 +1510,9 @@ export const EcoShopPage: React.FC = () => {
                             openAdTargetUrl(target.url);
                           }
                         }}
-                        className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shrink-0 transition-colors no-underline ${
+                        className={`min-h-[38px] px-3.5 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shrink-0 transition-colors no-underline ${
                           visited
-                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-[#00F5A0] border border-emerald-500/30'
                             : 'bg-sky-600 text-white hover:bg-sky-500'
                         }`}
                       >
@@ -1551,7 +1529,7 @@ export const EcoShopPage: React.FC = () => {
                   type="button"
                   disabled={verifyingSubscription}
                   onClick={() => setSubscriptionGateItem(null)}
-                  className="flex-1 py-3.5 bg-slate-100 dark:bg-white/5 rounded-2xl text-xs font-bold text-slate-600 dark:text-slate-300 cursor-pointer"
+                  className="flex-1 min-h-[44px] py-2.5 bg-slate-100 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 cursor-pointer"
                 >
                   Bekor qilish
                 </button>
@@ -1559,7 +1537,7 @@ export const EcoShopPage: React.FC = () => {
                   type="button"
                   disabled={verifyingSubscription}
                   onClick={handleVerifyAndCompleteSubscriptionGate}
-                  className="flex-[2] py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-xs font-bold cursor-pointer disabled:opacity-50"
+                  className="flex-[2] min-h-[44px] py-2.5 bg-gradient-to-r from-[#00F5A0] to-[#10B981] text-[#04110B] font-black border-b-[3px] border-emerald-700 rounded-xl text-xs cursor-pointer disabled:opacity-50"
                 >
                   {verifyingSubscription ? 'Tekshirilmoqda...' : 'Obunani tekshirish & Olish'}
                 </button>
@@ -1571,10 +1549,10 @@ export const EcoShopPage: React.FC = () => {
 
       {/* Super Admin Create / Edit Gift Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-[120] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-[#0f172a] w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 shadow-2xl my-4">
+        <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-[#061812] w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl border border-slate-200 dark:border-emerald-500/25 p-5 sm:p-6 space-y-4 shadow-2xl my-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-black uppercase">
+              <h3 className="text-base font-black">
                 {editingItem ? "Sovg'ani Tahrirlash" : "Yangi Sovg'a Qo'shish"}
               </h3>
               <button
@@ -1595,14 +1573,14 @@ export const EcoShopPage: React.FC = () => {
                 placeholder="Sovg'a nomi (masalan: Smart Soat)"
                 value={giftTitle}
                 onChange={e => setGiftTitle(e.target.value)}
-                className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
+                className="w-full min-h-[40px] px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none"
               />
               <textarea
                 rows={2}
                 placeholder="Tavsifi"
                 value={giftDescription}
                 onChange={e => setGiftDescription(e.target.value)}
-                className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none resize-none"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none resize-none"
               />
               <div className="grid grid-cols-2 gap-3">
                 <input
@@ -1611,7 +1589,7 @@ export const EcoShopPage: React.FC = () => {
                   placeholder="Narxi (EcoCoin)"
                   value={giftPrice}
                   onChange={e => setGiftPrice(e.target.value)}
-                  className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
+                  className="w-full min-h-[40px] px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none"
                 />
                 <input
                   type="number"
@@ -1619,13 +1597,13 @@ export const EcoShopPage: React.FC = () => {
                   placeholder="Zaxira soni"
                   value={giftStock}
                   onChange={e => setGiftStock(e.target.value)}
-                  className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
+                  className="w-full min-h-[40px] px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none"
                 />
               </div>
               <select
                 value={giftCategory}
                 onChange={e => setGiftCategory(e.target.value as ShopItem['category'])}
-                className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
+                className="w-full min-h-[40px] px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none"
               >
                 <option value="accessories">Sport & Aksessuarlar</option>
                 <option value="stationery">O'quv qurollari</option>
@@ -1637,10 +1615,10 @@ export const EcoShopPage: React.FC = () => {
                 placeholder="Homiy nomi"
                 value={giftSponsor}
                 onChange={e => setGiftSponsor(e.target.value)}
-                className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
+                className="w-full min-h-[40px] px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none"
               />
               <div className="flex items-center gap-3">
-                <label className="flex-1 px-4 py-3 rounded-2xl bg-emerald-500/10 border border-dashed border-emerald-500/40 text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center justify-center gap-2 cursor-pointer">
+                <label className="flex-1 min-h-[40px] px-3.5 py-2.5 rounded-xl bg-emerald-500/10 border border-dashed border-emerald-500/40 text-emerald-600 dark:text-[#00F5A0] text-xs font-bold flex items-center justify-center gap-2 cursor-pointer">
                   <ImageIcon className="w-4 h-4" />
                   <span>{uploadingGiftImg ? 'Rasm yuklanmoqda...' : 'Qurilmadan rasm yuklash'}</span>
                   <input
@@ -1654,7 +1632,7 @@ export const EcoShopPage: React.FC = () => {
                   <img
                     src={resolveMediaUrl(giftImageUrl)}
                     alt="Preview"
-                    className="w-12 h-12 rounded-xl object-cover border border-slate-200 dark:border-slate-700 shrink-0"
+                    className="w-12 h-12 rounded-xl object-cover border border-slate-200 dark:border-emerald-500/25 shrink-0"
                   />
                 )}
               </div>
@@ -1662,10 +1640,10 @@ export const EcoShopPage: React.FC = () => {
                 <summary className="cursor-pointer">Yoki rasm havolasi (ixtiyoriy)</summary>
                 <input
                   type="text"
-                  placeholder="Rasm URL (https://... yoki /uploads/...)"
+                  placeholder="Rasm URL (/assets/... yoki /uploads/...)"
                   value={giftImageUrl}
                   onChange={e => setGiftImageUrl(e.target.value)}
-                  className="mt-2 w-full px-4 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
+                  className="mt-2 w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none"
                 />
               </details>
               <GiftGateConfigEditor
@@ -1676,7 +1654,7 @@ export const EcoShopPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={savingLoading || uploadingGiftImg}
-                className="w-full py-3.5 bg-emerald-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest cursor-pointer disabled:opacity-50"
+                className="w-full min-h-[44px] py-2.5 bg-gradient-to-r from-[#00F5A0] to-[#10B981] text-[#04110B] font-black border-b-[3px] border-emerald-700 rounded-xl text-xs cursor-pointer disabled:opacity-50"
               >
                 {savingLoading ? 'Saqlanmoqda...' : editingItem ? 'Yangilash' : "Sovg'ani Saqlash"}
               </button>
@@ -1687,10 +1665,10 @@ export const EcoShopPage: React.FC = () => {
 
       {/* Super Admin Quick Ad Create / Edit Modal */}
       {showShopAdModal && (
-        <div className="fixed inset-0 z-[120] bg-slate-950/80 backdrop-blur-sm flex items-start sm:items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-[#0f172a] w-full max-w-lg max-h-[92dvh] overflow-y-auto rounded-3xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-4 shadow-2xl my-3 sm:my-6">
+        <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-sm flex items-start sm:items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-[#061812] w-full max-w-lg max-h-[92dvh] overflow-y-auto rounded-3xl border border-slate-200 dark:border-emerald-500/25 p-5 sm:p-6 space-y-4 shadow-2xl my-3 sm:my-6">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-black uppercase">
+              <h3 className="text-base font-black">
                 {editingAd ? 'Reklamani Tahrirlash' : "Super Admin Reklama Qo'shish"}
               </h3>
               <button
@@ -1708,7 +1686,7 @@ export const EcoShopPage: React.FC = () => {
               <select
                 value={adPlacementChoice}
                 onChange={e => setAdPlacementChoice(e.target.value as any)}
-                className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
+                className="w-full min-h-[40px] px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none"
               >
                 <option value="earn_coins">Reklama ko'rib EcoCoin olish</option>
                 <option value="post_purchase">Sovg'a sotib olgandan keyin (Skip)</option>
@@ -1722,14 +1700,14 @@ export const EcoShopPage: React.FC = () => {
                   placeholder="Reklama nomi"
                   value={adTitleInput}
                   onChange={e => setAdTitleInput(e.target.value)}
-                  className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
+                  className="w-full min-h-[40px] px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none"
                 />
                 <input
                   type="text"
                   placeholder="Homiy / Kompaniya nomi"
                   value={adSponsorInput}
                   onChange={e => setAdSponsorInput(e.target.value)}
-                  className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
+                  className="w-full min-h-[40px] px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none"
                 />
               </div>
               <input
@@ -1737,17 +1715,17 @@ export const EcoShopPage: React.FC = () => {
                 placeholder="Asosiy sarlavha"
                 value={adHeadlineInput}
                 onChange={e => setAdHeadlineInput(e.target.value)}
-                className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
+                className="w-full min-h-[40px] px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none"
               />
               <input
                 type="text"
                 placeholder="Qo'shimcha matn (ixtiyoriy)"
                 value={adSubheadlineInput}
                 onChange={e => setAdSubheadlineInput(e.target.value)}
-                className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
+                className="w-full min-h-[40px] px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none"
               />
               {/* Primary Ad Cover / Screen Image (Visible outside before pressing Watch Video) */}
-              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-emerald-500/30 space-y-2.5">
+              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-[#040D0A] border border-emerald-500/30 space-y-2.5">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[11px] font-extrabold text-emerald-700 dark:text-emerald-300">
                     Reklama ekran rasmi (Videodan oldin tashqaridan ko&apos;rinadi)
@@ -1762,7 +1740,7 @@ export const EcoShopPage: React.FC = () => {
                     </button>
                   )}
                 </div>
-                <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-slate-950 border border-slate-200 dark:border-slate-800">
+                <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20">
                   <img
                     src={resolveMediaUrl(adImageInput) || heroEcoForestImg}
                     onError={e => {
@@ -1811,7 +1789,7 @@ export const EcoShopPage: React.FC = () => {
               </div>
 
               {/* Secondary Optional Small Sponsor Logo */}
-              <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
+              <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 space-y-2">
                 <div className="flex items-center gap-2.5">
                   <div className="w-9 h-9 rounded-full overflow-hidden bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0">
                     {isAdLogoImage(adSponsorLogoInput) ? (
@@ -1828,7 +1806,7 @@ export const EcoShopPage: React.FC = () => {
                       </span>
                     )}
                   </div>
-                  <label className="flex-1 px-3 py-2 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer">
+                  <label className="flex-1 px-3 py-2 rounded-xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 text-slate-600 dark:text-slate-300 text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer">
                     <ImageIcon className="w-3.5 h-3.5 shrink-0" />
                     <span>{uploadingAdLogo ? 'Yuklanmoqda...' : 'Kichik homiy belgisi (ixtiyoriy)'}</span>
                     <input
@@ -1851,7 +1829,7 @@ export const EcoShopPage: React.FC = () => {
               </div>
 
               {/* Duration Presets (15s, 30s, 60s, 90s, 120s + custom) */}
-              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
+              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 space-y-2">
                 <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400">
                   <span className="inline-flex items-center gap-1">
                     <Clock className="w-3.5 h-3.5 text-amber-500" />
@@ -1867,8 +1845,8 @@ export const EcoShopPage: React.FC = () => {
                       onClick={() => setAdSkipSecondsInput(String(sec))}
                       className={`px-2.5 py-1 rounded-lg font-mono font-bold text-[11px] cursor-pointer ${
                         Number(adSkipSecondsInput) === sec
-                          ? 'bg-amber-500 text-slate-950'
-                          : 'bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-300'
+                          ? 'bg-amber-400 text-[#04110B]'
+                          : 'bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 text-slate-500 dark:text-slate-300'
                       }`}
                     >
                       {sec >= 60 ? `${sec / 60} min` : `${sec}s`}
@@ -1881,13 +1859,13 @@ export const EcoShopPage: React.FC = () => {
                     value={adSkipSecondsInput}
                     onChange={e => setAdSkipSecondsInput(e.target.value)}
                     placeholder="soniya"
-                    className="w-20 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono font-bold outline-none"
+                    className="w-20 px-2.5 py-1 rounded-lg bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 text-xs font-mono font-bold outline-none"
                   />
                 </div>
               </div>
 
               {/* Destination Link Type */}
-              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2.5">
+              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 space-y-2.5">
                 <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
                   Reklama bosilganda qayerga kirsin?
                 </div>
@@ -1908,7 +1886,7 @@ export const EcoShopPage: React.FC = () => {
                         className={`py-2 px-2 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 border cursor-pointer ${
                           adCtaType === kind.id
                             ? 'bg-emerald-500/15 border-emerald-500 text-emerald-500'
-                            : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-500'
+                            : 'bg-white dark:bg-[#061812] border-slate-200 dark:border-emerald-500/20 text-slate-500'
                         }`}
                       >
                         <Icon className="w-3.5 h-3.5" />
@@ -1923,7 +1901,7 @@ export const EcoShopPage: React.FC = () => {
                     placeholder="Tugma matni"
                     value={adCtaTextInput}
                     onChange={e => setAdCtaTextInput(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
+                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none"
                   />
                   <input
                     type="text"
@@ -1936,7 +1914,7 @@ export const EcoShopPage: React.FC = () => {
                     }
                     value={adCtaInput}
                     onChange={e => setAdCtaInput(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
+                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none"
                   />
                 </div>
                 <label className="flex items-center gap-2 text-[11px] font-semibold text-slate-600 dark:text-slate-300 cursor-pointer">
@@ -1955,17 +1933,17 @@ export const EcoShopPage: React.FC = () => {
                 <div className="mt-2 space-y-2">
                   <input
                     type="text"
-                    placeholder="Rasm URL (https://... yoki /uploads/...)"
+                    placeholder="Rasm URL (/assets/... yoki /uploads/...)"
                     value={adImageInput}
                     onChange={e => setAdImageInput(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
+                    className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none"
                   />
                   <input
                     type="text"
                     placeholder="Video URL (ixtiyoriy mp4)"
                     value={adVideoInput}
                     onChange={e => setAdVideoInput(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
+                    className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none"
                   />
                 </div>
               </details>
@@ -1975,13 +1953,13 @@ export const EcoShopPage: React.FC = () => {
                   placeholder="Mukofot (EcoCoin)"
                   value={adRewardInput}
                   onChange={e => setAdRewardInput(e.target.value)}
-                  className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold outline-none"
+                  className="w-full min-h-[40px] px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 text-xs font-bold outline-none"
                 />
               )}
               <button
                 type="submit"
                 disabled={uploadingAdImg || uploadingAdLogo || uploadingAdVideo}
-                className="w-full py-3.5 bg-amber-500 text-slate-950 rounded-2xl text-xs font-black uppercase tracking-widest cursor-pointer disabled:opacity-50"
+                className="w-full min-h-[44px] py-2.5 bg-amber-400 hover:bg-amber-300 text-[#04110B] font-black border-b-[3px] border-amber-600 rounded-xl text-xs cursor-pointer disabled:opacity-50"
               >
                 {editingAd ? 'Saqlash' : 'Reklamani Joylash'}
               </button>

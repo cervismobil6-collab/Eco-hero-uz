@@ -113,6 +113,8 @@ export interface UnifiedDatabase {
   };
   registrationSessions: Record<string, any>;
   dailyQuizClaims: Record<string, string>; // key: uid -> YYYY-MM-DD
+  quizSessions?: Record<string, any>;
+  quizDailyAttempts?: Record<string, Record<string, number>>;
   qrEcoScans: any[];
   schoolDuels: any[];
   certificates: any[];
@@ -1285,6 +1287,8 @@ function createDefaultDatabase(): UnifiedDatabase {
     weeklyChallenge: createDefaultWeeklyChallenge(),
     registrationSessions: {},
     dailyQuizClaims: {},
+    quizSessions: {},
+    quizDailyAttempts: {},
     qrEcoScans: [],
     schoolDuels: [],
     certificates: [],
@@ -1817,6 +1821,12 @@ function loadUnifiedDatabase(): { db: UnifiedDatabase; needsSave: boolean } {
         weeklyChallenge: parsedWeekly,
         registrationSessions: parsed.registrationSessions || {},
         dailyQuizClaims: parsed.dailyQuizClaims || {},
+        quizSessions:
+          parsed.quizSessions && typeof parsed.quizSessions === 'object' ? parsed.quizSessions : {},
+        quizDailyAttempts:
+          parsed.quizDailyAttempts && typeof parsed.quizDailyAttempts === 'object'
+            ? parsed.quizDailyAttempts
+            : {},
         qrEcoScans: Array.isArray(parsed.qrEcoScans) ? parsed.qrEcoScans : [],
         schoolDuels: Array.isArray(parsed.schoolDuels) ? parsed.schoolDuels : [],
         certificates: Array.isArray(parsed.certificates) ? parsed.certificates : [],

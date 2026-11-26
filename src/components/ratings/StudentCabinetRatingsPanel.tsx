@@ -264,9 +264,9 @@ export const StudentCabinetRatingsPanel: React.FC<StudentCabinetRatingsPanelProp
 
           {/* Progress Bar */}
           <div className="space-y-1.5">
-            <div className="w-full h-2.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+            <div className="w-full h-2.5 rounded-full bg-slate-100 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/15 overflow-hidden">
               <div
-                className="h-full bg-emerald-500 transition-all duration-300"
+                className="h-full bg-gradient-to-r from-[#00F5A0] to-[#10B981] transition-all duration-300"
                 style={{
                   width: `${Math.min(
                     100,
@@ -289,7 +289,7 @@ export const StudentCabinetRatingsPanel: React.FC<StudentCabinetRatingsPanelProp
           </div>
 
           {/* Prize Preview */}
-          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-2">
+          <div className="pt-4 border-t border-slate-100 dark:border-emerald-500/15 space-y-2">
             <div className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
               <Gift className="w-3.5 h-3.5 text-amber-500" />
               <span>
@@ -298,14 +298,14 @@ export const StudentCabinetRatingsPanel: React.FC<StudentCabinetRatingsPanelProp
                   : '1 oylik eng faol TOP-3 o‘quvchilar uchun qimmatbaho sovg‘alar:'}
               </span>
             </div>
-            <div className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
+            <div className="divide-y divide-slate-100 dark:divide-emerald-500/15 text-xs">
               {current.prizes.map(p => (
                 <div key={p.rank} className="py-2 flex items-center justify-between gap-3">
                   <span className="text-slate-700 dark:text-slate-300 font-medium">
                     <span className="font-mono font-bold text-amber-500 mr-2">#{p.rank}</span>
                     {p.title}
                   </span>
-                  <span className="font-mono tabular-nums font-bold text-emerald-600 dark:text-emerald-400 shrink-0">
+                  <span className="font-mono tabular-nums font-bold text-emerald-600 dark:text-[#00F5A0] shrink-0">
                     +{p.bonusCoins.toLocaleString()} ECO
                   </span>
                 </div>
@@ -316,7 +316,7 @@ export const StudentCabinetRatingsPanel: React.FC<StudentCabinetRatingsPanelProp
       ) : (
         <div>
           {/* Active Prize Banner Strip */}
-          <div className="px-6 py-3.5 bg-slate-50 dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-2 text-xs">
+          <div className="px-5 py-3 bg-slate-50 dark:bg-[#040D0A] border-b border-slate-200 dark:border-emerald-500/15 flex flex-col lg:flex-row lg:items-center justify-between gap-2 text-xs">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
               <span className="font-bold text-slate-800 dark:text-slate-200 inline-flex items-center gap-1.5">
                 <Crown className="w-3.5 h-3.5 text-amber-500" />
@@ -326,7 +326,7 @@ export const StudentCabinetRatingsPanel: React.FC<StudentCabinetRatingsPanelProp
                 <span key={p.rank} className="text-slate-600 dark:text-slate-300">
                   {idx > 0 && <span className="mr-2 text-slate-400">·</span>}
                   <b className="font-mono text-amber-600 dark:text-amber-400">#{p.rank}</b> {p.title}{' '}
-                  <span className="font-mono text-emerald-600 dark:text-emerald-400">(+{p.bonusCoins} ECO)</span>
+                  <span className="font-mono text-emerald-600 dark:text-[#00F5A0]">(+{p.bonusCoins} ECO)</span>
                 </span>
               ))}
             </div>
@@ -343,13 +343,13 @@ export const StudentCabinetRatingsPanel: React.FC<StudentCabinetRatingsPanelProp
               Hali reytingga ball to‘plagan o‘quvchilar mavjud emas. Ilk ekologik harakatni bajaring!
             </div>
           ) : (
-            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            <div className="divide-y divide-slate-100 dark:divide-emerald-500/15">
               {(compact ? current.top10.slice(0, 10) : current.top10).map(entry => renderRow(entry, current))}
 
               {/* If caller is ranked below #10, show separator and exact position below Top 10 */}
               {current.myEntry && current.myRank && current.myRank > 10 && (
                 <>
-                  <div className="py-1.5 px-4 text-center text-xs font-mono text-slate-400 tracking-[0.4em] bg-slate-50/70 dark:bg-slate-950/50">
+                  <div className="py-1.5 px-4 text-center text-xs font-mono text-slate-400 tracking-[0.4em] bg-slate-50/70 dark:bg-[#040D0A]/60">
                     ···
                   </div>
                   {renderRow(current.myEntry, current, true)}
@@ -360,10 +360,10 @@ export const StudentCabinetRatingsPanel: React.FC<StudentCabinetRatingsPanelProp
 
           {/* Bottom Personal Position Summary */}
           {current.myEntry && (
-            <div className="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/60 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="px-5 py-3 border-t border-slate-200 dark:border-emerald-500/15 bg-slate-50/60 dark:bg-[#040D0A]/70 flex flex-wrap items-center justify-between gap-2 text-xs">
               <span className="text-slate-600 dark:text-slate-300">
                 Jami ishtirokchilar: <b className="font-mono tabular-nums">{current.totalParticipants}</b> · Sizning o‘rningiz:{' '}
-                <b className="font-mono tabular-nums text-emerald-600 dark:text-emerald-400">#{current.myRank}</b>
+                <b className="font-mono tabular-nums text-emerald-600 dark:text-[#00F5A0]">#{current.myRank}</b>
               </span>
               <span className="font-mono tabular-nums font-semibold text-amber-600 dark:text-amber-400">
                 {current.scope === 'school'
@@ -383,12 +383,12 @@ export const StudentCabinetRatingsPanel: React.FC<StudentCabinetRatingsPanelProp
 
           {/* Recent Monthly Winners */}
           {current.recentWinners && current.recentWinners.length > 0 && (
-            <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 space-y-2 text-xs">
+            <div className="px-5 py-3.5 border-t border-slate-200 dark:border-emerald-500/15 space-y-2 text-xs">
               <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                 <Gift className="w-3.5 h-3.5 text-amber-500" />
                 <span>So‘nggi oy g‘oliblari ({current.recentWinners[0].periodLabel})</span>
               </div>
-              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+              <div className="divide-y divide-slate-100 dark:divide-emerald-500/15">
                 {current.recentWinners[0].winners.map(w => (
                   <div key={`${w.uid}_${w.rank}`} className="py-1.5 flex items-center justify-between gap-2">
                     <span className="text-slate-700 dark:text-slate-300">
@@ -396,7 +396,7 @@ export const StudentCabinetRatingsPanel: React.FC<StudentCabinetRatingsPanelProp
                       {w.fullName}
                       {w.schoolName && current.scope === 'district' ? ` · ${w.schoolName}` : ''}
                     </span>
-                    <span className="font-mono tabular-nums text-emerald-600 dark:text-emerald-400 font-semibold">
+                    <span className="font-mono tabular-nums text-emerald-600 dark:text-[#00F5A0] font-semibold">
                       +{w.bonusCoins} ECO
                     </span>
                   </div>

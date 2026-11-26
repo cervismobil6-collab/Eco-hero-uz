@@ -17,6 +17,7 @@ import { useEco } from '../../context/EcoContext';
 import { AnalyticsResponse, RosterCoordinatorEntry } from '../../types/eco';
 import { UZBEKISTAN_DISTRICTS, UZBEKISTAN_REGIONS } from '../../data/mockData';
 import { EcoTelegramChatPanel } from '../chat/EcoTelegramChatPanel';
+import cabinetDistrictCommandImg from '../../assets/images/cabinet_district_command_1795687842689.jpg';
 
 function slugifyChatKey(val?: string): string {
   return String(val || '')
@@ -50,6 +51,7 @@ export const RegionalCoordinatorDashboardView: React.FC = () => {
   const [distLeaders, setDistLeaders] = useState<any[]>([]);
   const [districtCoordinators, setDistrictCoordinators] = useState<RosterCoordinatorEntry[]>([]);
   const [selectedChatChannelId, setSelectedChatChannelId] = useState<string>('');
+  const [sectionTab, setSectionTab] = useState<'overview' | 'cadres' | 'coordinators_chat'>('overview');
   const chatSectionRef = React.useRef<HTMLDivElement | null>(null);
 
   // Elect District Coordinator form state
@@ -98,7 +100,10 @@ export const RegionalCoordinatorDashboardView: React.FC = () => {
     const regSlug = slugifyChatKey(regName || user.region || 'toshkent_shahri');
     const ch = coordUid ? `reg_dm:${regSlug}:${coordUid}` : `reg_group:${regSlug}`;
     setSelectedChatChannelId(ch);
-    chatSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setSectionTab('coordinators_chat');
+    window.setTimeout(() => {
+      chatSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
   };
 
   const regionalSchools = useMemo(() => {
@@ -163,71 +168,112 @@ export const RegionalCoordinatorDashboardView: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="p-6 md:p-8 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-rose-500/10 text-rose-500 flex items-center justify-center shrink-0">
-            <Globe className="w-7 h-7" />
-          </div>
-          <div>
-            <div className="text-xs font-semibold text-rose-500">Viloyat Eko-Koordinatori Kabineti</div>
-            <h2 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+    <div className="space-y-4">
+      {/* Compact Duolingo Dark-Emerald Regional Hero */}
+      <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-br from-[#072419] via-[#051811] to-[#040D0A] border border-emerald-500/30 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5 min-w-0">
+          <img
+            src={cabinetDistrictCommandImg}
+            alt="Viloyat Eko-Koordinatori"
+            className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl object-cover border border-emerald-400/40 shrink-0 shadow-md"
+          />
+          <div className="min-w-0">
+            <div className="text-[11px] font-bold text-[#00F5A0] uppercase tracking-wider truncate">
+              Viloyat Eko-Koordinatori Kabineti
+            </div>
+            <h2 className="text-lg sm:text-2xl font-extrabold tracking-tight text-white truncate">
               {user.role === 'super_admin' ? "O'zbekiston Viloyatlari" : user.region}
             </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Tuman koordinatorlarini saylash, hududiy arizalarni tasdiqlash va tumanlar reytingini kuzatish
+            <p className="text-xs text-emerald-100/70 truncate">
+              Tuman koordinatorlarini saylash, hududiy arizalar va tumanlar reytingini kuzatish
             </p>
           </div>
         </div>
       </div>
 
-      {/* Regional KPI Row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
-          <div className="text-xs text-slate-500 flex items-center justify-between">
+      {/* Compact Regional KPI Row */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="p-3.5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-0.5">
+          <div className="text-[11px] text-slate-500 dark:text-emerald-100/60 flex items-center justify-between">
             <span>Tumanlar soni</span>
-            <Globe className="w-4 h-4 text-rose-500" />
+            <Globe className="w-4 h-4 text-emerald-400" />
           </div>
-          <div className="text-2xl font-black font-mono tabular-nums">{distPerf.length}</div>
+          <div className="text-xl font-black font-mono tabular-nums text-slate-900 dark:text-white">{distPerf.length}</div>
         </div>
-        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
-          <div className="text-xs text-slate-500 flex items-center justify-between">
+        <div className="p-3.5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-0.5">
+          <div className="text-[11px] text-slate-500 dark:text-emerald-100/60 flex items-center justify-between">
             <span>Maktablar</span>
             <SchoolIcon className="w-4 h-4 text-emerald-500" />
           </div>
-          <div className="text-2xl font-black font-mono tabular-nums">{regionalSchools.length}</div>
+          <div className="text-xl font-black font-mono tabular-nums text-slate-900 dark:text-white">{regionalSchools.length}</div>
         </div>
-        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
-          <div className="text-xs text-slate-500 flex items-center justify-between">
+        <div className="p-3.5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-0.5">
+          <div className="text-[11px] text-slate-500 dark:text-emerald-100/60 flex items-center justify-between">
             <span>Hal etilgan muammolar</span>
             <CheckCircle2 className="w-4 h-4 text-sky-500" />
           </div>
-          <div className="text-2xl font-black font-mono tabular-nums text-emerald-500">
+          <div className="text-xl font-black font-mono tabular-nums text-emerald-500">
             {regionalReports.filter(r => r.status === 'resolved' || r.status === 'RESOLVED').length} / {regionalReports.length}
           </div>
         </div>
-        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
-          <div className="text-xs text-slate-500 flex items-center justify-between">
+        <div className="p-3.5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-0.5">
+          <div className="text-[11px] text-slate-500 dark:text-emerald-100/60 flex items-center justify-between">
             <span>Hududiy EcoCoin</span>
             <Award className="w-4 h-4 text-amber-500" />
           </div>
-          <div className="text-2xl font-black font-mono tabular-nums text-amber-500">
+          <div className="text-xl font-black font-mono tabular-nums text-amber-500">
             {(regionAnalytics?.totals.totalEcoCoins ?? regionalSchools.reduce((s, sc) => s + (sc.totalCoins || 0), 0)).toLocaleString()} ECO
           </div>
         </div>
       </div>
 
+      {/* Role-Specific Compact Top Sub-Tabs */}
+      <div className="flex flex-wrap gap-2 p-1.5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20">
+        {[
+          { id: 'overview' as const, label: 'Viloyat Reytingi', badge: 0 },
+          { id: 'cadres' as const, label: 'Arizalar & Kadrlar', badge: incomingApplications.length },
+          { id: 'coordinators_chat' as const, label: 'Koordinatorlar & Suhbat', badge: 0 },
+        ].map(tab => {
+          const active = sectionTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setSectionTab(tab.id)}
+              className={`flex-1 min-w-[140px] min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                active
+                  ? 'bg-gradient-to-r from-[#00F5A0] to-[#10B981] text-[#04110B] border-b-[3px] border-emerald-700 shadow-sm'
+                  : 'text-slate-600 dark:text-emerald-100/75 hover:bg-slate-100 dark:hover:bg-[#040D0A]'
+              }`}
+            >
+              <span>{tab.label}</span>
+              {tab.badge > 0 && (
+                <span
+                  className={`px-1.5 py-0.5 rounded-full text-[10px] font-black font-mono tabular-nums ${
+                    active ? 'bg-[#04110B] text-[#00F5A0]' : 'bg-amber-500 text-slate-950'
+                  }`}
+                >
+                  {tab.badge}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {sectionTab === 'cadres' && (
+        <div className="space-y-4">
       {/* Elect District Coordinator + Regional Application Queue */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         <form
           onSubmit={handleAppointCoordinator}
-          className="lg:col-span-5 p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4"
+          className="lg:col-span-5 p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-3.5"
         >
           <div className="flex items-center gap-2">
-            <UserPlus className="w-5 h-5 text-rose-500" />
+            <UserPlus className="w-5 h-5 text-emerald-500" />
             <div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">Tuman Koordinatorini saylash</h3>
-              <p className="text-[11px] text-slate-500">
+              <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">Tuman Koordinatorini saylash</h3>
+              <p className="text-[11px] text-slate-500 dark:text-emerald-100/60">
                 Viloyatingizdagi istalgan tuman uchun mas’ul koordinator tayinlang
               </p>
             </div>
@@ -235,24 +281,24 @@ export const RegionalCoordinatorDashboardView: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
             <div className="sm:col-span-2">
-              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Nomzod F.I.Sh. *</label>
+              <label className="block font-semibold text-slate-600 dark:text-emerald-100/75 mb-1">Nomzod F.I.Sh. *</label>
               <input
                 type="text"
                 required
                 value={coordFullName}
                 onChange={e => setCoordFullName(e.target.value)}
                 placeholder="Masalan: Azizbek Rahimov"
-                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 outline-none focus:border-emerald-500"
               />
             </div>
 
             {user.role === 'super_admin' && (
               <div className="sm:col-span-2">
-                <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Viloyat *</label>
+                <label className="block font-semibold text-slate-600 dark:text-emerald-100/75 mb-1">Viloyat *</label>
                 <select
                   value={targetRegion}
                   onChange={e => setTargetRegion(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 outline-none focus:border-emerald-500"
+                  className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 outline-none focus:border-emerald-500"
                 >
                   {UZBEKISTAN_REGIONS.map(r => (
                     <option key={r} value={r}>
@@ -264,13 +310,13 @@ export const RegionalCoordinatorDashboardView: React.FC = () => {
             )}
 
             <div className="sm:col-span-2">
-              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">
+              <label className="block font-semibold text-slate-600 dark:text-emerald-100/75 mb-1">
                 Qaysi tuman uchun *
               </label>
               <select
                 value={selectedDistrict}
                 onChange={e => setSelectedDistrict(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 outline-none focus:border-emerald-500"
               >
                 {availableDistricts.map(d => (
                   <option key={d} value={d}>
@@ -281,35 +327,35 @@ export const RegionalCoordinatorDashboardView: React.FC = () => {
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Telefon raqam</label>
+              <label className="block font-semibold text-slate-600 dark:text-emerald-100/75 mb-1">Telefon raqam</label>
               <input
                 type="text"
                 value={coordPhone}
                 onChange={e => setCoordPhone(e.target.value)}
                 placeholder="+998 90 123 45 67"
-                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 outline-none focus:border-emerald-500"
               />
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Telegram username</label>
+              <label className="block font-semibold text-slate-600 dark:text-emerald-100/75 mb-1">Telegram username</label>
               <input
                 type="text"
                 value={coordTelegram}
                 onChange={e => setCoordTelegram(e.target.value)}
                 placeholder="@koordinator_uz"
-                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 outline-none focus:border-emerald-500"
               />
             </div>
 
             <div className="sm:col-span-2">
-              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Email</label>
+              <label className="block font-semibold text-slate-600 dark:text-emerald-100/75 mb-1">Email</label>
               <input
                 type="email"
                 value={coordEmail}
                 onChange={e => setCoordEmail(e.target.value)}
                 placeholder="koordinator@ecohero.uz"
-                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 outline-none focus:border-emerald-500"
               />
             </div>
           </div>
@@ -317,20 +363,20 @@ export const RegionalCoordinatorDashboardView: React.FC = () => {
           <button
             type="submit"
             disabled={coordSubmitting}
-            className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white font-bold text-xs cursor-pointer"
+            className="w-full min-h-[44px] py-2.5 rounded-xl bg-gradient-to-r from-[#00F5A0] to-[#10B981] hover:brightness-105 disabled:opacity-60 text-[#04110B] font-black text-xs border-b-[3px] border-emerald-700 active:translate-y-[1px] cursor-pointer"
           >
             {coordSubmitting ? 'Tayinlanmoqda...' : 'Tuman Koordinatorini saylash'}
           </button>
         </form>
 
-        <div className="lg:col-span-7 p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+        <div className="lg:col-span-7 p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-3.5">
           <div className="flex items-center gap-2">
             <Inbox className="w-5 h-5 text-sky-500" />
             <div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+              <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
                 Viloyat Arizalari Navbati ({incomingApplications.length})
               </h3>
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-slate-500 dark:text-emerald-100/60">
                 Tuman koordinatori, maktab sardori va eko-elchi bo‘lish uchun kelgan arizalar
               </p>
             </div>
@@ -345,7 +391,7 @@ export const RegionalCoordinatorDashboardView: React.FC = () => {
               {incomingApplications.map(app => (
                 <div
                   key={app.id}
-                  className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-3 text-xs"
+                  className="p-3.5 rounded-2xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 space-y-3 text-xs"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
@@ -363,7 +409,7 @@ export const RegionalCoordinatorDashboardView: React.FC = () => {
                     </span>
                   </div>
 
-                  <p className="text-slate-600 dark:text-slate-300 leading-relaxed">{app.verificationDetails}</p>
+                  <p className="text-slate-600 dark:text-emerald-100/80 leading-relaxed">{app.verificationDetails}</p>
 
                   <div className="flex flex-col sm:flex-row gap-2">
                     <input
@@ -371,14 +417,14 @@ export const RegionalCoordinatorDashboardView: React.FC = () => {
                       value={reviewNotes[app.id] || ''}
                       onChange={e => setReviewNotes(prev => ({ ...prev, [app.id]: e.target.value }))}
                       placeholder="Izoh (ixtiyoriy)"
-                      className="flex-1 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs outline-none"
+                      className="flex-1 px-3 py-2 rounded-xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 text-xs outline-none focus:border-emerald-500"
                     />
                     <div className="flex items-center gap-1.5 shrink-0">
                       <button
                         type="button"
                         disabled={reviewBusyId === app.id}
                         onClick={() => handleReviewApp(app.id, 'approve')}
-                        className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                        className="min-h-[40px] px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#00F5A0] to-[#10B981] text-[#04110B] font-black border-b-[2px] border-emerald-700 inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
                       >
                         <CheckCircle2 className="w-3.5 h-3.5" />
                         <span>Tasdiqlash</span>
@@ -387,7 +433,7 @@ export const RegionalCoordinatorDashboardView: React.FC = () => {
                         type="button"
                         disabled={reviewBusyId === app.id}
                         onClick={() => handleReviewApp(app.id, 'request_info')}
-                        className="px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-600 dark:text-amber-400 font-bold inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                        className="min-h-[40px] px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-500 font-bold inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
                       >
                         <AlertCircle className="w-3.5 h-3.5" />
                         <span>So‘rash</span>
@@ -396,7 +442,7 @@ export const RegionalCoordinatorDashboardView: React.FC = () => {
                         type="button"
                         disabled={reviewBusyId === app.id}
                         onClick={() => handleReviewApp(app.id, 'reject')}
-                        className="px-3 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-500 font-bold inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                        className="min-h-[40px] px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-500 font-bold inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
                       >
                         <XCircle className="w-3.5 h-3.5" />
                         <span>Rad</span>
@@ -409,15 +455,19 @@ export const RegionalCoordinatorDashboardView: React.FC = () => {
           )}
         </div>
       </div>
+        </div>
+      )}
 
+      {sectionTab === 'overview' && (
+        <div className="space-y-4">
       {/* District Performance Comparison & Coordinator Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-7 p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
-          <h3 className="text-base font-bold text-slate-900 dark:text-white">Tumanlar bo‘yicha taqqoslama</h3>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        <div className="lg:col-span-7 p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-3.5">
+          <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">Tumanlar bo‘yicha taqqoslama</h3>
           {distPerf.length === 0 ? (
             <p className="py-8 text-center text-xs text-slate-500">Tumanlar ma’lumotlari yuklanmoqda...</p>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3.5">
               {distPerf.map((d, i) => {
                 const pct = Math.max(6, Math.round(((d.coins || 0) / maxDistCoins) * 100));
                 return (
@@ -431,8 +481,8 @@ export const RegionalCoordinatorDashboardView: React.FC = () => {
                         <b className="text-emerald-500">{(d.coins || 0).toLocaleString()} ECO</b>
                       </span>
                     </div>
-                    <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                      <div className="h-full rounded-full bg-emerald-500" style={{ width: `${pct}%` }} />
+                    <div className="h-2 rounded-full bg-slate-100 dark:bg-[#040D0A] overflow-hidden border border-emerald-500/15">
+                      <div className="h-full rounded-full bg-gradient-to-r from-[#00F5A0] to-[#10B981]" style={{ width: `${pct}%` }} />
                     </div>
                   </div>
                 );
@@ -441,15 +491,15 @@ export const RegionalCoordinatorDashboardView: React.FC = () => {
           )}
         </div>
 
-        <div className="lg:col-span-5 p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
-          <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+        <div className="lg:col-span-5 p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-3.5">
+          <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
             <Trophy className="w-4 h-4 text-amber-500" />
             <span>Tuman Koordinatorlari Faolligi</span>
           </h3>
           {distLeaders.length === 0 ? (
             <p className="py-8 text-center text-xs text-slate-500">Tuman koordinatorlari ma’lumotlari topilmadi.</p>
           ) : (
-            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            <div className="divide-y divide-slate-100 dark:divide-emerald-500/15">
               {distLeaders.map((dl, idx) => (
                 <div key={dl.id} className="py-3 flex items-center justify-between text-xs">
                   <div>
@@ -471,8 +521,8 @@ export const RegionalCoordinatorDashboardView: React.FC = () => {
       </div>
 
       {/* Regional School Rankings */}
-      <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
-        <h3 className="text-base font-bold text-slate-900 dark:text-white">Viloyat maktablari reytingi</h3>
+      <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-3.5">
+        <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">Viloyat maktablari reytingi</h3>
         {regionalSchools.length === 0 ? (
           <p className="py-8 text-center text-xs text-slate-500">Hozircha viloyatda ro‘yxatga olingan maktablar yo‘q.</p>
         ) : (
@@ -481,7 +531,7 @@ export const RegionalCoordinatorDashboardView: React.FC = () => {
               {regionalSchools.slice(0, 15).map((s, idx) => (
                 <div
                   key={s.id}
-                  className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 text-xs"
+                  className="p-3.5 rounded-2xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 flex items-center justify-between gap-3 text-xs"
                 >
                   <div className="min-w-0">
                     <div className="font-bold text-slate-900 dark:text-white truncate">
@@ -501,7 +551,7 @@ export const RegionalCoordinatorDashboardView: React.FC = () => {
 
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="border-b border-slate-200 dark:border-slate-800 text-slate-500">
+                <thead className="border-b border-slate-200 dark:border-emerald-500/20 text-slate-500">
                   <tr>
                     <th className="py-3 pr-3">#</th>
                     <th className="py-3 px-3">Maktab</th>
@@ -510,7 +560,7 @@ export const RegionalCoordinatorDashboardView: React.FC = () => {
                     <th className="py-3 pl-3 text-right">Jami EcoCoin</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                <tbody className="divide-y divide-slate-100 dark:divide-emerald-500/15">
                   {regionalSchools.slice(0, 15).map((s, idx) => (
                     <tr key={s.id}>
                       <td className="py-3 pr-3 font-mono tabular-nums text-slate-400">#{idx + 1}</td>
@@ -528,23 +578,27 @@ export const RegionalCoordinatorDashboardView: React.FC = () => {
           </>
         )}
       </div>
+        </div>
+      )}
 
+      {sectionTab === 'coordinators_chat' && (
+        <div className="space-y-4">
       {/* District Coordinators Directory (Chat, Tasks & Ideas) */}
-      <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+      <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-3.5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <Users className="w-4 h-4 text-rose-500" />
+            <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+              <Users className="w-4 h-4 text-emerald-500" />
               <span>Viloyat Tuman Koordinatorlari ({districtCoordinators.length})</span>
             </h3>
-            <p className="text-[11px] text-slate-500">
+            <p className="text-[11px] text-slate-500 dark:text-emerald-100/60">
               Tuman koordinatorlariga topshiriq yuboring, g‘oya almashing yoki Telegram-chatda suhbatlashing
             </p>
           </div>
           <button
             type="button"
             onClick={() => openCoordinatorChat()}
-            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shrink-0"
+            className="min-h-[42px] px-4 py-2 rounded-xl bg-gradient-to-r from-[#00F5A0] to-[#10B981] hover:brightness-105 text-[#04110B] text-xs font-black border-b-[3px] border-emerald-700 inline-flex items-center gap-1.5 cursor-pointer shrink-0"
           >
             <MessageSquare className="w-4 h-4" />
             <span>Umumiy Viloyat Kengashiga Yozish</span>
@@ -560,11 +614,11 @@ export const RegionalCoordinatorDashboardView: React.FC = () => {
             {districtCoordinators.map(dc => (
               <div
                 key={dc.uid}
-                className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 text-xs"
+                className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 flex items-center justify-between gap-3 text-xs"
               >
                 <div className="min-w-0">
                   <div className="font-bold text-slate-900 dark:text-white truncate">{dc.fullName}</div>
-                  <div className="text-[11px] text-rose-500 font-semibold truncate">{dc.district}</div>
+                  <div className="text-[11px] text-emerald-500 font-semibold truncate">{dc.district}</div>
                   <div className="text-[11px] text-slate-500 truncate">
                     {dc.schoolsCount} maktab · {dc.telegramUsername || dc.phoneNumber || 'Aloqa'}
                   </div>
@@ -572,7 +626,7 @@ export const RegionalCoordinatorDashboardView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => openCoordinatorChat(dc.uid, dc.region)}
-                  className="px-3 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-[11px] font-bold inline-flex items-center gap-1 shrink-0 cursor-pointer"
+                  className="min-h-[38px] px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#00F5A0] to-[#10B981] text-[#04110B] text-[11px] font-black inline-flex items-center gap-1 shrink-0 cursor-pointer"
                 >
                   <Send className="w-3 h-3" />
                   <span>Topshiriq / G‘oya</span>
@@ -591,6 +645,8 @@ export const RegionalCoordinatorDashboardView: React.FC = () => {
           title="Viloyat va Tuman Koordinatorlari Chati (Topshiriq, G‘oya & Rasm)"
         />
       </div>
+        </div>
+      )}
     </div>
   );
 };

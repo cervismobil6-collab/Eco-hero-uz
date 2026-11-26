@@ -29,6 +29,7 @@ import {
 } from '../../types/eco';
 import { EcoTelegramChatPanel } from '../chat/EcoTelegramChatPanel';
 import { StudentRatingManagerCard } from './StudentRatingManagerCard';
+import cabinetDistrictCommandImg from '../../assets/images/cabinet_district_command_1795687842689.jpg';
 
 function slugifyChatKey(val?: string): string {
   return String(val || '')
@@ -76,6 +77,7 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
   const [userGrowthForbidden, setUserGrowthForbidden] = useState(false);
   const [districtCaptains, setDistrictCaptains] = useState<RosterCaptainEntry[]>([]);
   const [selectedChatChannelId, setSelectedChatChannelId] = useState<string>('');
+  const [sectionTab, setSectionTab] = useState<'overview' | 'cadres' | 'captains_chat'>('overview');
   const chatSectionRef = React.useRef<HTMLDivElement | null>(null);
 
   // Appoint School Captain form state
@@ -123,7 +125,10 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
     const distSlug = slugifyChatKey(captainDistrict || user.district || 'shayxontohur_tumani');
     const ch = captainUid ? `dist_dm:${distSlug}:${captainUid}` : `dist_group:${distSlug}`;
     setSelectedChatChannelId(ch);
-    chatSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setSectionTab('captains_chat');
+    window.setTimeout(() => {
+      chatSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
   };
 
   const districtSchools = useMemo(() => {
@@ -261,27 +266,29 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
   const realAmbassadorRatings = districtDetails?.ambassadorRatings || [];
 
   return (
-    <div className="space-y-6">
-      {/* District Header */}
-      <div className="p-6 md:p-8 rounded-3xl bg-gradient-to-br from-white via-white to-amber-50/40 dark:from-slate-900 dark:via-slate-900 dark:to-amber-950/20 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-        <div className="flex items-center gap-4 min-w-0">
-          <div className="w-14 h-14 rounded-2xl bg-amber-500/15 border border-amber-500/25 text-amber-500 flex items-center justify-center shrink-0">
-            <MapPin className="w-7 h-7" />
-          </div>
+    <div className="space-y-4">
+      {/* Compact Duolingo Dark-Emerald District Hero Header */}
+      <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-br from-[#072419] via-[#051811] to-[#040D0A] border border-emerald-500/30 text-white shadow-xl flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5 min-w-0">
+          <img
+            src={cabinetDistrictCommandImg}
+            alt="Tuman Eko-Koordinatori"
+            className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl object-cover border border-emerald-400/40 shrink-0 shadow-md"
+          />
           <div className="min-w-0">
-            <div className="text-xs font-semibold text-amber-600 dark:text-amber-400">
-              Tuman Eko-Koordinatori Kabineti · {user.region}
+            <div className="text-[11px] font-bold text-[#00F5A0] uppercase tracking-wider truncate">
+              Tuman Eko-Koordinatori · {user.region}
             </div>
-            <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white truncate">
+            <h2 className="text-lg sm:text-2xl font-extrabold tracking-tight text-white truncate">
               {user.district} Tumani Boshqaruvi
             </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Maktab sardorlarini tayinlash, arizalarni tasdiqlash, jonli reyting va oy oxirgi kuni TOP-3 promokodli taqdirlash.
+            <p className="text-xs text-emerald-100/70 truncate">
+              Maktab sardorlarini tayinlash, arizalar, jonli reyting va oy oxiri TOP-3 taqdirlash.
             </p>
           </div>
         </div>
 
-        <div className="flex flex-col items-stretch sm:items-end gap-2 shrink-0">
+        <div className="flex flex-col items-stretch sm:items-end gap-1.5 shrink-0">
           <button
             onClick={handleAwardTop3}
             disabled={
@@ -289,14 +296,14 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
               !districtDetails?.isLastDayOfMonth ||
               Boolean(districtDetails?.alreadyAwardedThisMonth)
             }
-            className={`px-4 py-3 rounded-2xl font-black text-xs inline-flex items-center justify-center gap-2 cursor-pointer transition-all ${
+            className={`min-h-[44px] px-4 py-2.5 rounded-xl font-black text-xs inline-flex items-center justify-center gap-2 transition-all ${
               districtDetails?.isLastDayOfMonth && !districtDetails?.alreadyAwardedThisMonth
-                ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-lg shadow-amber-500/25'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 cursor-not-allowed'
+                ? 'bg-gradient-to-r from-amber-400 to-amber-500 hover:brightness-105 text-[#04110B] border-b-[3px] border-amber-700 active:translate-y-[1px] cursor-pointer shadow-lg shadow-amber-500/20'
+                : 'bg-[#040D0A]/80 text-emerald-100/60 border border-emerald-500/25 cursor-not-allowed'
             }`}
           >
             {districtDetails?.alreadyAwardedThisMonth ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
             ) : districtDetails?.isLastDayOfMonth ? (
               <Gift className="w-4 h-4" />
             ) : (
@@ -312,19 +319,19 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
                 : 'Sovg‘a topshirish (Oy oxirgi kuni ochiladi)'}
             </span>
           </button>
-          <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400 flex items-center sm:justify-end gap-1.5">
-            <Calendar className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+          <div className="text-[11px] font-medium text-emerald-100/65 flex items-center sm:justify-end gap-1.5">
+            <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" />
             {districtDetails?.alreadyAwardedThisMonth ? (
-              <span className="text-emerald-600 dark:text-emerald-400">
+              <span className="text-[#00F5A0]">
                 {districtDetails.periodLabel} g‘oliblariga promokod yuborildi
               </span>
             ) : districtDetails?.isLastDayOfMonth ? (
-              <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+              <span className="text-[#00F5A0] font-semibold">
                 Bugun oyning oxirgi kuni! TOP-3 maktab va elchilarga promokod yuborish ochiq
               </span>
             ) : (
               <span className="font-mono tabular-nums">
-                Ochilish sanasi: {districtDetails?.lastDayDateLabel || 'Oy oxirgi kuni'} · yana{' '}
+                Ochilish: {districtDetails?.lastDayDateLabel || 'Oy oxirgi kuni'} ·{' '}
                 {districtDetails?.daysRemainingInMonth ?? '—'} kun qoldi
               </span>
             )}
@@ -332,54 +339,90 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
         </div>
       </div>
 
-      {/* KPI Strip */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
-          <div className="text-xs text-slate-500 flex items-center justify-between">
+      {/* Compact KPI Strip */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="p-3.5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-0.5">
+          <div className="text-[11px] text-slate-500 dark:text-emerald-100/60 flex items-center justify-between">
             <span>Vakolatli maktablar</span>
             <SchoolIcon className="w-4 h-4 text-emerald-500" />
           </div>
-          <div className="text-2xl font-black font-mono tabular-nums">{districtSchools.length}</div>
+          <div className="text-xl font-black font-mono tabular-nums text-slate-900 dark:text-white">{districtSchools.length}</div>
         </div>
-        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
-          <div className="text-xs text-slate-500 flex items-center justify-between">
+        <div className="p-3.5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-0.5">
+          <div className="text-[11px] text-slate-500 dark:text-emerald-100/60 flex items-center justify-between">
             <span>Jami o‘quvchilar</span>
             <Award className="w-4 h-4 text-sky-500" />
           </div>
-          <div className="text-2xl font-black font-mono tabular-nums">{totalStudents.toLocaleString()}</div>
+          <div className="text-xl font-black font-mono tabular-nums text-slate-900 dark:text-white">{totalStudents.toLocaleString()}</div>
         </div>
-        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
-          <div className="text-xs text-slate-500 flex items-center justify-between">
+        <div className="p-3.5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-0.5">
+          <div className="text-[11px] text-slate-500 dark:text-emerald-100/60 flex items-center justify-between">
             <span>Hal etilgan hisobotlar</span>
             <CheckCircle2 className="w-4 h-4 text-emerald-500" />
           </div>
-          <div className="text-2xl font-black font-mono tabular-nums text-emerald-500">{resolvedReports.length}</div>
+          <div className="text-xl font-black font-mono tabular-nums text-emerald-500">{resolvedReports.length}</div>
         </div>
-        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
-          <div className="text-xs text-slate-500 flex items-center justify-between">
+        <div className="p-3.5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-0.5">
+          <div className="text-[11px] text-slate-500 dark:text-emerald-100/60 flex items-center justify-between">
             <span>Oy yakuniga qoldi</span>
             <Clock className="w-4 h-4 text-amber-500" />
           </div>
-          <div className="text-2xl font-black font-mono tabular-nums text-amber-500">
+          <div className="text-xl font-black font-mono tabular-nums text-amber-500">
             {districtDetails?.daysRemainingInMonth ?? '—'} kun
           </div>
         </div>
       </div>
 
+      {/* Role-Specific Compact Top Sub-Tabs */}
+      <div className="flex flex-wrap gap-2 p-1.5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20">
+        {[
+          { id: 'overview' as const, label: 'Boshqaruv & Reyting', badge: 0 },
+          { id: 'cadres' as const, label: 'Arizalar & Kadrlar', badge: incomingApplications.length },
+          { id: 'captains_chat' as const, label: 'Sardorlar & Suhbat', badge: 0 },
+        ].map(tab => {
+          const active = sectionTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setSectionTab(tab.id)}
+              className={`flex-1 min-w-[140px] min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                active
+                  ? 'bg-gradient-to-r from-[#00F5A0] to-[#10B981] text-[#04110B] border-b-[3px] border-emerald-700 shadow-sm'
+                  : 'text-slate-600 dark:text-emerald-100/75 hover:bg-slate-100 dark:hover:bg-[#040D0A]'
+              }`}
+            >
+              <span>{tab.label}</span>
+              {tab.badge > 0 && (
+                <span
+                  className={`px-1.5 py-0.5 rounded-full text-[10px] font-black font-mono tabular-nums ${
+                    active ? 'bg-[#04110B] text-[#00F5A0]' : 'bg-amber-500 text-slate-950'
+                  }`}
+                >
+                  {tab.badge}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {sectionTab === 'overview' && (
+        <div className="space-y-4">
       {/* EXCLUSIVE TOP-3 District User-Growth Race (Visible ONLY to District Coordinators & Super Admin) */}
       {!userGrowthForbidden && userGrowth && (
-        <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-amber-500/40 space-y-4">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#061812] border border-amber-500/35 space-y-4">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
             <div className="space-y-1">
               <div className="flex items-center gap-2 text-xs font-bold text-amber-500">
                 <Lock className="w-3.5 h-3.5" />
                 <span>Faqat Tuman Koordinatorlari uchun maxfiy musobaqa</span>
               </div>
-              <h3 className="text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-emerald-500" />
+              <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-emerald-500" />
                 <span>Eng Ko‘p Foydalanuvchi Yig‘gan TOP-3 Tuman (Qimmatbaho Sovg‘alar)</span>
               </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">{userGrowth.prizeNote}</p>
+              <p className="text-xs text-slate-500 dark:text-emerald-100/65">{userGrowth.prizeNote}</p>
             </div>
             {userGrowth.myDistrictRank && (
               <div className="px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs shrink-0">
@@ -404,7 +447,7 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
                     ? 'bg-emerald-500/10 border-emerald-500/40'
                     : row.isTop3
                     ? 'bg-amber-500/5 border-amber-500/30'
-                    : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800'
+                    : 'bg-slate-50 dark:bg-[#040D0A] border-slate-200 dark:border-emerald-500/20'
                 }`}
               >
                 <div className="flex items-start justify-between gap-2">
@@ -429,7 +472,7 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
                     {row.isTop3 && <div className="text-[10px] font-bold text-amber-500">TOP-3 Sovrin</div>}
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200/70 dark:border-slate-800 text-[11px] font-mono tabular-nums">
+                <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200/70 dark:border-emerald-500/20 text-[11px] font-mono tabular-nums">
                   <div>
                     <div className="text-slate-400 font-sans">Maktablar</div>
                     <div className="font-bold text-slate-800 dark:text-slate-200">{row.schoolsCount}</div>
@@ -452,7 +495,7 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
           {/* Desktop Table for District User Growth */}
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="border-b border-slate-200 dark:border-slate-800 text-slate-500">
+              <thead className="border-b border-slate-200 dark:border-emerald-500/20 text-slate-500 dark:text-emerald-100/60">
                 <tr>
                   <th className="py-2.5 pr-3">O‘rin</th>
                   <th className="py-2.5 px-3">Tuman / Koordinator</th>
@@ -462,7 +505,7 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
                   <th className="py-2.5 pl-3 text-right">Jami foydalanuvchi</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              <tbody className="divide-y divide-slate-100 dark:divide-emerald-500/15">
                 {userGrowth.items.map(row => (
                   <tr
                     key={row.id}
@@ -516,22 +559,27 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
         district={user.district}
       />
 
+        </div>
+      )}
+
+      {sectionTab === 'captains_chat' && (
+        <div className="space-y-4">
       {/* District School Captains Directory + Quick Command/Chat Buttons */}
-      <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+      <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <Users className="w-4 h-4 text-indigo-500" />
+            <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+              <Users className="w-4 h-4 text-emerald-500" />
               <span>Tumandagi Maktab Sardorlari Ro‘yxati ({districtCaptains.length})</span>
             </h3>
-            <p className="text-[11px] text-slate-500">
+            <p className="text-[11px] text-slate-500 dark:text-emerald-100/60">
               Istalgan maktab sardoriga yakka tartibda yoki barchaga umumiy buyruq/xabar va rasm yuboring
             </p>
           </div>
           <button
             type="button"
             onClick={() => openCaptainChat()}
-            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shrink-0"
+            className="min-h-[42px] px-4 py-2 rounded-xl bg-gradient-to-r from-[#00F5A0] to-[#10B981] hover:brightness-105 text-[#04110B] text-xs font-black border-b-[3px] border-emerald-700 inline-flex items-center gap-1.5 cursor-pointer shrink-0"
           >
             <MessageSquare className="w-4 h-4" />
             <span>Barcha Sardorlarga Umumiy Yozish</span>
@@ -540,18 +588,18 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
 
         {districtCaptains.length === 0 ? (
           <p className="py-6 text-center text-xs text-slate-500">
-            Hozircha tumanda tayinlangan maktab sardorlari ro‘yxati bo‘sh. Quyida qo‘shishingiz mumkin.
+            Hozircha tumanda tayinlangan maktab sardorlari ro‘yxati bo‘sh. Arizalar & Kadrlar bo‘limida qo‘shishingiz mumkin.
           </p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {districtCaptains.map(cap => (
               <div
                 key={cap.uid}
-                className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 text-xs"
+                className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 flex items-center justify-between gap-3 text-xs"
               >
                 <div className="min-w-0">
                   <div className="font-bold text-slate-900 dark:text-white truncate">{cap.fullName}</div>
-                  <div className="text-[11px] text-indigo-500 font-semibold truncate">{cap.schoolName}</div>
+                  <div className="text-[11px] text-emerald-500 font-semibold truncate">{cap.schoolName}</div>
                   <div className="text-[11px] text-slate-500 truncate">
                     {cap.telegramUsername ? <span className="font-mono text-sky-500">{cap.telegramUsername}</span> : null}
                     {cap.phoneNumber ? ` · ${cap.phoneNumber}` : ''}
@@ -560,7 +608,7 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => openCaptainChat(cap.uid, cap.district)}
-                  className="px-3 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-[11px] font-bold inline-flex items-center gap-1 shrink-0 cursor-pointer"
+                  className="min-h-[38px] px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#00F5A0] to-[#10B981] text-[#04110B] text-[11px] font-black inline-flex items-center gap-1 shrink-0 cursor-pointer"
                 >
                   <Send className="w-3 h-3" />
                   <span>Yozish</span>
@@ -571,19 +619,32 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
         )}
       </div>
 
+      {/* Telegram-style Real-Time Chat with School Captains & Regional Coordinator */}
+      <div ref={chatSectionRef}>
+        <EcoTelegramChatPanel
+          defaultChannelId={selectedChatChannelId}
+          allowedScopes={['district_captains', 'regional_coordinators']}
+          title="Tuman Maktab Sardorlari & Viloyat Chati (Oddiy xabar, Buyruq & Rasm)"
+        />
+      </div>
+        </div>
+      )}
+
+      {sectionTab === 'cadres' && (
+        <div className="space-y-4">
       {/* Appoint School Captain + Incoming District Applications */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         <form
           onSubmit={handleAppointCaptain}
-          className="lg:col-span-5 p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4"
+          className="lg:col-span-5 p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-3.5"
         >
           <div className="flex items-center gap-2">
             <UserPlus className="w-5 h-5 text-emerald-500" />
             <div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+              <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
                 Maktab Sardori qo‘shish va biriktirish
               </h3>
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-slate-500 dark:text-emerald-100/60">
                 O‘quvchi ma’lumotlarini kiriting va tumaningizdagi maktabga biriktiring
               </p>
             </div>
@@ -591,7 +652,7 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
             <div className="sm:col-span-2">
-              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">
+              <label className="block font-semibold text-slate-600 dark:text-emerald-100/75 mb-1">
                 O‘quvchi F.I.Sh. *
               </label>
               <input
@@ -600,62 +661,62 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
                 value={captainFullName}
                 onChange={e => setCaptainFullName(e.target.value)}
                 placeholder="Masalan: Jasur Karimov"
-                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 outline-none focus:border-emerald-500"
               />
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Telefon raqam</label>
+              <label className="block font-semibold text-slate-600 dark:text-emerald-100/75 mb-1">Telefon raqam</label>
               <input
                 type="text"
                 value={captainPhone}
                 onChange={e => setCaptainPhone(e.target.value)}
                 placeholder="+998 90 123 45 67"
-                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 outline-none focus:border-emerald-500"
               />
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Telegram username</label>
+              <label className="block font-semibold text-slate-600 dark:text-emerald-100/75 mb-1">Telegram username</label>
               <input
                 type="text"
                 value={captainTelegram}
                 onChange={e => setCaptainTelegram(e.target.value)}
                 placeholder="@sardor_uz"
-                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 outline-none focus:border-emerald-500"
               />
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Email</label>
+              <label className="block font-semibold text-slate-600 dark:text-emerald-100/75 mb-1">Email</label>
               <input
                 type="email"
                 value={captainEmail}
                 onChange={e => setCaptainEmail(e.target.value)}
                 placeholder="sardor@ecohero.uz"
-                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 outline-none focus:border-emerald-500"
               />
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Sinf</label>
+              <label className="block font-semibold text-slate-600 dark:text-emerald-100/75 mb-1">Sinf</label>
               <input
                 type="text"
                 value={captainGrade}
                 onChange={e => setCaptainGrade(e.target.value)}
                 placeholder="10-A"
-                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 outline-none focus:border-emerald-500"
               />
             </div>
 
             <div className="sm:col-span-2">
-              <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">
+              <label className="block font-semibold text-slate-600 dark:text-emerald-100/75 mb-1">
                 Qaysi maktabga biriktiriladi *
               </label>
               <select
                 value={selectedSchoolId}
                 onChange={e => setSelectedSchoolId(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 outline-none focus:border-emerald-500"
               >
                 {districtSchools.map(s => (
                   <option key={s.id} value={s.id}>
@@ -669,7 +730,7 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
             {selectedSchoolId === '__new__' && (
               <>
                 <div>
-                  <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                  <label className="block font-semibold text-slate-600 dark:text-emerald-100/75 mb-1">
                     Maktab raqami *
                   </label>
                   <input
@@ -678,11 +739,11 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
                     value={newSchoolNumber}
                     onChange={e => setNewSchoolNumber(e.target.value)}
                     placeholder="Masalan: 34"
-                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 outline-none focus:border-emerald-500"
+                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 outline-none focus:border-emerald-500"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                  <label className="block font-semibold text-slate-600 dark:text-emerald-100/75 mb-1">
                     Rasmiy maktab nomi *
                   </label>
                   <input
@@ -691,7 +752,7 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
                     value={newSchoolName}
                     onChange={e => setNewSchoolName(e.target.value)}
                     placeholder="34-sonli maktab"
-                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 outline-none focus:border-emerald-500"
+                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 outline-none focus:border-emerald-500"
                   />
                 </div>
               </>
@@ -701,21 +762,21 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
           <button
             type="submit"
             disabled={captainSubmitting}
-            className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white font-bold text-xs cursor-pointer"
+            className="w-full min-h-[44px] py-2.5 rounded-xl bg-gradient-to-r from-[#00F5A0] to-[#10B981] hover:brightness-105 disabled:opacity-60 text-[#04110B] font-black text-xs border-b-[3px] border-emerald-700 active:translate-y-[1px] cursor-pointer"
           >
             {captainSubmitting ? 'Biriktirilmoqda...' : 'Maktab Sardorini tayinlash'}
           </button>
         </form>
 
-        <div className="lg:col-span-7 p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+        <div className="lg:col-span-7 p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-3.5">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Inbox className="w-5 h-5 text-sky-500" />
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
                   Kelgan Arizalar Navbati ({incomingApplications.length})
                 </h3>
-                <p className="text-[11px] text-slate-500">
+                <p className="text-[11px] text-slate-500 dark:text-emerald-100/60">
                   Tumaningizdagi Maktab Sardori va Eko-Elchi nomzodlarining arizalari
                 </p>
               </div>
@@ -731,7 +792,7 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
               {incomingApplications.map(app => (
                 <div
                   key={app.id}
-                  className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-3 text-xs"
+                  className="p-3.5 rounded-2xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 space-y-3 text-xs"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
@@ -749,7 +810,7 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
                     </span>
                   </div>
 
-                  <p className="text-slate-600 dark:text-slate-300 leading-relaxed">{app.verificationDetails}</p>
+                  <p className="text-slate-600 dark:text-emerald-100/80 leading-relaxed">{app.verificationDetails}</p>
 
                   <div className="flex flex-col sm:flex-row gap-2">
                     <input
@@ -757,14 +818,14 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
                       value={reviewNotes[app.id] || ''}
                       onChange={e => setReviewNotes(prev => ({ ...prev, [app.id]: e.target.value }))}
                       placeholder="Izoh (ixtiyoriy)"
-                      className="flex-1 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs outline-none"
+                      className="flex-1 px-3 py-2 rounded-xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 text-xs outline-none focus:border-emerald-500"
                     />
                     <div className="flex items-center gap-1.5 shrink-0">
                       <button
                         type="button"
                         disabled={reviewBusyId === app.id}
                         onClick={() => handleReviewApp(app.id, 'approve')}
-                        className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                        className="min-h-[40px] px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#00F5A0] to-[#10B981] text-[#04110B] font-black border-b-[2px] border-emerald-700 inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
                       >
                         <CheckCircle2 className="w-3.5 h-3.5" />
                         <span>Tasdiqlash</span>
@@ -773,7 +834,7 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
                         type="button"
                         disabled={reviewBusyId === app.id}
                         onClick={() => handleReviewApp(app.id, 'request_info')}
-                        className="px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-600 dark:text-amber-400 font-bold inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                        className="min-h-[40px] px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-500 font-bold inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
                       >
                         <AlertCircle className="w-3.5 h-3.5" />
                         <span>So‘rash</span>
@@ -782,7 +843,7 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
                         type="button"
                         disabled={reviewBusyId === app.id}
                         onClick={() => handleReviewApp(app.id, 'reject')}
-                        className="px-3 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-500 font-bold inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                        className="min-h-[40px] px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-500 font-bold inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
                       >
                         <XCircle className="w-3.5 h-3.5" />
                         <span>Rad</span>
@@ -795,10 +856,14 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
           )}
         </div>
       </div>
+        </div>
+      )}
 
+      {sectionTab === 'overview' && (
+        <div className="space-y-4">
       {/* Real District School Ratings + Restricted District Leaders Leaderboard */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-7 p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        <div className="lg:col-span-7 p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <h3 className="text-base font-bold text-slate-900 dark:text-white">
@@ -852,7 +917,7 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
                           i === 0
                             ? 'bg-amber-500/10 border-amber-400/50'
                             : i === 1
-                            ? 'bg-slate-200/60 dark:bg-slate-800/70 border-slate-300 dark:border-slate-700'
+                            ? 'bg-slate-200/60 dark:bg-[#040D0A] border-slate-300 dark:border-emerald-500/20'
                             : 'bg-orange-500/10 border-orange-500/30'
                         }`}
                       >
@@ -881,7 +946,7 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
                       className={`p-3.5 rounded-2xl border text-xs space-y-2 ${
                         s.isTop3
                           ? 'bg-amber-500/5 border-amber-500/30'
-                          : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800'
+                          : 'bg-slate-50 dark:bg-[#040D0A] border-slate-200 dark:border-emerald-500/20'
                       }`}
                     >
                       <div className="flex items-start justify-between gap-2">
@@ -900,7 +965,7 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
                           {s.realScore.toLocaleString()} ball
                         </div>
                       </div>
-                      <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200/70 dark:border-slate-800 text-[11px] font-mono tabular-nums">
+                      <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200/70 dark:border-emerald-500/20 text-[11px] font-mono tabular-nums">
                         <div>
                           <div className="text-slate-400 font-sans">O‘quvchilar</div>
                           <div className="font-bold text-sky-500">{(s.registeredStudentsCount || 0).toLocaleString()}</div>
@@ -918,7 +983,7 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
                       </div>
                     </div>
                   ))}
-                  <div className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/70 flex items-center justify-between text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                  <div className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-[#040D0A] flex items-center justify-between text-[11px] font-bold text-slate-600 dark:text-slate-300">
                     <span>Jami: {schoolRows.length} ta maktab</span>
                     <span className="font-mono tabular-nums text-sky-500">{totalStudentsRow.toLocaleString()} o‘quvchi</span>
                   </div>
@@ -927,7 +992,7 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
                 {/* Desktop Table */}
                 <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-left text-xs">
-                    <thead className="border-b border-slate-200 dark:border-slate-800 text-slate-500">
+                    <thead className="border-b border-slate-200 dark:border-emerald-500/20 text-slate-500">
                       <tr>
                         <th className="py-3 pr-3">#</th>
                         <th className="py-3 px-3">Maktab</th>
@@ -937,7 +1002,7 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
                         <th className="py-3 pl-3 text-right">Real Ball</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    <tbody className="divide-y divide-slate-100 dark:divide-emerald-500/15">
                       {schoolRows.map(s => (
                         <tr key={s.id} className={s.isTop3 ? 'bg-amber-500/5' : ''}>
                           <td className="py-3 pr-3 font-mono tabular-nums font-bold text-slate-500">
@@ -964,7 +1029,7 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
                         </tr>
                       ))}
                     </tbody>
-                    <tfoot className="border-t border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                    <tfoot className="border-t border-slate-200 dark:border-emerald-500/20 text-[11px] font-bold text-slate-600 dark:text-slate-300">
                       <tr>
                         <td colSpan={2} className="py-2.5 pr-3">
                           Tumandagi jami: {schoolRows.length} ta maktab
@@ -985,9 +1050,9 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
         </div>
 
         {/* Restricted District Leaders Leaderboard */}
-        <div className="lg:col-span-5 p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+        <div className="lg:col-span-5 p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-3.5">
           <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
               <Trophy className="w-4 h-4 text-amber-500" />
               <span>Tuman Koordinatorlari Reytingi</span>
             </h3>
@@ -1004,7 +1069,7 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
           ) : leaders.length === 0 ? (
             <p className="py-8 text-center text-xs text-slate-500">Ma’lumotlar yo‘q.</p>
           ) : (
-            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            <div className="divide-y divide-slate-100 dark:divide-emerald-500/15">
               {leaders.slice(0, 8).map((l, idx) => (
                 <div key={l.id} className="py-3 flex items-center justify-between gap-3 text-xs">
                   <div className="flex items-center gap-3 min-w-0">
@@ -1028,11 +1093,11 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
       </div>
 
       {/* Full District Ambassadors Ranking & Monthly Winners */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-7 p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        <div className="lg:col-span-7 p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-3.5">
           <div className="flex items-center justify-between gap-2">
             <div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+              <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
                 Tumandagi Barcha Eko-Elchilar Reytingi ({realAmbassadorRatings.length || districtAmbassadors.length})
               </h3>
               <p className="text-[11px] text-slate-500">
@@ -1044,7 +1109,7 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
           {realAmbassadorRatings.length === 0 && districtAmbassadors.length === 0 ? (
             <p className="text-xs text-slate-500 py-6 text-center">Eko-Elchilar ro‘yxati bo‘sh.</p>
           ) : (
-            <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[360px] overflow-y-auto pr-1">
+            <div className="divide-y divide-slate-100 dark:divide-emerald-500/15 max-h-[360px] overflow-y-auto pr-1">
               {(realAmbassadorRatings.length > 0
                 ? realAmbassadorRatings
                 : districtAmbassadors.map((a, idx) => ({
@@ -1086,10 +1151,10 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
           )}
         </div>
 
-        <div className="lg:col-span-5 space-y-6">
+        <div className="lg:col-span-5 space-y-4">
           {/* Monthly Awards History */}
-          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
-            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-3">
+            <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
               <Gift className="w-4 h-4 text-amber-500" />
               <span>Oy oxiri g‘oliblari tarixi</span>
             </h3>
@@ -1100,7 +1165,7 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
                 {districtAwardHistory.slice(0, 2).map(aw => (
                   <div
                     key={aw.id}
-                    className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2 text-xs"
+                    className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 space-y-2 text-xs"
                   >
                     <div className="font-bold text-amber-500">
                       {aw.periodLabel} · {aw.district}
@@ -1163,8 +1228,8 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
           </div>
 
           {/* District Media Projects */}
-          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
-            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-3.5">
+            <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
               <Camera className="w-4 h-4 text-sky-500" />
               <span>
                 Tumandagi eko-loyihalar ({districtMedia.length}) · Kutilayotgan muammo: {unresolvedReports.length}
@@ -1173,7 +1238,7 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
             {districtMedia.length === 0 ? (
               <p className="text-xs text-slate-500 py-4 text-center">Tumanda yuborilgan media loyihalar yo‘q.</p>
             ) : (
-              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+              <div className="divide-y divide-slate-100 dark:divide-emerald-500/15">
                 {districtMedia.slice(0, 4).map(m => (
                   <div key={m.id} className="py-2.5 flex items-center justify-between gap-3 text-xs">
                     <div className="min-w-0">
@@ -1190,15 +1255,8 @@ export const DistrictCoordinatorDashboardView: React.FC = () => {
           </div>
         </div>
       </div>
-
-      {/* Telegram-style Real-Time Chat with School Captains & Regional Coordinator */}
-      <div ref={chatSectionRef}>
-        <EcoTelegramChatPanel
-          defaultChannelId={selectedChatChannelId}
-          allowedScopes={['district_captains', 'regional_coordinators']}
-          title="Tuman Maktab Sardorlari & Viloyat Chati (Oddiy xabar, Buyruq & Rasm)"
-        />
-      </div>
+        </div>
+      )}
     </div>
   );
 };

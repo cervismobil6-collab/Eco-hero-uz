@@ -3443,8 +3443,16 @@ app.patch('/api/reports/:id', requireRoles('super_admin', 'moderator'), (req: Au
     if (severity !== undefined) report.severity = severity;
     if (status !== undefined) report.status = status;
     if (rewardCoins !== undefined) report.rewardCoins = Math.max(0, Number(rewardCoins) || 0);
-    if (imageUrl !== undefined) report.imageUrl = String(imageUrl).trim();
-    if (resolvedImageUrl !== undefined) report.resolvedImageUrl = String(resolvedImageUrl).trim();
+    // BEFORE original photo from student is immutable once created
+    if (imageUrl !== undefined && !report.beforeImageUrl && !report.imageUrl) {
+      const cleanImg = String(imageUrl).trim();
+      report.imageUrl = cleanImg;
+      report.beforeImageUrl = cleanImg;
+    }
+    if (resolvedImageUrl !== undefined) {
+      report.resolvedImageUrl = String(resolvedImageUrl).trim();
+      report.afterImageUrl = String(resolvedImageUrl).trim();
+    }
     if (address !== undefined) report.address = String(address).trim();
     report.updatedAt = new Date().toISOString();
 
@@ -11352,21 +11360,47 @@ app.delete('/api/admin/ads/:id', requireRoles('super_admin', 'sponsor'), (req: A
 // 8.5 ECO MISSIONS HUB (MULTI-QUESTION QUIZZES, CHANNELS, CUSTOM TASKS)
 // ==========================================
 
+function stripQuizOptionMarker(opt: any): string {
+  return String(opt || '')
+    .trim()
+    .replace(/^\s*[*+✓]+\s*/, '')
+    .trim();
+}
+
+function shuffleQuizArray<T>(items: T[]): T[] {
+  const copy = [...items];
+  for (let i = copy.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
 function normalizeQuizQuestions(missionOrBody: any) {
   const list = Array.isArray(missionOrBody?.questions)
     ? missionOrBody.questions
         .map((q: any, idx: number) => {
-          const opts = Array.isArray(q?.options)
-            ? q.options.map((o: any) => String(o || '').trim()).filter(Boolean)
-            : [];
+          const rawOpts = Array.isArray(q?.options) ? q.options : [];
+          let detectedCorrect = Number(q?.correctIndex);
+          const opts = rawOpts
+            .map((o: any, oIdx: number) => {
+              const s = String(o || '').trim();
+              if (/^\s*[*+]/.test(s) && Number.isNaN(detectedCorrect)) {
+                detectedCorrect = oIdx;
+              }
+              return stripQuizOptionMarker(s);
+            })
+            .filter(Boolean);
           const qText = String(q?.question || '').trim();
           if (!qText || opts.length < 2) return null;
+          const safeCorrect = Number.isNaN(detectedCorrect) ? 0 : detectedCorrect;
           return {
             id: String(q?.id || `q_${Date.now()}_${idx}`),
             question: qText,
             options: opts,
-            correctIndex: Math.max(0, Math.min(opts.length - 1, Number(q?.correctIndex) || 0)),
+            correctIndex: Math.max(0, Math.min(opts.length - 1, safeCorrect)),
             explanation: String(q?.explanation || '').trim() || undefined,
+            ...(q?.imageUrl ? { imageUrl: String(q.imageUrl).trim() } : {}),
           };
         })
         .filter(Boolean)
@@ -11375,9 +11409,8 @@ function normalizeQuizQuestions(missionOrBody: any) {
   if (list.length > 0) return list;
 
   // Fallback for legacy single-question structure
-  const legacyOpts = Array.isArray(missionOrBody?.options)
-    ? missionOrBody.options.map((o: any) => String(o || '').trim()).filter(Boolean)
-    : [];
+  const legacyRaw = Array.isArray(missionOrBody?.options) ? missionOrBody.options : [];
+  const legacyOpts = legacyRaw.map((o: any) => stripQuizOptionMarker(o)).filter(Boolean);
   if (missionOrBody?.question && legacyOpts.length >= 2) {
     return [
       {
@@ -11386,19 +11419,29 @@ function normalizeQuizQuestions(missionOrBody: any) {
         options: legacyOpts,
         correctIndex: Math.max(0, Math.min(legacyOpts.length - 1, Number(missionOrBody.correctIndex) || 0)),
         explanation: String(missionOrBody.explanation || '').trim() || undefined,
+        ...(missionOrBody?.imageUrl ? { imageUrl: String(missionOrBody.imageUrl).trim() } : {}),
       },
     ];
   }
   return [];
 }
 
-function sanitizeMissionForCaller(m: any, isAdmin: boolean) {
-  if (isAdmin || m.type !== 'quiz') return m;
-  const normalizedQuestions = normalizeQuizQuestions(m).map(({ correctIndex: _ci, ...qRest }: any) => qRest);
-  const { correctIndex: _legacyCi, ...rest } = m;
+function sanitizeMissionForCaller(m: any, _isAdmin: boolean) {
+  if (m.type !== 'quiz') return m;
+  const normalizedQuestions = normalizeQuizQuestions(m);
+  const {
+    correctIndex: _legacyCi,
+    explanation: _legacyExp,
+    question: _legacyQ,
+    options: _legacyOpts,
+    questions: _allQs,
+    ...rest
+  } = m;
+  // NEVER expose correctIndex, '*' markers, or question bank answers to the browser
   return {
     ...rest,
-    questions: normalizedQuestions,
+    questions: [],
+    questionCount: normalizedQuestions.length,
     passingPercent: Math.max(10, Math.min(100, Number(m.passingPercent) || 70)),
   };
 }
@@ -11622,10 +11665,16 @@ app.post('/api/missions', requireRoles('super_admin', 'moderator', 'school_admin
     saveCentralDb();
     broadcastRealtimeEvent('db:updated', { scope: 'missions' });
     upsertCatalogDocToFirestoreRest('eco_missions', newMission.id, newMission, getFirebaseTokenFromReq(req)).catch(() => {});
-    res.json({ success: true, mission: newMission });
+    res.json({ success: true, mission: sanitizeMissionForCaller(newMission, false) });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
+});
+
+app.get('/api/missions/:id/admin-detail', requireRoles('super_admin', 'moderator', 'school_admin'), (req: AuthenticatedRequest, res) => {
+  const mission = (centralDb.ecoMissions || []).find((m: any) => m.id === req.params.id);
+  if (!mission) return res.status(404).json({ error: 'Topshiriq topilmadi' });
+  res.json({ success: true, mission });
 });
 
 app.patch('/api/missions/:id', requireRoles('super_admin', 'moderator', 'school_admin'), (req: AuthenticatedRequest, res) => {
@@ -11707,7 +11756,7 @@ app.patch('/api/missions/:id', requireRoles('super_admin', 'moderator', 'school_
     saveCentralDb();
     broadcastRealtimeEvent('db:updated', { scope: 'missions' });
     upsertCatalogDocToFirestoreRest('eco_missions', mission.id, mission, getFirebaseTokenFromReq(req)).catch(() => {});
-    res.json({ success: true, mission });
+    res.json({ success: true, mission: sanitizeMissionForCaller(mission, false) });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -11794,6 +11843,380 @@ app.post('/api/missions/weekly/claim', requireAuth, (req: AuthenticatedRequest, 
   }
 });
 
+// Proctored Quiz Anti-Cheat Session Endpoints (One question at a time, server timer, option/question shuffle, speed check, daily limit)
+const QUIZ_TIME_LIMIT_SECONDS = 20;
+const QUIZ_SUSPICIOUS_FAST_MS = 2000;
+const QUIZ_MAX_DAILY_ATTEMPTS = 3;
+const QUIZ_PROCTOR_NOTICE_UZ =
+  "Bu testni sunʼiy intellekt yordamida yechish taqiqlangan. Shubhali urinishlar uchun mukofot berilmaydi.";
+
+app.post('/api/missions/:id/quiz/start', requireAuth, (req: AuthenticatedRequest, res) => {
+  try {
+    const caller = req.authUser;
+    const mission = (centralDb.ecoMissions || []).find((m: any) => m.id === req.params.id);
+    if (!mission || mission.status !== 'active' || mission.type !== 'quiz') {
+      return res.status(404).json({ error: 'Test topilmadi yoki faol emas' });
+    }
+
+    const allQuestions = normalizeQuizQuestions(mission);
+    if (allQuestions.length === 0) {
+      return res.status(400).json({ error: 'Test savollari topilmadi' });
+    }
+
+    const today = getUzbekistanDateKey();
+    if (!centralDb.quizDailyAttempts || typeof centralDb.quizDailyAttempts !== 'object') {
+      centralDb.quizDailyAttempts = {};
+    }
+    const attemptKey = `${caller.uid}::${mission.id}`;
+    const userAttemptDates = centralDb.quizDailyAttempts[attemptKey] || {};
+    const usedToday = Number(userAttemptDates[today] || 0);
+
+    if (usedToday >= QUIZ_MAX_DAILY_ATTEMPTS) {
+      return res.status(429).json({
+        success: false,
+        limitReached: true,
+        attemptsUsedToday: usedToday,
+        maxAttemptsPerDay: QUIZ_MAX_DAILY_ATTEMPTS,
+        error: `Bugungi urinishlar limiti tugadi (kuniga maksimal ${QUIZ_MAX_DAILY_ATTEMPTS} ta urinish). Ertaga qaytadan urinib ko‘ring!`,
+      });
+    }
+
+    // Select random subset if question bank > 10, otherwise shuffle question order
+    const shuffledPool = shuffleQuizArray(allQuestions);
+    const maxQuestionsPerAttempt = Math.min(shuffledPool.length, 10);
+    const chosenQuestions = (shuffledPool.length > 10 ? shuffledPool.slice(0, maxQuestionsPerAttempt) : shuffledPool).map(
+      (q: any) => {
+        const indexedOptions: { text: string; isCorrect: boolean }[] = q.options.map((text: string, origIdx: number) => ({
+          text: stripQuizOptionMarker(text),
+          isCorrect: origIdx === Number(q.correctIndex),
+        }));
+        const shuffledOptions = shuffleQuizArray(indexedOptions) as { text: string; isCorrect: boolean }[];
+        const shuffledCorrectIndex = Math.max(
+          0,
+          shuffledOptions.findIndex((o: { text: string; isCorrect: boolean }) => o.isCorrect)
+        );
+        return {
+          id: q.id,
+          question: q.question,
+          imageUrl: q.imageUrl || undefined,
+          options: shuffledOptions.map((o: { text: string; isCorrect: boolean }) => o.text),
+          shuffledCorrectIndex,
+          explanation: q.explanation || '',
+        };
+      }
+    );
+
+    if (!centralDb.quizSessions || typeof centralDb.quizSessions !== 'object') {
+      centralDb.quizSessions = {};
+    }
+    // Prune stale sessions older than 24h to keep DB small
+    const cutoffMs = Date.now() - 24 * 3600 * 1000;
+    for (const [sid, sess] of Object.entries(centralDb.quizSessions)) {
+      if (new Date((sess as any)?.createdAt || 0).getTime() < cutoffMs) {
+        delete centralDb.quizSessions[sid];
+      }
+    }
+
+    const nextAttemptsUsed = usedToday + 1;
+    centralDb.quizDailyAttempts[attemptKey] = { [today]: nextAttemptsUsed };
+
+    const nowMs = Date.now();
+    const nowIso = new Date(nowMs).toISOString();
+    const sessionId = `qses_${nowMs}_${Math.random().toString(36).slice(2, 8)}`;
+
+    centralDb.quizSessions[sessionId] = {
+      id: sessionId,
+      userId: caller.uid,
+      missionId: mission.id,
+      dateKey: today,
+      questions: chosenQuestions,
+      currentIndex: 0,
+      questionStartedAtMs: nowMs,
+      answers: [],
+      tabViolations: 0,
+      suspiciousFastCount: 0,
+      isSuspicious: false,
+      cancelled: false,
+      finished: false,
+      createdAt: nowIso,
+    };
+
+    saveCentralDb();
+
+    const firstQ = chosenQuestions[0];
+    const alreadyRewarded = Array.isArray(centralDb.missionCompletions?.[caller.uid])
+      ? centralDb.missionCompletions[caller.uid].includes(mission.id)
+      : false;
+
+    return res.json({
+      success: true,
+      sessionId,
+      totalQuestions: chosenQuestions.length,
+      currentIndex: 0,
+      timeLimitSeconds: QUIZ_TIME_LIMIT_SECONDS,
+      questionStartedAt: nowIso,
+      attemptsUsedToday: nextAttemptsUsed,
+      maxAttemptsPerDay: QUIZ_MAX_DAILY_ATTEMPTS,
+      alreadyRewarded,
+      noticeUz: QUIZ_PROCTOR_NOTICE_UZ,
+      question: {
+        id: firstQ.id,
+        question: firstQ.question,
+        options: firstQ.options,
+        ...(firstQ.imageUrl ? { imageUrl: firstQ.imageUrl } : {}),
+      },
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || 'Test sessiyasini boshlashda xatolik' });
+  }
+});
+
+app.post('/api/missions/:id/quiz/violation', requireAuth, (req: AuthenticatedRequest, res) => {
+  try {
+    const caller = req.authUser;
+    const { sessionId, reason } = req.body || {};
+    const session = centralDb.quizSessions?.[String(sessionId || '')];
+    if (!session || session.userId !== caller.uid || session.missionId !== req.params.id) {
+      return res.status(404).json({ error: 'Test sessiyasi topilmadi' });
+    }
+    if (session.finished || session.cancelled) {
+      return res.json({
+        success: true,
+        cancelled: Boolean(session.cancelled),
+        warningCount: Number(session.tabViolations || 0),
+        message: session.cancelReason || 'Test yakunlangan.',
+      });
+    }
+
+    session.tabViolations = Number(session.tabViolations || 0) + 1;
+    const count = session.tabViolations;
+    if (count >= 2) {
+      session.cancelled = true;
+      session.finished = true;
+      session.isSuspicious = true;
+      session.cancelReason =
+        "Test paytida ilova yoki oyna ikki marta almashtirilgani sababli urinish bekor qilindi.";
+      addAuditLog({
+        actorUid: caller.uid,
+        actorName: caller.fullName,
+        actorRole: caller.role,
+        action: 'quiz_attempt_cancelled_tab_switch',
+        targetCollection: 'eco_missions',
+        targetId: req.params.id,
+        details: { sessionId, reason: reason || 'visibilitychange', tabViolations: count },
+      });
+      saveCentralDb();
+      return res.json({
+        success: true,
+        cancelled: true,
+        warningCount: count,
+        noticeUz: QUIZ_PROCTOR_NOTICE_UZ,
+        message: session.cancelReason,
+      });
+    }
+
+    saveCentralDb();
+    return res.json({
+      success: true,
+      cancelled: false,
+      warningCount: count,
+      message:
+        "Diqqat! Test paytida boshqa oynaga o‘tish taqiqlangan. Yana bir marta takrorlansa urinish avtomatik bekor qilinadi!",
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || 'Xatolik' });
+  }
+});
+
+app.post('/api/missions/:id/quiz/answer', requireAuth, (req: AuthenticatedRequest, res) => {
+  try {
+    const caller = req.authUser;
+    const mission = (centralDb.ecoMissions || []).find((m: any) => m.id === req.params.id);
+    if (!mission || mission.status !== 'active' || mission.type !== 'quiz') {
+      return res.status(404).json({ error: 'Test topilmadi yoki faol emas' });
+    }
+
+    const { sessionId, questionIndex, selectedIndex, timedOut } = req.body || {};
+    const session = centralDb.quizSessions?.[String(sessionId || '')];
+    if (!session || session.userId !== caller.uid || session.missionId !== mission.id) {
+      return res.status(404).json({ error: 'Faol test sessiyasi topilmadi' });
+    }
+    if (session.cancelled) {
+      return res.status(400).json({ error: session.cancelReason || 'Urinish bekor qilingan' });
+    }
+    if (session.finished) {
+      return res.status(400).json({ error: 'Ushbu test sessiyasi allaqachon yakunlangan' });
+    }
+
+    const curIdx = Number(session.currentIndex || 0);
+    if (Number(questionIndex) !== curIdx) {
+      return res.status(409).json({ error: 'Savol tartibi mos kelmadi. Iltimos sahifani yangilang.' });
+    }
+
+    const qObj = session.questions[curIdx];
+    if (!qObj) {
+      return res.status(400).json({ error: 'Savol topilmadi' });
+    }
+
+    const nowMs = Date.now();
+    const elapsedMs = Math.max(0, nowMs - Number(session.questionStartedAtMs || nowMs));
+    const isTimedOut = Boolean(timedOut) || elapsedMs > (QUIZ_TIME_LIMIT_SECONDS * 1000 + 1500);
+    const parsedSelected = selectedIndex === null || selectedIndex === undefined ? -1 : Number(selectedIndex);
+    const isValidSelection =
+      !isTimedOut && !Number.isNaN(parsedSelected) && parsedSelected >= 0 && parsedSelected < qObj.options.length;
+    const isSuspiciousFast = !isTimedOut && isValidSelection && elapsedMs < QUIZ_SUSPICIOUS_FAST_MS;
+
+    if (isSuspiciousFast) {
+      session.suspiciousFastCount = Number(session.suspiciousFastCount || 0) + 1;
+      session.isSuspicious = true;
+    }
+
+    const isCorrect = !isTimedOut && isValidSelection && parsedSelected === Number(qObj.shuffledCorrectIndex);
+
+    session.answers.push({
+      questionId: qObj.id,
+      question: qObj.question,
+      selectedIndex: isValidSelection ? parsedSelected : -1,
+      correctIndex: Number(qObj.shuffledCorrectIndex),
+      isCorrect,
+      timedOut: isTimedOut,
+      suspiciousFast: isSuspiciousFast,
+      elapsedMs,
+      explanation: qObj.explanation || '',
+    });
+
+    // Advance to next single question if not finished
+    if (curIdx + 1 < session.questions.length) {
+      session.currentIndex = curIdx + 1;
+      session.questionStartedAtMs = nowMs;
+      saveCentralDb();
+      const nextQ = session.questions[session.currentIndex];
+      return res.json({
+        success: true,
+        finished: false,
+        currentIndex: session.currentIndex,
+        totalQuestions: session.questions.length,
+        timeLimitSeconds: QUIZ_TIME_LIMIT_SECONDS,
+        questionStartedAt: new Date(nowMs).toISOString(),
+        lastQuestionTimedOut: isTimedOut,
+        lastQuestionSuspiciousFast: isSuspiciousFast,
+        question: {
+          id: nextQ.id,
+          question: nextQ.question,
+          options: nextQ.options,
+          ...(nextQ.imageUrl ? { imageUrl: nextQ.imageUrl } : {}),
+        },
+      });
+    }
+
+    // Complete quiz attempt and grade strictly on server
+    session.finished = true;
+    session.finishedAt = new Date(nowMs).toISOString();
+
+    const totalCount = session.questions.length;
+    const correctCount = session.answers.filter((a: any) => a.isCorrect).length;
+    const scorePercent = totalCount > 0 ? Math.round((correctCount / totalCount) * 100) : 0;
+    const passingPercent = Math.max(10, Math.min(100, Number(mission.passingPercent) || 70));
+    const passed = !session.cancelled && scorePercent >= passingPercent;
+    const isSuspicious = Boolean(session.isSuspicious || Number(session.suspiciousFastCount || 0) > 0);
+
+    if (!centralDb.missionCompletions || typeof centralDb.missionCompletions !== 'object') {
+      centralDb.missionCompletions = {};
+    }
+    const userCompleted = centralDb.missionCompletions[caller.uid] || [];
+    const alreadyRewarded = userCompleted.includes(mission.id);
+    const rewardCoins = Math.max(1, Number(mission.rewardCoins) || 50);
+    const rewardXp = rewardCoins * 4;
+
+    let awardedCoins = 0;
+    let awardedXp = 0;
+
+    if (passed && !isSuspicious && !alreadyRewarded) {
+      userCompleted.push(mission.id);
+      centralDb.missionCompletions[caller.uid] = userCompleted;
+      caller.ecoCoins = (caller.ecoCoins || 0) + rewardCoins;
+      caller.totalCoinsEarned = (caller.totalCoinsEarned || 0) + rewardCoins;
+      caller.ecoXP = Number(caller.ecoXP || 0) + rewardXp;
+      syncUserStatsConsistency(caller);
+      recordTransaction({
+        userId: caller.uid,
+        amount: rewardCoins,
+        type: 'earn',
+        status: 'approved',
+        reason: `Eco-Quiz (${scorePercent}%): ${mission.title}`,
+      });
+      awardedCoins = rewardCoins;
+      awardedXp = rewardXp;
+    }
+
+    if (isSuspicious) {
+      addAuditLog({
+        actorUid: caller.uid,
+        actorName: caller.fullName,
+        actorRole: caller.role,
+        action: 'quiz_attempt_flagged_suspicious',
+        targetCollection: 'eco_missions',
+        targetId: mission.id,
+        details: {
+          sessionId,
+          scorePercent,
+          suspiciousFastCount: session.suspiciousFastCount || 0,
+          tabViolations: session.tabViolations || 0,
+        },
+      });
+    }
+
+    saveCentralDb();
+    if (awardedCoins > 0) {
+      broadcastRealtimeEvent('db:updated', { scope: 'missions' });
+    }
+
+    const suspiciousReason = isSuspicious
+      ? "Bir yoki bir nechta savolga 2 soniyadan tez javob berilgani sababli urinish shubhali deb topildi — XP va EcoCoin berilmaydi."
+      : undefined;
+
+    let resultMessage = '';
+    if (isSuspicious) {
+      resultMessage = `Shubhali urinish aniqlandi (${scorePercent}%): 2 soniyadan tez javob berilgani uchun XP va EcoCoin berilmadi.`;
+    } else if (passed && awardedCoins > 0) {
+      resultMessage = `Ajoyib! Siz ${scorePercent}% natija qayd etdingiz: +${awardedCoins} EcoCoin va +${awardedXp} XP berildi!`;
+    } else if (passed && alreadyRewarded) {
+      resultMessage = `Natija: ${scorePercent}% (${correctCount}/${totalCount}). Ushbu test uchun mukofot birinchi muvaffaqiyatli urinishda berilgan.`;
+    } else {
+      resultMessage = `Natija: ${scorePercent}% (${correctCount}/${totalCount}). O‘tish uchun kamida ${passingPercent}% to‘plang.`;
+    }
+
+    return res.json({
+      success: true,
+      finished: true,
+      passed,
+      scorePercent,
+      correctCount,
+      totalCount,
+      passingPercent,
+      awardedCoins,
+      awardedXp,
+      isSuspicious,
+      suspiciousReason,
+      alreadyRewarded,
+      noticeUz: QUIZ_PROCTOR_NOTICE_UZ,
+      results: session.answers.map((a: any) => ({
+        questionId: a.questionId,
+        question: a.question,
+        selectedIndex: a.selectedIndex,
+        correctIndex: a.correctIndex,
+        isCorrect: a.isCorrect,
+        timedOut: a.timedOut,
+        explanation: a.explanation,
+      })),
+      ...(awardedCoins > 0 ? { newBalance: caller.ecoCoins, completedIds: userCompleted } : {}),
+      message: resultMessage,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || 'Javobni tekshirishda xatolik' });
+  }
+});
+
 app.post('/api/missions/:id/submit', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const caller = req.authUser;
@@ -11814,71 +12237,8 @@ app.post('/api/missions/:id/submit', requireAuth, async (req: AuthenticatedReque
     const nowIso = new Date().toISOString();
 
     if (mission.type === 'quiz') {
-      const quizQuestions = normalizeQuizQuestions(mission);
-      if (quizQuestions.length === 0) {
-        return res.status(400).json({ error: 'Quiz savollari topilmadi' });
-      }
-
-      const rawAnswers: number[] = Array.isArray(req.body?.answers)
-        ? req.body.answers.map((a: any) => Number(a))
-        : req.body?.selectedOptionIndex !== undefined
-        ? [Number(req.body.selectedOptionIndex)]
-        : [];
-
-      if (rawAnswers.length < quizQuestions.length || rawAnswers.some((a) => Number.isNaN(a) || a < 0)) {
-        return res.status(400).json({ error: 'Barcha savollarga javob belgilang' });
-      }
-
-      let correctCount = 0;
-      const results = quizQuestions.map((q: any, idx: number) => {
-        const selectedIndex = rawAnswers[idx];
-        const isCorrect = selectedIndex === Number(q.correctIndex);
-        if (isCorrect) correctCount += 1;
-        return {
-          questionId: q.id,
-          question: q.question,
-          selectedIndex,
-          correctIndex: Number(q.correctIndex),
-          isCorrect,
-          explanation: q.explanation || '',
-        };
-      });
-
-      const totalCount = quizQuestions.length;
-      const scorePercent = Math.round((correctCount / totalCount) * 100);
-      const passingPercent = Math.max(10, Math.min(100, Number(mission.passingPercent) || 70));
-      const passed = scorePercent >= passingPercent;
-
-      if (passed) {
-        userCompleted.push(mission.id);
-        centralDb.missionCompletions[caller.uid] = userCompleted;
-        caller.ecoCoins = (caller.ecoCoins || 0) + reward;
-        caller.totalCoinsEarned = (caller.totalCoinsEarned || 0) + reward;
-        recordTransaction({
-          userId: caller.uid,
-          amount: reward,
-          type: 'earn',
-          status: 'approved',
-          reason: `Eco-Quiz (${scorePercent}%): ${mission.title}`,
-        });
-        saveCentralDb();
-      }
-
-      return res.json({
-        success: true,
-        passed,
-        correct: passed,
-        scorePercent,
-        correctCount,
-        totalCount,
-        passingPercent,
-        awardedCoins: passed ? reward : 0,
-        explanation: results[0]?.explanation || mission.explanation || '',
-        results,
-        ...(passed ? { newBalance: caller.ecoCoins, completedIds: userCompleted } : {}),
-        message: passed
-          ? `Ajoyib! Siz ${scorePercent}% natija qayd etdingiz va +${reward} EcoCoin qo‘lga kiritdingiz!`
-          : `Natija: ${scorePercent}% (${correctCount}/${totalCount}). Coin olish uchun kamida ${passingPercent}% to‘plang va qayta urinib ko‘ring!`,
+      return res.status(400).json({
+        error: "Testlar nazorat ostida bittadan savol rejimida (/quiz/start va /quiz/answer) topshiriladi.",
       });
     }
 

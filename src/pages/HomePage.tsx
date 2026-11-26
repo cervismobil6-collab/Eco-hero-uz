@@ -33,6 +33,7 @@ import { calculateLevelProgress } from '../utils/level';
 import { resolveMediaUrl, openAdTargetUrl } from '../utils/api';
 import { HomePost, HomePostCategory } from '../types/eco';
 import heroEcoForestImg from '../assets/images/hero_eco_forest_1795179384249.jpg';
+import realisticAvatarImg from '../assets/images/profile_avatar_realistic_1795605008121.jpg';
 
 export const HomePage: React.FC = () => {
   const {
@@ -286,9 +287,9 @@ export const HomePage: React.FC = () => {
                       <div className="w-14 h-14 rounded-2xl overflow-hidden border-2 border-emerald-400/60 shadow-lg bg-[#040D0A]">
                         <img
                           src={
-                            user.avatarUrl ||
-                            user.profileImage ||
-                            `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.fullName || 'EcoHero')}`
+                            (user.avatarUrl && !user.avatarUrl.includes('dicebear.com') ? user.avatarUrl : '') ||
+                            (user.profileImage && !user.profileImage.includes('dicebear.com') ? user.profileImage : '') ||
+                            realisticAvatarImg
                           }
                           className="w-full h-full object-cover"
                           alt={user.fullName}

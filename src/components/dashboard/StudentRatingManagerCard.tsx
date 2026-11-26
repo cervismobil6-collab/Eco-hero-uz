@@ -201,11 +201,11 @@ export const StudentRatingManagerCard: React.FC<StudentRatingManagerCardProps> =
     : 0;
 
   return (
-    <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-5">
+    <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 space-y-4">
       {/* Header + Activation Toggle */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         <div className="space-y-1">
-          <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
             <Trophy className="w-4 h-4 text-amber-500" />
             <span>
               {mode === 'school'
@@ -213,24 +213,24 @@ export const StudentRatingManagerCard: React.FC<StudentRatingManagerCardProps> =
                 : "Tuman O'quvchilari Oylik Reytingi (TOP-3 Qimmatbaho Sovg'alar)"}
             </span>
           </h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
+          <p className="text-xs text-slate-500 dark:text-emerald-200/70">
             {mode === 'school'
               ? "Reyting avtomatik yoqilmaydi: kamida 50 ta o'quvchi qo'shilgach Maktab Sardori yoqadi va eng faol 1-o'quvchi taqdirlanadi."
               : "1 oy davomida tumandagi eng faol 3 ta o'quvchiga qimmatbaho sovg'alar beriladi. Kamida 500 ta ishtirokchi yig'ilgach yoqiladi."}
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           <button
             type="button"
             disabled={toggling || !payload || (!payload.enabled && !payload.canActivate)}
             onClick={handleToggle}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold inline-flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+            className={`min-h-[44px] px-4 py-2 rounded-xl text-xs font-bold inline-flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
               payload?.isLiveActive
-                ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-b-2 border-emerald-800'
                 : payload?.canActivate
-                ? 'bg-indigo-600 hover:bg-indigo-500 text-white'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
+                ? 'bg-gradient-to-r from-[#00F5A0] to-[#10B981] text-[#04110B] font-black border-b-2 border-emerald-700'
+                : 'bg-slate-100 dark:bg-[#040D0A] text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-emerald-500/20'
             }`}
           >
             {payload?.isLiveActive ? (
@@ -260,7 +260,7 @@ export const StudentRatingManagerCard: React.FC<StudentRatingManagerCardProps> =
               previewRows.length === 0
             }
             onClick={handleAwardClick}
-            className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 text-xs font-black inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+            className="min-h-[44px] px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 text-xs font-black border-b-2 border-amber-700 inline-flex items-center gap-1.5 cursor-pointer transition-colors"
           >
             <Gift className="w-4 h-4" />
             <span>
@@ -278,7 +278,7 @@ export const StudentRatingManagerCard: React.FC<StudentRatingManagerCardProps> =
 
       {/* Early Award Inline Confirmation (No window.confirm) */}
       {confirmEarlyAward && payload && (
-        <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+        <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
           <div className="text-slate-800 dark:text-slate-200">
             Oy yakuniga hali <b className="font-mono">{payload.daysRemainingInMonth}</b> kun qoldi ({payload.lastDayDateLabel}).{' '}
             Hozirgi yetakchilarni <b>{payload.periodLabel}</b> oyi g‘oliblari sifatida tasdiqlaysizmi?
@@ -287,7 +287,7 @@ export const StudentRatingManagerCard: React.FC<StudentRatingManagerCardProps> =
             <button
               type="button"
               onClick={() => setConfirmEarlyAward(false)}
-              className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 font-semibold cursor-pointer"
+              className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-emerald-500/25 font-semibold cursor-pointer"
             >
               Bekor qilish
             </button>
@@ -307,7 +307,7 @@ export const StudentRatingManagerCard: React.FC<StudentRatingManagerCardProps> =
       ) : payload ? (
         <>
           {/* Threshold Progress Strip */}
-          <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2">
+          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
               <span className="font-semibold text-slate-700 dark:text-slate-200 inline-flex items-center gap-1.5">
                 <Users className="w-4 h-4 text-emerald-500" />
@@ -319,19 +319,19 @@ export const StudentRatingManagerCard: React.FC<StudentRatingManagerCardProps> =
                 {payload.currentMembersCount} / {payload.minMembersThreshold} ({pct}%)
               </span>
             </div>
-            <div className="w-full h-2.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+            <div className="w-full h-2.5 rounded-full bg-slate-200 dark:bg-emerald-950 overflow-hidden">
               <div
                 className={`h-full transition-all duration-300 ${
                   payload.isLiveActive
                     ? 'bg-emerald-500'
                     : payload.canActivate
-                    ? 'bg-indigo-500'
+                    ? 'bg-sky-500'
                     : 'bg-amber-500'
                 }`}
                 style={{ width: `${pct}%` }}
               />
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400">
               <span>
                 Holat:{' '}
                 <b className={payload.isLiveActive ? 'text-emerald-500' : 'text-amber-500'}>
@@ -348,7 +348,7 @@ export const StudentRatingManagerCard: React.FC<StudentRatingManagerCardProps> =
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
             {/* Prize & Threshold Configuration Form */}
             <form onSubmit={handleSaveSettings} className="lg:col-span-5 space-y-3 text-xs">
               <div className="font-bold text-slate-800 dark:text-slate-200">
@@ -358,19 +358,19 @@ export const StudentRatingManagerCard: React.FC<StudentRatingManagerCardProps> =
               {mode === 'school' ? (
                 <>
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+                    <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">
                       1-o‘ringa beriladigan sovg‘a nomi
                     </label>
                     <input
                       type="text"
                       value={schoolPrizeTitle}
                       onChange={e => setSchoolPrizeTitle(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 outline-none focus:border-emerald-500"
+                      className="w-full min-h-[40px] px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 outline-none focus:border-emerald-500"
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-2.5">
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+                      <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">
                         Bonus EcoCoin
                       </label>
                       <input
@@ -378,11 +378,11 @@ export const StudentRatingManagerCard: React.FC<StudentRatingManagerCardProps> =
                         min={0}
                         value={schoolBonusCoins}
                         onChange={e => setSchoolBonusCoins(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 font-mono outline-none focus:border-emerald-500"
+                        className="w-full min-h-[40px] px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 font-mono outline-none focus:border-emerald-500"
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+                      <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">
                         Ishga tushish chegarasi
                       </label>
                       <input
@@ -390,7 +390,7 @@ export const StudentRatingManagerCard: React.FC<StudentRatingManagerCardProps> =
                         min={user.role === 'super_admin' ? 1 : 10}
                         value={schoolThreshold}
                         onChange={e => setSchoolThreshold(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 font-mono outline-none focus:border-emerald-500"
+                        className="w-full min-h-[40px] px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 font-mono outline-none focus:border-emerald-500"
                       />
                     </div>
                   </div>
@@ -400,72 +400,72 @@ export const StudentRatingManagerCard: React.FC<StudentRatingManagerCardProps> =
                   <div className="space-y-2">
                     <div className="grid grid-cols-3 gap-2">
                       <div className="col-span-2">
-                        <label className="block text-[11px] font-semibold text-slate-500 mb-1">1-o‘rin sovg‘asi</label>
+                        <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">1-o‘rin sovg‘asi</label>
                         <input
                           type="text"
                           value={top1Prize}
                           onChange={e => setTop1Prize(e.target.value)}
-                          className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 outline-none focus:border-emerald-500"
+                          className="w-full min-h-[40px] px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 outline-none focus:border-emerald-500"
                         />
                       </div>
                       <div>
-                        <label className="block text-[11px] font-semibold text-slate-500 mb-1">Bonus ECO</label>
+                        <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">Bonus ECO</label>
                         <input
                           type="number"
                           min={0}
                           value={bonus1}
                           onChange={e => setBonus1(e.target.value)}
-                          className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 font-mono outline-none focus:border-emerald-500"
+                          className="w-full min-h-[40px] px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 font-mono outline-none focus:border-emerald-500"
                         />
                       </div>
                     </div>
 
                     <div className="grid grid-cols-3 gap-2">
                       <div className="col-span-2">
-                        <label className="block text-[11px] font-semibold text-slate-500 mb-1">2-o‘rin sovg‘asi</label>
+                        <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">2-o‘rin sovg‘asi</label>
                         <input
                           type="text"
                           value={top2Prize}
                           onChange={e => setTop2Prize(e.target.value)}
-                          className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 outline-none focus:border-emerald-500"
+                          className="w-full min-h-[40px] px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 outline-none focus:border-emerald-500"
                         />
                       </div>
                       <div>
-                        <label className="block text-[11px] font-semibold text-slate-500 mb-1">Bonus ECO</label>
+                        <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">Bonus ECO</label>
                         <input
                           type="number"
                           min={0}
                           value={bonus2}
                           onChange={e => setBonus2(e.target.value)}
-                          className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 font-mono outline-none focus:border-emerald-500"
+                          className="w-full min-h-[40px] px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 font-mono outline-none focus:border-emerald-500"
                         />
                       </div>
                     </div>
 
                     <div className="grid grid-cols-3 gap-2">
                       <div className="col-span-2">
-                        <label className="block text-[11px] font-semibold text-slate-500 mb-1">3-o‘rin sovg‘asi</label>
+                        <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">3-o‘rin sovg‘asi</label>
                         <input
                           type="text"
                           value={top3Prize}
                           onChange={e => setTop3Prize(e.target.value)}
-                          className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 outline-none focus:border-emerald-500"
+                          className="w-full min-h-[40px] px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 outline-none focus:border-emerald-500"
                         />
                       </div>
                       <div>
-                        <label className="block text-[11px] font-semibold text-slate-500 mb-1">Bonus ECO</label>
+                        <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">Bonus ECO</label>
                         <input
                           type="number"
                           min={0}
                           value={bonus3}
                           onChange={e => setBonus3(e.target.value)}
-                          className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 font-mono outline-none focus:border-emerald-500"
+                          className="w-full min-h-[40px] px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 font-mono outline-none focus:border-emerald-500"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+                      <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">
                         Ishga tushish chegarasi (default 500)
                       </label>
                       <input
@@ -473,7 +473,7 @@ export const StudentRatingManagerCard: React.FC<StudentRatingManagerCardProps> =
                         min={user.role === 'super_admin' ? 1 : 100}
                         value={distThreshold}
                         onChange={e => setDistThreshold(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 font-mono outline-none focus:border-emerald-500"
+                        className="w-full min-h-[40px] px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#040D0A] border border-slate-200 dark:border-emerald-500/20 font-mono outline-none focus:border-emerald-500"
                       />
                     </div>
                   </div>
@@ -483,7 +483,7 @@ export const StudentRatingManagerCard: React.FC<StudentRatingManagerCardProps> =
               <button
                 type="submit"
                 disabled={saving}
-                className="w-full py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold text-xs inline-flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                className="w-full min-h-[44px] py-2.5 rounded-xl bg-gradient-to-r from-[#00F5A0] to-[#10B981] text-[#04110B] font-black border-b-[3px] border-emerald-700 active:translate-y-[1px] text-xs inline-flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 <Save className="w-3.5 h-3.5" />
                 <span>{saving ? 'Saqlanmoqda...' : 'Sozlamalarni Saqlash'}</span>
@@ -505,11 +505,11 @@ export const StudentRatingManagerCard: React.FC<StudentRatingManagerCardProps> =
               </div>
 
               {previewRows.length === 0 ? (
-                <div className="py-10 text-center text-xs text-slate-500 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
+                <div className="py-10 text-center text-xs text-slate-500 border border-dashed border-slate-200 dark:border-emerald-500/20 rounded-xl">
                   Hozircha bu hududda ro‘yxatdan o‘tgan o‘quvchilar yo‘q.
                 </div>
               ) : (
-                <div className="border border-slate-200 dark:border-slate-800 rounded-xl divide-y divide-slate-100 dark:divide-slate-800 max-h-[340px] overflow-y-auto">
+                <div className="border border-slate-200 dark:border-emerald-500/20 rounded-xl divide-y divide-slate-100 dark:divide-emerald-500/15 max-h-[340px] overflow-y-auto bg-white dark:bg-[#040D0A]">
                   {previewRows.map(st => {
                     const isWinnerZone = mode === 'school' ? st.rank === 1 : st.rank <= 3;
                     return (
@@ -529,7 +529,7 @@ export const StudentRatingManagerCard: React.FC<StudentRatingManagerCardProps> =
                           </span>
                           <div className="min-w-0">
                             <div className="font-bold text-slate-900 dark:text-white truncate">{st.fullName}</div>
-                            <div className="text-[11px] text-slate-500 truncate">
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
                               {mode === 'district' ? `${st.schoolName || 'Maktab'} · ` : ''}
                               {st.grade || "O'quvchi"} · {st.monthlyActivitiesCount} faollik
                             </div>
