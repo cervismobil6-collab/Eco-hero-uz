@@ -26,6 +26,7 @@ import {
   Target,
   Flame,
   ChevronRight,
+  BookOpen,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useEco } from '../../context/EcoContext';
@@ -77,6 +78,7 @@ export const Navbar: React.FC = () => {
     { id: 'home', label: 'Bosh sahifa', icon: Leaf },
     { id: 'map', label: 'Eko Xarita', icon: MapPin },
     { id: 'missions', label: 'Missiyalar', icon: Target },
+    { id: 'eco_bilim', label: 'Eco Bilim', icon: BookOpen },
     { id: 'media', label: 'Eko-Media', icon: Video },
     { id: 'rating', label: 'Reyting', icon: Award },
     { id: 'shop', label: 'Eko Bozor', icon: ShoppingBag },
@@ -137,9 +139,12 @@ export const Navbar: React.FC = () => {
 
           {/* Desktop Nav */}
           <nav className="hidden xl:flex items-center bg-white/75 dark:bg-[#071812]/80 rounded-full p-1 border border-emerald-500/15 backdrop-blur-md shadow-sm">
-            {navLinks.slice(0, 7).map(link => {
+            {navLinks.slice(0, 8).map(link => {
               const Icon = link.icon;
-              const isActive = activeTab === link.id || (link.id === 'missions' && activeTab === 'tasks');
+              const isActive =
+                activeTab === link.id ||
+                (link.id === 'missions' && activeTab === 'tasks') ||
+                (link.id === 'eco_bilim' && ['bilim', 'eco_tests'].includes(activeTab));
               return (
                 <button
                   key={link.id}

@@ -60,6 +60,8 @@ import {
 type MissionFilter =
   | 'all'
   | 'tasks'
+  | 'custom_task'
+  | 'channel_subscribe'
   | 'ecology'
   | 'english'
   | 'russian'
@@ -69,6 +71,10 @@ type MissionFilter =
   | 'logic'
   | 'literature'
   | 'completed';
+
+export interface EcoMissionsPageProps {
+  mode?: 'missions' | 'quizzes';
+}
 
 type PageTab = 'missions' | 'submissions';
 type QuizBuilderTab = 'manual' | 'import';
@@ -204,7 +210,7 @@ const MissionCardPhoto: React.FC<{ mission: EcoMission }> = ({ mission }) => {
   );
 };
 
-export const EcoMissionsPage: React.FC = () => {
+export const EcoMissionsPage: React.FC<EcoMissionsPageProps> = ({ mode = 'missions' }) => {
   const {
     user,
     isSuperAdmin,
@@ -227,6 +233,9 @@ export const EcoMissionsPage: React.FC = () => {
     triggerHaptic,
   } = useEco();
 
+  const isQuizzesMode = mode === 'quizzes';
+  const isMissionsMode = !isQuizzesMode;
+
   const canManageMissions =
     isSuperAdmin ||
     user.role === 'super_admin' ||
@@ -237,6 +246,11 @@ export const EcoMissionsPage: React.FC = () => {
   const [filterType, setFilterType] = useState<MissionFilter>('all');
   const [proofModalMission, setProofModalMission] = useState<EcoMission | null>(null);
   const row2Ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setFilterType('all');
+    setPageTab('missions');
+  }, [mode]);
 
   // Server-Proctored Sequential Multi-Question Quiz Runner State
   const [activeQuizMission, setActiveQuizMission] = useState<EcoMission | null>(null);
@@ -307,17 +321,31 @@ export const EcoMissionsPage: React.FC = () => {
     return 'https://t.me/Ecoheros_uz';
   };
 
+  const modeScopedMissions = useMemo(
+    () =>
+      ecoMissions.filter(m =>
+        isQuizzesMode ? m.type === 'quiz' : m.type !== 'quiz'
+      ),
+    [ecoMissions, isQuizzesMode]
+  );
+
   const visibleMissions = useMemo(() => {
     const list = canManageMissions
-      ? ecoMissions
-      : ecoMissions.filter(m => m.status === 'active');
+      ? modeScopedMissions
+      : modeScopedMissions.filter(m => m.status === 'active');
 
     if (filterType === 'all') return list;
     if (filterType === 'completed') {
       return list.filter(m => missionCompletions.includes(m.id));
     }
+    if (filterType === 'custom_task') {
+      return list.filter(m => m.type === 'custom_task');
+    }
+    if (filterType === 'channel_subscribe') {
+      return list.filter(m => m.type === 'channel_subscribe');
+    }
     return list.filter(m => resolveMissionSubjectKey(m) === filterType);
-  }, [ecoMissions, canManageMissions, filterType, missionCompletions]);
+  }, [modeScopedMissions, canManageMissions, filterType, missionCompletions]);
 
   const pendingSubmissions = useMemo(
     () => missionSubmissions.filter(s => s.status === 'pending'),
@@ -334,13 +362,16 @@ export const EcoMissionsPage: React.FC = () => {
   }, [missionSubmissions]);
 
   const activeCount = useMemo(
-    () => ecoMissions.filter(m => m.status === 'active').length,
-    [ecoMissions]
+    () => modeScopedMissions.filter(m => m.status === 'active').length,
+    [modeScopedMissions]
   );
 
   const completedCount = useMemo(
-    () => ecoMissions.filter(m => m.status === 'active' && missionCompletions.includes(m.id)).length,
-    [ecoMissions, missionCompletions]
+    () =>
+      modeScopedMissions.filter(
+        m => m.status === 'active' && missionCompletions.includes(m.id)
+      ).length,
+    [modeScopedMissions, missionCompletions]
   );
 
   // --- PROCTORED QUIZ RUNNER HANDLERS ---
@@ -539,15 +570,23 @@ export const EcoMissionsPage: React.FC = () => {
   }, [isQuizSessionLive, activeQuizMission, quizSessionId, reportQuizViolation]);
 
   // --- ADMIN MODAL HANDLERS ---
-  const openCreateModal = (presetType: MissionType = 'quiz') => {
+  const openCreateModal = (presetType?: MissionType) => {
+    const resolvedType: MissionType =
+      presetType || (isQuizzesMode ? 'quiz' : 'custom_task');
     setEditingMissionId(null);
     setQuizBuilderTab('manual');
     setImportRawText('');
     setForm({
       ...DEFAULT_FORM,
-      type: presetType,
-      category: presetType === 'custom_task' ? 'greening' : presetType === 'channel_subscribe' ? 'telegram' : 'ecology',
-      rewardCoins: presetType === 'quiz' ? 50 : presetType === 'channel_subscribe' ? 100 : 150,
+      type: resolvedType,
+      category:
+        resolvedType === 'custom_task'
+          ? 'greening'
+          : resolvedType === 'channel_subscribe'
+          ? 'telegram'
+          : 'ecology',
+      rewardCoins:
+        resolvedType === 'quiz' ? 50 : resolvedType === 'channel_subscribe' ? 100 : 150,
       questions: [makeBlankQuestion(1)],
     });
     setModalOpen(true);
@@ -946,48 +985,65 @@ export const EcoMissionsPage: React.FC = () => {
       ? Math.round(((quizStepIndex + (quizDraftOption !== null ? 0.5 : 0)) / quizTotalQuestions) * 100)
       : 0;
 
-  const row1Categories: {
+  const quizRow1Categories: {
     id: MissionFilter;
     label: string;
     icon?: React.ComponentType<{ className?: string }>;
     flag?: string;
     iconColor?: string;
   }[] = [
-    { id: 'tasks', label: 'Topshiriqlar', icon: ClipboardList, iconColor: 'text-emerald-400' },
     { id: 'all', label: 'Barchasi', icon: LayoutGrid, iconColor: 'text-emerald-400' },
     { id: 'ecology', label: 'Ekologiya', icon: Leaf, iconColor: 'text-emerald-400' },
     { id: 'english', label: 'Ingliz tili', flag: '🇬🇧' },
     { id: 'russian', label: 'Rus tili', flag: '🇷🇺' },
     { id: 'biology', label: 'Biologiya', icon: Dna, iconColor: 'text-emerald-300' },
+    { id: 'geography', label: 'Geografiya', icon: Globe, iconColor: 'text-sky-400' },
   ];
 
-  const row2Categories: {
+  const quizRow2Categories: {
     id: MissionFilter;
     label: string;
     icon: React.ComponentType<{ className?: string }>;
     iconColor: string;
   }[] = [
-    { id: 'geography', label: 'Geografiya', icon: Globe, iconColor: 'text-sky-400' },
     { id: 'math', label: 'Matematika', icon: Calculator, iconColor: 'text-cyan-400' },
     { id: 'logic', label: 'Mantiqiy savollar', icon: Brain, iconColor: 'text-pink-400' },
     { id: 'literature', label: 'Asar va kitob testlari', icon: BookOpen, iconColor: 'text-emerald-400' },
     { id: 'completed', label: 'Bajarilgan', icon: CheckCircle2, iconColor: 'text-amber-400' },
   ];
 
+  const missionFilterCategories: {
+    id: MissionFilter;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+    iconColor: string;
+  }[] = [
+    { id: 'all', label: 'Barchasi', icon: LayoutGrid, iconColor: 'text-emerald-400' },
+    { id: 'custom_task', label: 'Amaliy vazifalar', icon: ClipboardList, iconColor: 'text-emerald-400' },
+    { id: 'channel_subscribe', label: 'Telegram kanallar', icon: Send, iconColor: 'text-sky-400' },
+    { id: 'completed', label: 'Bajarilgan', icon: CheckCircle2, iconColor: 'text-amber-400' },
+  ];
+
   return (
     <div className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-6 pb-28 space-y-3.5 sm:space-y-4">
-      {/* 1. Compact Header matching reference */}
+      {/* 1. Compact Header per active section */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
           <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0">
-            <BookOpen className="w-5 h-5 sm:w-6 sm:h-6 text-[#00F5A0]" />
+            {isQuizzesMode ? (
+              <BookOpen className="w-5 h-5 sm:w-6 sm:h-6 text-[#00F5A0]" />
+            ) : (
+              <Target className="w-5 h-5 sm:w-6 sm:h-6 text-[#00F5A0]" />
+            )}
           </div>
           <div className="min-w-0">
             <h1 className="font-display text-lg sm:text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight truncate">
-              Ta&apos;lim va topshiriqlar
+              {isQuizzesMode ? 'Eco Bilim' : 'Eco Missiyalar'}
             </h1>
             <p className="text-[11px] sm:text-xs font-medium text-slate-500 dark:text-emerald-100/70 truncate">
-              Bilimingni oshir, tabiatni asra!
+              {isQuizzesMode
+                ? 'Ekologiya va fanlar bo‘yicha testlar hamda viktorinalar'
+                : 'Tabiat uchun amaliy vazifalarni bajaring va EcoCoin yig‘ing!'}
             </p>
           </div>
         </div>
@@ -1015,42 +1071,45 @@ export const EcoMissionsPage: React.FC = () => {
                   : 'bg-white dark:bg-[#061812] text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-emerald-500/15'
               }`}
             >
-              Topshiriqlar ({visibleMissions.length})
+              {isQuizzesMode
+                ? `Testlar (${visibleMissions.length})`
+                : `Missiyalar (${visibleMissions.length})`}
             </button>
-            <button
-              type="button"
-              onClick={() => setPageTab('submissions')}
-              className={`min-h-[36px] px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all ${
-                pageTab === 'submissions'
-                  ? 'bg-amber-500 text-slate-950'
-                  : 'bg-white dark:bg-[#061812] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-emerald-500/15'
-              }`}
-            >
-              <span>Kelgan arizalar</span>
-              {pendingSubmissions.length > 0 && (
-                <span className="px-1.5 py-0.5 rounded-md bg-rose-500 text-white text-[10px] font-black tabular-nums">
-                  {pendingSubmissions.length}
-                </span>
-              )}
-            </button>
+            {isMissionsMode && (
+              <button
+                type="button"
+                onClick={() => setPageTab('submissions')}
+                className={`min-h-[36px] px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all ${
+                  pageTab === 'submissions'
+                    ? 'bg-amber-500 text-slate-950'
+                    : 'bg-white dark:bg-[#061812] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-emerald-500/15'
+                }`}
+              >
+                <span>Kelgan arizalar</span>
+                {pendingSubmissions.length > 0 && (
+                  <span className="px-1.5 py-0.5 rounded-md bg-rose-500 text-white text-[10px] font-black tabular-nums">
+                    {pendingSubmissions.length}
+                  </span>
+                )}
+              </button>
+            )}
           </div>
 
           <button
             type="button"
-            onClick={() => openCreateModal('quiz')}
+            onClick={() => openCreateModal(isQuizzesMode ? 'quiz' : 'custom_task')}
             className="min-h-[36px] px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#00F5A0] to-[#10E88A] text-[#04110B] font-extrabold text-xs flex items-center gap-1.5 cursor-pointer shadow-sm hover:brightness-105 transition-all"
           >
             <Plus className="w-4 h-4" />
-            <span>Yangi missiya / test</span>
+            <span>{isQuizzesMode ? 'Yangi test' : 'Yangi missiya'}</span>
           </button>
         </div>
       )}
 
-      {/* 2. Compact 2-Row Subject Filter Tiles */}
-      <div className="space-y-2">
-        {/* Row 1 */}
-        <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 sm:gap-2">
-          {row1Categories.map(cat => {
+      {/* 2. Mode-Specific Filter Bar */}
+      {isMissionsMode ? (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
+          {missionFilterCategories.map(cat => {
             const isActive = pageTab === 'missions' && filterType === cat.id;
             const Icon = cat.icon;
             return (
@@ -1062,38 +1121,29 @@ export const EcoMissionsPage: React.FC = () => {
                   setPageTab('missions');
                   setFilterType(cat.id);
                 }}
-                className={`min-h-[54px] sm:min-h-[60px] px-2 py-2 rounded-2xl border flex flex-col items-center justify-center gap-1 text-center transition-all cursor-pointer ${
+                className={`min-h-[52px] sm:min-h-[56px] px-2.5 py-2 rounded-2xl border flex items-center justify-center gap-2 text-center transition-all cursor-pointer ${
                   isActive
                     ? 'bg-gradient-to-b from-[#34FC9E] to-[#10B981] border-emerald-300/70 text-[#04110B] shadow-[0_6px_18px_rgba(16,232,138,0.28)]'
                     : 'bg-white/95 dark:bg-[#061D15]/90 border-slate-200 dark:border-emerald-500/25 text-slate-700 dark:text-slate-100 hover:border-emerald-400/55'
                 }`}
               >
-                {cat.flag ? (
-                  <span className="text-base sm:text-lg leading-none" aria-hidden="true">
-                    {cat.flag}
-                  </span>
-                ) : Icon ? (
-                  <Icon
-                    className={`w-4 h-4 sm:w-[18px] sm:h-[18px] shrink-0 ${
-                      isActive ? 'text-[#04110B]' : cat.iconColor || 'text-emerald-400'
-                    }`}
-                  />
-                ) : null}
-                <span className="text-[11px] sm:text-xs font-bold leading-tight truncate w-full">
+                <Icon
+                  className={`w-4 h-4 shrink-0 ${
+                    isActive ? 'text-[#04110B]' : cat.iconColor
+                  }`}
+                />
+                <span className="text-[11px] sm:text-xs font-bold leading-tight whitespace-nowrap">
                   {cat.label}
                 </span>
               </button>
             );
           })}
         </div>
-
-        {/* Row 2 with scroll chevron button */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          <div
-            ref={row2Ref}
-            className="flex-1 flex items-stretch gap-1.5 sm:gap-2 overflow-x-auto scrollbar-hide pb-0.5"
-          >
-            {row2Categories.map(cat => {
+      ) : (
+        <div className="space-y-2">
+          {/* Row 1 */}
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 sm:gap-2">
+            {quizRow1Categories.map(cat => {
               const isActive = pageTab === 'missions' && filterType === cat.id;
               const Icon = cat.icon;
               return (
@@ -1105,18 +1155,24 @@ export const EcoMissionsPage: React.FC = () => {
                     setPageTab('missions');
                     setFilterType(cat.id);
                   }}
-                  className={`min-h-[52px] sm:min-h-[56px] min-w-[104px] sm:min-w-[132px] sm:flex-1 px-2.5 py-2 rounded-2xl border flex flex-col items-center justify-center gap-1 text-center shrink-0 transition-all cursor-pointer ${
+                  className={`min-h-[54px] sm:min-h-[60px] px-2 py-2 rounded-2xl border flex flex-col items-center justify-center gap-1 text-center transition-all cursor-pointer ${
                     isActive
                       ? 'bg-gradient-to-b from-[#34FC9E] to-[#10B981] border-emerald-300/70 text-[#04110B] shadow-[0_6px_18px_rgba(16,232,138,0.28)]'
                       : 'bg-white/95 dark:bg-[#061D15]/90 border-slate-200 dark:border-emerald-500/25 text-slate-700 dark:text-slate-100 hover:border-emerald-400/55'
                   }`}
                 >
-                  <Icon
-                    className={`w-4 h-4 shrink-0 ${
-                      isActive ? 'text-[#04110B]' : cat.iconColor
-                    }`}
-                  />
-                  <span className="text-[10.5px] sm:text-xs font-bold leading-tight whitespace-nowrap">
+                  {cat.flag ? (
+                    <span className="text-base sm:text-lg leading-none" aria-hidden="true">
+                      {cat.flag}
+                    </span>
+                  ) : Icon ? (
+                    <Icon
+                      className={`w-4 h-4 sm:w-[18px] sm:h-[18px] shrink-0 ${
+                        isActive ? 'text-[#04110B]' : cat.iconColor || 'text-emerald-400'
+                      }`}
+                    />
+                  ) : null}
+                  <span className="text-[11px] sm:text-xs font-bold leading-tight truncate w-full">
                     {cat.label}
                   </span>
                 </button>
@@ -1124,25 +1180,63 @@ export const EcoMissionsPage: React.FC = () => {
             })}
           </div>
 
-          <button
-            type="button"
-            aria-label="Keyingi fanlar"
-            onClick={() => {
-              if (row2Ref.current) {
-                const el = row2Ref.current;
-                if (el.scrollLeft + el.clientWidth >= el.scrollWidth - 8) {
-                  el.scrollTo({ left: 0, behavior: 'smooth' });
-                } else {
-                  el.scrollBy({ left: 160, behavior: 'smooth' });
+          {/* Row 2 with scroll chevron button */}
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <div
+              ref={row2Ref}
+              className="flex-1 flex items-stretch gap-1.5 sm:gap-2 overflow-x-auto scrollbar-hide pb-0.5"
+            >
+              {quizRow2Categories.map(cat => {
+                const isActive = pageTab === 'missions' && filterType === cat.id;
+                const Icon = cat.icon;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => {
+                      triggerHaptic('light');
+                      setPageTab('missions');
+                      setFilterType(cat.id);
+                    }}
+                    className={`min-h-[52px] sm:min-h-[56px] min-w-[104px] sm:min-w-[132px] sm:flex-1 px-2.5 py-2 rounded-2xl border flex flex-col items-center justify-center gap-1 text-center shrink-0 transition-all cursor-pointer ${
+                      isActive
+                        ? 'bg-gradient-to-b from-[#34FC9E] to-[#10B981] border-emerald-300/70 text-[#04110B] shadow-[0_6px_18px_rgba(16,232,138,0.28)]'
+                        : 'bg-white/95 dark:bg-[#061D15]/90 border-slate-200 dark:border-emerald-500/25 text-slate-700 dark:text-slate-100 hover:border-emerald-400/55'
+                    }`}
+                  >
+                    <Icon
+                      className={`w-4 h-4 shrink-0 ${
+                        isActive ? 'text-[#04110B]' : cat.iconColor
+                      }`}
+                    />
+                    <span className="text-[10.5px] sm:text-xs font-bold leading-tight whitespace-nowrap">
+                      {cat.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              aria-label="Keyingi fanlar"
+              onClick={() => {
+                if (row2Ref.current) {
+                  const el = row2Ref.current;
+                  if (el.scrollLeft + el.clientWidth >= el.scrollWidth - 8) {
+                    el.scrollTo({ left: 0, behavior: 'smooth' });
+                  } else {
+                    el.scrollBy({ left: 160, behavior: 'smooth' });
+                  }
                 }
-              }
-            }}
-            className="w-9 h-9 rounded-full bg-white/95 dark:bg-[#061D15]/90 border border-slate-200 dark:border-emerald-500/30 text-slate-600 dark:text-emerald-300 hover:border-emerald-400 flex items-center justify-center shrink-0 cursor-pointer transition-all"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
+              }}
+              className="w-9 h-9 rounded-full bg-white/95 dark:bg-[#061D15]/90 border border-slate-200 dark:border-emerald-500/30 text-slate-600 dark:text-emerald-300 hover:border-emerald-400 flex items-center justify-center shrink-0 cursor-pointer transition-all"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* 3. Cards Grid matching reference */}
       {pageTab === 'missions' ? (
@@ -1150,10 +1244,12 @@ export const EcoMissionsPage: React.FC = () => {
           <div className="rounded-2xl bg-white dark:bg-[#061D15]/90 border border-slate-200 dark:border-emerald-500/25 p-10 text-center space-y-2">
             <Target className="w-9 h-9 text-emerald-500 mx-auto" />
             <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
-              Ushbu bo&apos;limda hozircha topshiriq yo&apos;q
+              {isQuizzesMode
+                ? 'Ushbu bo‘limda hozircha test yo‘q'
+                : 'Ushbu bo‘limda hozircha missiya yo‘q'}
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Boshqa fanni tanlang yoki barchasini ko&apos;rish uchun &quot;Barchasi&quot; tugmasini bosing.
+              Barchasini ko&apos;rish uchun &quot;Barchasi&quot; tugmasini bosing.
             </p>
           </div>
         ) : (
@@ -2103,27 +2199,40 @@ export const EcoMissionsPage: React.FC = () => {
             </div>
 
             <form onSubmit={handleSaveMission} className="space-y-4">
-              <div className="grid grid-cols-3 gap-2">
+              <div
+                className={`grid gap-2 ${
+                  editingMissionId
+                    ? 'grid-cols-3'
+                    : isQuizzesMode
+                    ? 'grid-cols-1'
+                    : 'grid-cols-2'
+                }`}
+              >
                 {(
                   [
                     { id: 'quiz', label: 'Fan / Test' },
                     { id: 'custom_task', label: 'Amaliy Topshiriq' },
                     { id: 'channel_subscribe', label: 'Kanal Obuna' },
                   ] as { id: MissionType; label: string }[]
-                ).map(t => (
-                  <button
-                    type="button"
-                    key={t.id}
-                    onClick={() => setForm(prev => ({ ...prev, type: t.id }))}
-                    className={`min-h-[42px] py-2.5 px-3 rounded-xl text-xs font-black border cursor-pointer transition-all ${
-                      form.type === t.id
-                        ? 'bg-emerald-500 border-emerald-400 text-slate-950'
-                        : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-300'
-                    }`}
-                  >
-                    {t.label}
-                  </button>
-                ))}
+                )
+                  .filter(t => {
+                    if (editingMissionId) return true;
+                    return isQuizzesMode ? t.id === 'quiz' : t.id !== 'quiz';
+                  })
+                  .map(t => (
+                    <button
+                      type="button"
+                      key={t.id}
+                      onClick={() => setForm(prev => ({ ...prev, type: t.id }))}
+                      className={`min-h-[42px] py-2.5 px-3 rounded-xl text-xs font-black border cursor-pointer transition-all ${
+                        form.type === t.id
+                          ? 'bg-emerald-500 border-emerald-400 text-slate-950'
+                          : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-300'
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

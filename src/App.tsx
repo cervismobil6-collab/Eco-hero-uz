@@ -269,7 +269,15 @@ const AppContent: React.FC = () => {
       case 'tasks':
         return (
           <Suspense fallback={<PageSkeletonLoader />}>
-            <EcoMissionsPage />
+            <EcoMissionsPage key="missions-page" mode="missions" />
+          </Suspense>
+        );
+      case 'eco_bilim':
+      case 'bilim':
+      case 'eco_tests':
+        return (
+          <Suspense fallback={<PageSkeletonLoader />}>
+            <EcoMissionsPage key="quizzes-page" mode="quizzes" />
           </Suspense>
         );
       case 'championship':
