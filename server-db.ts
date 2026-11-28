@@ -608,27 +608,6 @@ const SEED_SPONSORSHIP_PROPOSALS = [
 
 const SEED_ECO_ADS = [
   {
-    id: "ad_01",
-    title: "Sanfa Eko-Konteynerlar Bilan Saralang",
-    sponsorId: "part_04",
-    sponsorName: "Sanfa Products",
-    sponsorLogo: "SANFA",
-    type: "banner",
-    placement: "home_top",
-    headline: "Plastik Chiqindilarni Maktabda Saralang — Yangi Sovg'alar Oling!",
-    subheadline: "Sanfa va ECO HERO hamkorligidagi 'Toza Sinfxona' umumrespublika tanloviga qo'shiling.",
-    imageUrl: "https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?auto=format&fit=crop&w=1200&q=80",
-    ctaText: "Aksiyada qatnashish",
-    ctaUrl: "https://sanfa.uz/ecohero",
-    isVerifiedSponsor: true,
-    startDate: "2026-11-01",
-    endDate: "2026-12-31",
-    status: "active",
-    impressionsCount: 4210,
-    clicksCount: 384,
-    complianceNote: "Davlat ekologik talablariga mos, bolalar uchun ta'limiy va zararsiz targ'ibot.",
-  },
-  {
     id: "ad_02",
     title: "Najot Ta'lim: Yashil Dasturchilar IT Granti",
     sponsorId: "part_03",
@@ -1283,7 +1262,7 @@ function createDefaultDatabase(): UnifiedDatabase {
     dailyMissionSubmissions: [],
     dailyMissionCompletions: {},
     botStarters: {},
-    deletedIds: [],
+    deletedIds: ['ad_01'],
     weeklyChallenge: createDefaultWeeklyChallenge(),
     registrationSessions: {},
     dailyQuizClaims: {},
@@ -1701,7 +1680,12 @@ function loadUnifiedDatabase(): { db: UnifiedDatabase; needsSave: boolean } {
 
   if (parsed) {
     try {
-      const deletedSet = new Set<string>(Array.isArray(parsed.deletedIds) ? parsed.deletedIds.map(String) : []);
+      const rawDeletedIds = Array.isArray(parsed.deletedIds) ? parsed.deletedIds.map(String) : [];
+      const deletedSet = new Set<string>(rawDeletedIds);
+      const hadRetiredMissing = !deletedSet.has('ad_01');
+      deletedSet.add('ad_01');
+      const hadRetiredAdInDb =
+        Array.isArray(parsed.ecoAds) && parsed.ecoAds.some((a: any) => String(a?.id || '') === 'ad_01');
       const hasShopArray = Array.isArray(parsed.shopItems);
       const loadedShopItems = (hasShopArray ? parsed.shopItems : defaults.shopItems).filter(
         (i: any) => !deletedSet.has(String(i?.id || ''))
@@ -1843,7 +1827,7 @@ function loadUnifiedDatabase(): { db: UnifiedDatabase; needsSave: boolean } {
       };
 
       const { db: purgedDb, changed } = purgeDemoRecordsFromDb(hydrated);
-      return { db: purgedDb, needsSave: changed || recoveredFromBackup };
+      return { db: purgedDb, needsSave: changed || recoveredFromBackup || hadRetiredMissing || hadRetiredAdInDb };
     } catch (e) {
       console.error('[CentralDB] Error loading unified DB, using defaults:', e);
     }

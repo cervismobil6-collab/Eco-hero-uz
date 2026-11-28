@@ -1118,27 +1118,6 @@ export const INITIAL_SPONSORSHIP_PROPOSALS: SponsorshipProposal[] = [
 
 export const INITIAL_ECO_ADS: EcoAd[] = [
   {
-    id: "ad_01",
-    title: "Sanfa Eko-Konteynerlar Bilan Saralang",
-    sponsorId: "part_04",
-    sponsorName: "Sanfa Products",
-    sponsorLogo: "SANFA",
-    type: "banner",
-    placement: "home_top",
-    headline: "Plastik Chiqindilarni Maktabda Saralang — Yangi Sovg'alar Oling!",
-    subheadline: "Sanfa va ECO HERO hamkorligidagi 'Toza Sinfxona' umumrespublika tanloviga qo'shiling.",
-    imageUrl: "/assets/eco/eco_forest.jpg",
-    ctaText: "Aksiyada qatnashish",
-    ctaUrl: "https://sanfa.uz/ecohero",
-    isVerifiedSponsor: true,
-    startDate: "2026-11-01",
-    endDate: "2026-12-31",
-    status: "active",
-    impressionsCount: 4210,
-    clicksCount: 384,
-    complianceNote: "Davlat ekologik talablariga mos, bolalar uchun ta'limiy va zararsiz targ'ibot.",
-  },
-  {
     id: "ad_02",
     title: "Najot Ta'lim: Yashil Dasturchilar IT Granti",
     sponsorId: "part_03",

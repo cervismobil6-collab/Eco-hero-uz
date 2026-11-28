@@ -434,6 +434,8 @@ function recordTimeMs(rec: any): number {
   return Number.isNaN(ts) ? 0 : ts;
 }
 
+export const RETIRED_CATALOG_IDS = new Set<string>(['ad_01']);
+
 export function mergeCatalogListWithFirestore(
   localList: any[],
   remoteList: any[],
@@ -457,6 +459,11 @@ export function mergeCatalogListWithFirestore(
   for (const item of Array.isArray(localList) ? localList : []) {
     const id = String(item?.id || '');
     if (!id) continue;
+    if (RETIRED_CATALOG_IDS.has(id) || deletedIdsSet.has(id)) {
+      deletedIdsSet.add(id);
+      changed = true;
+      continue;
+    }
     const tombTs = tombstoneByTarget.get(id);
     if (tombTs !== undefined && recordTimeMs(item) <= tombTs) {
       deletedIdsSet.add(id);
@@ -470,14 +477,13 @@ export function mergeCatalogListWithFirestore(
   for (const remote of Array.isArray(remoteList) ? remoteList : []) {
     const id = String(remote?.id || '');
     if (!id) continue;
+    if (RETIRED_CATALOG_IDS.has(id) || deletedIdsSet.has(id)) continue;
     const remoteTs = recordTimeMs(remote);
     const tombTs = tombstoneByTarget.get(id);
     if (tombTs !== undefined && remoteTs <= tombTs) continue;
-    if (deletedIdsSet.has(id) && remoteTs === 0) continue;
 
     const existing = byId.get(id);
     if (!existing) {
-      deletedIdsSet.delete(id);
       byId.set(id, remote);
       orderedIds.unshift(id);
       changed = true;

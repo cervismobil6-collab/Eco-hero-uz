@@ -57,6 +57,7 @@ import {
   getDetectedBotUsersReport,
 } from './server-db';
 import {
+  RETIRED_CATALOG_IDS,
   fetchAllCatalogFromFirestoreRest,
   upsertCatalogDocToFirestoreRest,
   deleteCatalogDocFromFirestoreRest,
@@ -772,6 +773,7 @@ app.get('/api/bootstrap', (req: AuthenticatedRequest, res) => {
       weeklyChallenge: buildWeeklyChallengeSummary(caller),
       schoolTeamMission: buildSchoolTeamMissionSummary(caller),
       championshipMeta: buildChampionshipEligibility(caller),
+      deletedCatalogIds: Array.isArray(centralDb.deletedIds) ? centralDb.deletedIds : [],
       studentsLeaderboard: sanitizePublicUsersList()
         .sort((a: any, b: any) => (b.totalCoinsEarned || b.ecoCoins || 0) - (a.totalCoinsEarned || a.ecoCoins || 0))
         .slice(0, 50),
@@ -822,6 +824,9 @@ async function hydrateCatalogFromFirestoreOnBoot(): Promise<void> {
       const deletedSet = new Set<string>(
         Array.isArray(centralDb.deletedIds) ? centralDb.deletedIds.map(String) : []
       );
+      for (const retiredId of RETIRED_CATALOG_IDS) {
+        deletedSet.add(retiredId);
+      }
 
       if (remote.missions.length > 0 || remote.tombstones.some((t) => t.collectionName === 'eco_missions')) {
         const mRes = mergeCatalogListWithFirestore(
@@ -892,11 +897,17 @@ async function hydrateCatalogFromFirestoreOnBoot(): Promise<void> {
         }
       }
 
+      const prevDeletedLen = (centralDb.deletedIds || []).length;
       const nextDeleted = Array.from(deletedSet);
-      if (nextDeleted.length !== (centralDb.deletedIds || []).length) {
+      if (nextDeleted.length !== prevDeletedLen) {
         centralDb.deletedIds = nextDeleted;
         anyChanged = true;
       }
+    }
+
+    if (Array.isArray(centralDb.ecoAds) && centralDb.ecoAds.some((a: any) => RETIRED_CATALOG_IDS.has(String(a?.id || '')))) {
+      centralDb.ecoAds = centralDb.ecoAds.filter((a: any) => !RETIRED_CATALOG_IDS.has(String(a?.id || '')));
+      anyChanged = true;
     }
 
     if (reconcileSchoolsAndStudents(false)) {
@@ -9909,9 +9920,9 @@ app.delete(
         return res.status(403).json({ error: "Ushbu postni o'chirish huquqiga ega emassiz" });
       }
       const idx = (centralDb.homePosts || []).findIndex((p: any) => p.id === req.params.id);
-      if (idx === -1) return res.status(404).json({ error: 'Post topilmadi' });
-
-      centralDb.homePosts.splice(idx, 1);
+      if (idx !== -1) {
+        centralDb.homePosts.splice(idx, 1);
+      }
       recordDeletedId(req.params.id);
       saveCentralDb();
       broadcastRealtimeEvent('db:updated', { scope: 'home_posts' });
@@ -10490,8 +10501,9 @@ app.post('/api/admin/shop/item-create', requireRoles('super_admin', 'moderator')
 app.delete('/api/admin/shop/items/:id', requireRoles('super_admin', 'moderator'), (req: AuthenticatedRequest, res) => {
   try {
     const idx = centralDb.shopItems.findIndex((i) => i.id === req.params.id);
-    if (idx === -1) return res.status(404).json({ error: 'Mahsulot topilmadi' });
-    centralDb.shopItems.splice(idx, 1);
+    if (idx !== -1) {
+      centralDb.shopItems.splice(idx, 1);
+    }
     recordDeletedId(req.params.id);
     saveCentralDb();
     broadcastRealtimeEvent('db:updated', { scope: 'shop' });
@@ -11435,8 +11447,9 @@ app.patch('/api/admin/ads/:id', requireRoles('super_admin', 'sponsor'), (req: Au
 app.delete('/api/admin/ads/:id', requireRoles('super_admin', 'sponsor'), (req: AuthenticatedRequest, res) => {
   try {
     const idx = centralDb.ecoAds.findIndex((a) => a.id === req.params.id);
-    if (idx === -1) return res.status(404).json({ error: 'Reklama topilmadi' });
-    centralDb.ecoAds.splice(idx, 1);
+    if (idx !== -1) {
+      centralDb.ecoAds.splice(idx, 1);
+    }
     recordDeletedId(req.params.id);
     saveCentralDb();
     broadcastRealtimeEvent('db:updated', { scope: 'ads' });
@@ -11856,8 +11869,9 @@ app.patch('/api/missions/:id', requireRoles('super_admin', 'moderator', 'school_
 app.delete('/api/missions/:id', requireRoles('super_admin', 'moderator', 'school_admin'), (req: AuthenticatedRequest, res) => {
   try {
     const idx = (centralDb.ecoMissions || []).findIndex((m: any) => m.id === req.params.id);
-    if (idx === -1) return res.status(404).json({ error: 'Topshiriq topilmadi' });
-    centralDb.ecoMissions.splice(idx, 1);
+    if (idx !== -1) {
+      centralDb.ecoMissions.splice(idx, 1);
+    }
     recordDeletedId(req.params.id);
     saveCentralDb();
     broadcastRealtimeEvent('db:updated', { scope: 'missions' });

@@ -895,10 +895,38 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
 
+  const deletedCatalogIdsRef = useRef<Set<string>>((() => {
+    const initial = new Set<string>(['ad_01']);
+    try {
+      const saved = localStorage.getItem('ecohero_deleted_catalog_ids');
+      if (saved) {
+        const arr = JSON.parse(saved);
+        if (Array.isArray(arr)) {
+          for (const id of arr) initial.add(String(id));
+        }
+      }
+    } catch {}
+    return initial;
+  })());
+
+  const recordClientDeletedCatalogId = useCallback((id: string) => {
+    if (!id) return;
+    deletedCatalogIdsRef.current.add(id);
+    try {
+      localStorage.setItem(
+        'ecohero_deleted_catalog_ids',
+        JSON.stringify(Array.from(deletedCatalogIdsRef.current))
+      );
+    } catch {}
+  }, []);
+
   const [ecoAds, setEcoAds] = useState<EcoAd[]>(() => {
     try {
       const saved = localStorage.getItem('ecohero_eco_ads');
-      return saved ? JSON.parse(saved) : INITIAL_ECO_ADS;
+      const list: EcoAd[] = saved ? JSON.parse(saved) : INITIAL_ECO_ADS;
+      return Array.isArray(list)
+        ? list.filter(a => a && !deletedCatalogIdsRef.current.has(a.id))
+        : INITIAL_ECO_ADS;
     } catch {
       return INITIAL_ECO_ADS;
     }
@@ -1304,6 +1332,43 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 data.user.approvedRoles.some((r: string) => ['moderator', 'school_admin'].includes(r))))
         );
 
+        if (Array.isArray(data.deletedCatalogIds)) {
+          for (const delId of data.deletedCatalogIds) {
+            if (delId) deletedCatalogIdsRef.current.add(String(delId));
+          }
+          try {
+            localStorage.setItem(
+              'ecohero_deleted_catalog_ids',
+              JSON.stringify(Array.from(deletedCatalogIdsRef.current))
+            );
+          } catch {}
+        }
+
+        const effectiveDeletedIds = deletedCatalogIdsRef.current;
+
+        if (fsSnapshot && callerIsSuperAdmin) {
+          for (const fsAd of fsSnapshot.ecoAds || []) {
+            if (fsAd?.id && effectiveDeletedIds.has(fsAd.id)) {
+              deleteCatalogRecordFromFirestore('eco_ads', fsAd.id).catch(() => {});
+            }
+          }
+          for (const fsPost of fsSnapshot.homePosts || []) {
+            if (fsPost?.id && effectiveDeletedIds.has(fsPost.id)) {
+              deleteCatalogRecordFromFirestore('home_posts', fsPost.id).catch(() => {});
+            }
+          }
+          for (const fsMission of fsSnapshot.missions || []) {
+            if (fsMission?.id && effectiveDeletedIds.has(fsMission.id)) {
+              deleteCatalogRecordFromFirestore('eco_missions', fsMission.id).catch(() => {});
+            }
+          }
+          for (const fsShop of fsSnapshot.shopItems || []) {
+            if (fsShop?.id && effectiveDeletedIds.has(fsShop.id)) {
+              deleteCatalogRecordFromFirestore('shopItems', fsShop.id).catch(() => {});
+            }
+          }
+        }
+
         setIsServerConnected(true);
         if (Array.isArray(data.schools)) setSchools(data.schools);
         if (Array.isArray(data.reports)) setReports(data.reports);
@@ -1315,9 +1380,10 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 data.shopItems,
                 fsSnapshot.shopItems,
                 fsSnapshot.tombstones,
-                'shopItems'
+                'shopItems',
+                effectiveDeletedIds
               )
-            : data.shopItems;
+            : data.shopItems.filter((i: any) => !effectiveDeletedIds.has(String(i?.id || '')));
           setShopItems(mergedShop);
         }
 
@@ -1347,9 +1413,10 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 data.ecoAds,
                 fsSnapshot.ecoAds,
                 fsSnapshot.tombstones,
-                'eco_ads'
+                'eco_ads',
+                effectiveDeletedIds
               ).filter((a) => a.status === 'active' || callerIsSuperAdmin)
-            : data.ecoAds;
+            : data.ecoAds.filter((a: any) => !effectiveDeletedIds.has(String(a?.id || '')));
           setEcoAds(mergedAds);
         }
         if ('adWatchState' in data) {
@@ -1368,9 +1435,10 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 data.homePosts,
                 fsSnapshot.homePosts,
                 fsSnapshot.tombstones,
-                'home_posts'
+                'home_posts',
+                effectiveDeletedIds
               ).filter((p) => p.status === 'active' || callerIsSuperAdmin || callerRole === 'moderator')
-            : data.homePosts;
+            : data.homePosts.filter((p: any) => !effectiveDeletedIds.has(String(p?.id || '')));
           setHomePosts(mergedPosts);
         }
 
@@ -1395,9 +1463,10 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 data.ecoMissions,
                 fsSnapshot.missions,
                 fsSnapshot.tombstones,
-                'eco_missions'
+                'eco_missions',
+                effectiveDeletedIds
               ).filter((m) => m.status === 'active' || callerCanManageMissions)
-            : data.ecoMissions;
+            : data.ecoMissions.filter((m: any) => !effectiveDeletedIds.has(String(m?.id || '')));
           setEcoMissions(mergedMissions);
           try {
             localStorage.setItem('ecohero_eco_missions', JSON.stringify(mergedMissions));
@@ -3922,8 +3991,9 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (res.status === 401) setAuthModalOpen(true);
           return { success: false, error: data?.error || 'Xatolik' };
         }
+        recordClientDeletedCatalogId(id);
         setHomePosts(prev => prev.filter(p => p.id !== id));
-        deleteCatalogRecordFromFirestore('home_posts', id).catch(() => {});
+        await deleteCatalogRecordFromFirestore('home_posts', id).catch(() => false);
         await syncBootstrap();
         showNotification("Post o'chirildi", 'info');
         return { success: true };
@@ -3931,7 +4001,7 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return { success: false, error: err?.message || 'Tarmoq xatoligi' };
       }
     },
-    [apiFetch, showNotification, syncBootstrap]
+    [apiFetch, recordClientDeletedCatalogId, showNotification, syncBootstrap]
   );
 
   const editReport: EcoContextType['editReport'] = useCallback(
@@ -4067,8 +4137,9 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (res.status === 401) setAuthModalOpen(true);
           return { success: false, error: data?.error || 'Xatolik' };
         }
+        recordClientDeletedCatalogId(adId);
         setEcoAds(prev => prev.filter(a => a.id !== adId));
-        deleteCatalogRecordFromFirestore('eco_ads', adId).catch(() => {});
+        await deleteCatalogRecordFromFirestore('eco_ads', adId).catch(() => false);
         await syncBootstrap();
         showNotification("Reklama o'chirildi", 'info');
         return { success: true };
@@ -4076,7 +4147,7 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return { success: false, error: err?.message || 'Tarmoq xatoligi' };
       }
     },
-    [apiFetch, showNotification, syncBootstrap]
+    [apiFetch, recordClientDeletedCatalogId, showNotification, syncBootstrap]
   );
 
   const deleteShopItem: EcoContextType['deleteShopItem'] = useCallback(
@@ -4089,8 +4160,9 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (res.status === 401) setAuthModalOpen(true);
           return { success: false, error: data?.error || 'Xatolik' };
         }
+        recordClientDeletedCatalogId(itemId);
         setShopItems(prev => prev.filter(i => i.id !== itemId));
-        deleteCatalogRecordFromFirestore('shopItems', itemId).catch(() => {});
+        await deleteCatalogRecordFromFirestore('shopItems', itemId).catch(() => false);
         await syncBootstrap();
         showNotification("Sovg'a o'chirildi", 'info');
         return { success: true };
@@ -4098,7 +4170,7 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return { success: false, error: err?.message || 'Tarmoq xatoligi' };
       }
     },
-    [apiFetch, showNotification, syncBootstrap]
+    [apiFetch, recordClientDeletedCatalogId, showNotification, syncBootstrap]
   );
 
   const createMission: EcoContextType['createMission'] = useCallback(
@@ -4175,8 +4247,9 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
           return { success: false, error: data?.error || 'Xatolik' };
         }
+        recordClientDeletedCatalogId(id);
         setEcoMissions(prev => prev.filter(m => m.id !== id));
-        deleteCatalogRecordFromFirestore('eco_missions', id).catch(() => {});
+        await deleteCatalogRecordFromFirestore('eco_missions', id).catch(() => false);
         await syncBootstrap();
         showNotification("Missiya o'chirildi", 'info');
         return { success: true };
@@ -4185,7 +4258,7 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return { success: false, error: err?.message || 'Tarmoq xatoligi' };
       }
     },
-    [apiFetch, showNotification, syncBootstrap]
+    [apiFetch, recordClientDeletedCatalogId, showNotification, syncBootstrap]
   );
 
   const joinWeeklyChallenge = useCallback(async () => {

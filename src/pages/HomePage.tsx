@@ -1,10 +1,8 @@
 import React, { useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
-  BookOpen,
   Calendar,
   ChevronRight,
-  Crown,
   Edit2,
   ExternalLink,
   Globe,
@@ -12,9 +10,7 @@ import {
   Leaf,
   Plus,
   Send,
-  ShoppingCart,
   Sprout,
-  Star,
   Trash2,
   X,
   Zap,
@@ -33,14 +29,13 @@ import {
 import { HomePost, HomePostCategory } from '../types/eco';
 import heroEcoForestImg from '../assets/images/hero_eco_forest_1795179384249.jpg';
 import earthEmblemImg from '../assets/images/mission_photo_earth_1795603120184.jpg';
-import championshipCupImg from '../assets/images/home_championship_cup_1795602397115.jpg';
-import missionTargetImg from '../assets/images/home_mission_target_1795602397153.jpg';
+import ecoCoinVaultImg from '../assets/images/wallet_ecocoin_vault_1795687842608.jpg';
 import ecoCameraImg from '../assets/images/media_eco_camera_1795687842823.jpg';
 import cleanNatureImg from '../assets/images/report_clean_nature_1795687843689.jpg';
-import giftLeavesImg from '../assets/images/home_gift_leaves_1795602395449.jpg';
-import trophyCrestImg from '../assets/images/eco_trophy_crest_1795179383102.jpg';
-import missionBooksImg from '../assets/images/mission_photo_books_1795603120993.jpg';
 import missionPlantingImg from '../assets/images/mission_photo_planting_1795603120304.jpg';
+import marketEcoGiftsPhoto from '../assets/images/market_eco_gifts_photo_1795843392666.jpg';
+import schoolChampionshipPhoto from '../assets/images/school_championship_photo_1795843393072.jpg';
+import ecoKnowledgeDeskPhoto from '../assets/images/eco_knowledge_desk_photo_1795843393217.jpg';
 
 const UZ_MONTHS = [
   'yanvar',
@@ -105,13 +100,6 @@ export const HomePage: React.FC = () => {
         .sort((a, b) => Number(b.isPinned) - Number(a.isPinned)),
     [homePosts]
   );
-
-  const userCityLabel = useMemo(() => {
-    const raw = (user.region || 'Andijon')
-      .replace(/\s*(viloyati|shahri|respublikasi)\s*/gi, '')
-      .trim();
-    return raw ? `Yashil ${raw}` : 'Yashil Andijon';
-  }, [user.region]);
 
   const postCategoryMeta: Record<
     string,
@@ -298,10 +286,8 @@ export const HomePage: React.FC = () => {
       id: 'shop',
       title: 'Eco Bozor',
       subtitle: "Sovg'alar va chegirmalar",
-      icon: ShoppingCart,
-      iconColor: 'text-emerald-400',
-      iconBg: 'bg-emerald-500/15 border-emerald-400/35',
-      bgPhoto: giftLeavesImg,
+      photo: marketEcoGiftsPhoto,
+      photoAlt: "Ekologik sovg'alar va eko-mahsulotlar to'plami",
       onClick: () => {
         triggerHaptic('light');
         setActiveTab('shop');
@@ -311,10 +297,8 @@ export const HomePage: React.FC = () => {
       id: 'championship',
       title: 'Champiyonat',
       subtitle: 'Eng kuchli maktab va tumanlar',
-      icon: Crown,
-      iconColor: 'text-amber-400',
-      iconBg: 'bg-amber-500/15 border-amber-400/35',
-      bgPhoto: trophyCrestImg,
+      photo: schoolChampionshipPhoto,
+      photoAlt: "Maktablararo ekologik chempionat kubogi",
       onClick: () => {
         triggerHaptic('medium');
         setActiveTab('championship');
@@ -324,26 +308,11 @@ export const HomePage: React.FC = () => {
       id: 'eco_bilim',
       title: 'Eco Bilim',
       subtitle: 'Ekologiya testlari va viktorinalar',
-      icon: BookOpen,
-      iconColor: 'text-sky-400',
-      iconBg: 'bg-sky-500/15 border-sky-400/35',
-      bgPhoto: missionBooksImg,
+      photo: ecoKnowledgeDeskPhoto,
+      photoAlt: 'Ekologiya va botanika fanidan bilish kitoblari',
       onClick: () => {
         triggerHaptic('medium');
         setActiveTab('eco_bilim');
-      },
-    },
-    {
-      id: 'green_city',
-      title: userCityLabel,
-      subtitle: 'Toza va yashil shahar uchun',
-      icon: Sprout,
-      iconColor: 'text-[#00F5A0]',
-      iconBg: 'bg-emerald-500/15 border-emerald-400/35',
-      bgPhoto: missionPlantingImg,
-      onClick: () => {
-        triggerHaptic('light');
-        setActiveTab('map');
       },
     },
   ];
@@ -595,16 +564,16 @@ export const HomePage: React.FC = () => {
               triggerHaptic('medium');
               setActiveTab('rating');
             }}
-            className="relative overflow-hidden rounded-[20px] sm:rounded-[24px] border border-slate-200 dark:border-emerald-400/35 hover:border-emerald-400/75 bg-white dark:bg-gradient-to-br dark:from-[#0A2B1D] dark:via-[#072116] dark:to-[#04140D] p-2.5 sm:p-4 flex items-center justify-between gap-2 sm:gap-3.5 text-left shadow-xl shadow-emerald-950/20 group cursor-pointer min-h-[82px] sm:min-h-[98px]"
+            className="relative overflow-hidden rounded-[20px] sm:rounded-[24px] border border-slate-200 dark:border-emerald-400/35 hover:border-emerald-400/75 bg-white dark:bg-gradient-to-br dark:from-[#0A2B1D] dark:via-[#072116] dark:to-[#04140D] p-2.5 sm:p-4 flex items-center justify-between gap-2 sm:gap-3.5 text-left shadow-xl shadow-emerald-950/20 group cursor-pointer min-h-[82px] sm:min-h-[98px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
           >
             <div className="pointer-events-none absolute -left-4 -bottom-4 w-24 h-24 rounded-full bg-amber-400/15 blur-2xl" />
             <div className="flex items-center gap-2 sm:gap-3.5 min-w-0 relative z-10">
-              <div className="w-11 h-11 sm:w-16 sm:h-16 rounded-2xl overflow-hidden border border-amber-400/40 bg-[#04110B] shadow-md shrink-0">
+              <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl overflow-hidden border border-amber-400/40 bg-gradient-to-br from-[#0B2D1F] to-[#04110B] shadow-md shrink-0">
                 <img
-                  src={championshipCupImg}
-                  alt="Musobaqalar kubogi"
+                  src={ecoCoinVaultImg}
+                  alt="Musobaqalar va reyting"
                   referrerPolicy="no-referrer"
-                  className="w-full h-full object-cover scale-105 group-hover:scale-110 transition-transform duration-300"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 />
               </div>
               <div className="min-w-0 space-y-0.5">
@@ -631,16 +600,16 @@ export const HomePage: React.FC = () => {
               triggerHaptic('medium');
               setActiveTab('missions');
             }}
-            className="relative overflow-hidden rounded-[20px] sm:rounded-[24px] border border-slate-200 dark:border-emerald-400/35 hover:border-emerald-400/75 bg-white dark:bg-gradient-to-br dark:from-[#0A2B1D] dark:via-[#072116] dark:to-[#04140D] p-2.5 sm:p-4 flex items-center justify-between gap-2 sm:gap-3.5 text-left shadow-xl shadow-emerald-950/20 group cursor-pointer min-h-[82px] sm:min-h-[98px]"
+            className="relative overflow-hidden rounded-[20px] sm:rounded-[24px] border border-slate-200 dark:border-emerald-400/35 hover:border-emerald-400/75 bg-white dark:bg-gradient-to-br dark:from-[#0A2B1D] dark:via-[#072116] dark:to-[#04140D] p-2.5 sm:p-4 flex items-center justify-between gap-2 sm:gap-3.5 text-left shadow-xl shadow-emerald-950/20 group cursor-pointer min-h-[82px] sm:min-h-[98px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
           >
             <div className="pointer-events-none absolute -left-4 -bottom-4 w-24 h-24 rounded-full bg-emerald-400/15 blur-2xl" />
             <div className="flex items-center gap-2 sm:gap-3.5 min-w-0 relative z-10">
-              <div className="w-11 h-11 sm:w-16 sm:h-16 rounded-2xl overflow-hidden border border-emerald-400/40 bg-[#04110B] shadow-md shrink-0">
+              <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl overflow-hidden border border-emerald-400/40 bg-gradient-to-br from-[#0B2D1F] to-[#04110B] shadow-md shrink-0">
                 <img
-                  src={missionTargetImg}
+                  src={missionPlantingImg}
                   alt="Eco Missiyalar"
                   referrerPolicy="no-referrer"
-                  className="w-full h-full object-cover scale-105 group-hover:scale-110 transition-transform duration-300"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 />
               </div>
               <div className="min-w-0 space-y-0.5">
@@ -720,14 +689,13 @@ export const HomePage: React.FC = () => {
         </motion.div>
       </motion.section>
 
-      {/* SECTION 4: BOSHQA IMKONIYATLAR + 4 QUICK TILES */}
+      {/* SECTION 4: BOSHQA IMKONIYATLAR + 3 COMPACT PHOTO CARDS */}
       <motion.section
         variants={itemVariants}
-        className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 space-y-3"
+        className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 space-y-2.5 sm:space-y-3"
       >
         <div className="flex items-center justify-between gap-2.5">
           <div className="flex items-center gap-2 min-w-0">
-            <Star className="w-5 h-5 text-amber-400 fill-amber-400 shrink-0" />
             <h2 className="font-display text-base sm:text-xl font-extrabold text-slate-900 dark:text-white tracking-tight truncate">
               Boshqa imkoniyatlar
             </h2>
@@ -739,52 +707,51 @@ export const HomePage: React.FC = () => {
               triggerHaptic('light');
               setActiveTab('rewards');
             }}
-            className="min-h-[36px] px-3.5 py-1.5 rounded-full bg-white/95 dark:bg-[#082519]/90 border border-slate-200 dark:border-emerald-400/35 hover:border-emerald-400/75 text-slate-800 dark:text-emerald-100 text-xs font-bold inline-flex items-center gap-1.5 shadow-sm cursor-pointer transition-all whitespace-nowrap shrink-0"
+            className="min-h-[38px] px-3.5 py-1.5 rounded-full bg-white/95 dark:bg-[#082519]/90 border border-slate-200 dark:border-emerald-400/35 hover:border-emerald-400/75 text-slate-800 dark:text-emerald-100 text-xs font-bold inline-flex items-center gap-1.5 shadow-sm cursor-pointer transition-all whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
           >
             <span>Ko&apos;proq</span>
             <ArrowRight className="w-3.5 h-3.5 text-emerald-500 dark:text-[#00F5A0]" />
           </button>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3.5">
-          {quickOpportunityTiles.map(tile => {
-            const Icon = tile.icon;
-            return (
-              <motion.button
-                key={tile.id}
-                whileHover={{ y: -2, scale: 1.01 }}
-                whileTap={{ scale: 0.98 }}
-                type="button"
-                onClick={tile.onClick}
-                className="relative overflow-hidden rounded-[20px] border border-slate-200 dark:border-emerald-400/30 hover:border-emerald-400/75 bg-white dark:bg-[#072116] p-3.5 sm:p-4 flex flex-col items-center justify-center text-center gap-2 shadow-lg shadow-emerald-950/15 group cursor-pointer min-h-[124px] sm:min-h-[144px]"
-              >
-                {/* Photorealistic subtle depth texture behind card */}
+        <div className="grid grid-cols-3 gap-2 sm:gap-4">
+          {quickOpportunityTiles.map(tile => (
+            <motion.button
+              key={tile.id}
+              whileHover={{ y: -2 }}
+              whileTap={{ scale: 0.985 }}
+              type="button"
+              onClick={tile.onClick}
+              className="relative overflow-hidden rounded-2xl sm:rounded-[20px] border border-slate-200 dark:border-emerald-400/25 hover:border-emerald-400/70 bg-white dark:bg-[#061D14] flex flex-col text-left shadow-md shadow-emerald-950/15 group cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+            >
+              {/* Compact Real Photo Header */}
+              <div className="relative w-full h-16 sm:h-24 lg:h-28 overflow-hidden bg-gradient-to-br from-[#0B2E20] via-[#072116] to-[#04120C] shrink-0">
                 <img
-                  src={tile.bgPhoto}
-                  alt=""
-                  aria-hidden="true"
+                  src={tile.photo}
+                  alt={tile.photoAlt}
                   referrerPolicy="no-referrer"
-                  className="pointer-events-none absolute inset-0 w-full h-full object-cover opacity-12 dark:opacity-18 group-hover:scale-105 transition-transform duration-500"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 />
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/85 via-white/90 to-white/95 dark:from-[#082418]/80 dark:via-[#061D13]/90 dark:to-[#04130D]/95" />
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-black/45 via-black/10 to-transparent dark:from-[#061D14] dark:via-[#061D14]/35 dark:to-transparent" />
+              </div>
 
-                <div
-                  className={`relative z-10 w-11 h-11 sm:w-12 sm:h-12 rounded-2xl border flex items-center justify-center shadow-sm ${tile.iconBg}`}
-                >
-                  <Icon className={`w-5 h-5 sm:w-6 sm:h-6 ${tile.iconColor}`} />
-                </div>
-
-                <div className="relative z-10 space-y-0.5 min-w-0 w-full">
-                  <div className="font-display text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white leading-tight truncate">
+              {/* Compact Typography + Affordance */}
+              <div className="flex-1 w-full p-2 sm:p-3 flex items-center justify-between gap-1.5 min-w-0">
+                <div className="min-w-0 space-y-0.5">
+                  <div className="font-display text-[11.5px] sm:text-sm lg:text-[15px] font-extrabold text-slate-900 dark:text-white leading-tight truncate">
                     {tile.title}
                   </div>
-                  <div className="text-[10.5px] sm:text-xs font-medium text-slate-500 dark:text-emerald-100/70 leading-snug line-clamp-2">
+                  <div className="text-[9.5px] sm:text-[11px] font-medium text-slate-600 dark:text-emerald-100/75 leading-tight line-clamp-2">
                     {tile.subtitle}
                   </div>
                 </div>
-              </motion.button>
-            );
-          })}
+
+                <span className="hidden sm:flex w-6 h-6 lg:w-7 lg:h-7 rounded-full bg-emerald-500/12 dark:bg-emerald-400/15 border border-emerald-500/25 dark:border-emerald-400/30 items-center justify-center text-emerald-600 dark:text-[#00F5A0] shrink-0 group-hover:translate-x-0.5 transition-transform">
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </span>
+              </div>
+            </motion.button>
+          ))}
         </div>
       </motion.section>
 

@@ -291,12 +291,22 @@ function getRecordTimestampMs(rec: any): number {
   return Number.isNaN(ts) ? 0 : ts;
 }
 
+const RETIRED_CATALOG_IDS = new Set<string>(['ad_01']);
+
 export function mergeServerAndFirestoreCatalog<T extends { id: string }>(
   serverList: T[],
   firestoreList: T[],
   tombstones: { collectionName: string; targetId: string; deletedAt: string }[],
-  collectionName: CatalogCollectionName
+  collectionName: CatalogCollectionName,
+  serverDeletedIds?: Iterable<string>
 ): T[] {
+  const serverDeletedSet = new Set<string>(RETIRED_CATALOG_IDS);
+  if (serverDeletedIds) {
+    for (const id of serverDeletedIds) {
+      if (id) serverDeletedSet.add(String(id));
+    }
+  }
+
   const tombstoneByTarget = new Map<string, number>();
   for (const t of tombstones) {
     if (t.collectionName === collectionName && t.targetId) {
@@ -311,6 +321,7 @@ export function mergeServerAndFirestoreCatalog<T extends { id: string }>(
 
   for (const item of Array.isArray(serverList) ? serverList : []) {
     if (!item?.id) continue;
+    if (serverDeletedSet.has(item.id)) continue;
     const tombTs = tombstoneByTarget.get(item.id);
     if (tombTs !== undefined && getRecordTimestampMs(item) <= tombTs) continue;
     byId.set(item.id, item);
@@ -319,6 +330,7 @@ export function mergeServerAndFirestoreCatalog<T extends { id: string }>(
 
   for (const remote of Array.isArray(firestoreList) ? firestoreList : []) {
     if (!remote?.id) continue;
+    if (serverDeletedSet.has(remote.id)) continue;
     const remoteTs = getRecordTimestampMs(remote);
     const tombTs = tombstoneByTarget.get(remote.id);
     if (tombTs !== undefined && remoteTs <= tombTs) continue;
