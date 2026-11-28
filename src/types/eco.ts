@@ -993,6 +993,7 @@ export interface RosterStudentEntry {
   district: string;
   role: UserRole | string;
   ecoCoins: number;
+  totalCoinsEarned?: number;
   reportsCount: number;
   treesPlanted: number;
   badge: string;
@@ -1000,6 +1001,8 @@ export interface RosterStudentEntry {
   phoneNumber?: string;
   telegramUsername?: string;
   telegramLinked?: boolean;
+  isVerified?: boolean;
+  registrationDate?: string;
   allowStudentMessages?: boolean;
 }
 
@@ -1019,6 +1022,7 @@ export interface RosterAmbassadorEntry {
   verifiedActivitiesCount: number;
   tasksCompletedCount: number;
   status: string;
+  appointedAt?: string;
   avatarUrl?: string;
 }
 
@@ -1057,6 +1061,8 @@ export interface RosterDirectoryResponse {
   role: UserRole | string;
   schoolStudents: RosterStudentEntry[];
   schoolAmbassadors: RosterAmbassadorEntry[];
+  districtStudents?: RosterStudentEntry[];
+  districtAmbassadors?: RosterAmbassadorEntry[];
   districtCaptains: RosterCaptainEntry[];
   districtCoordinators: RosterCoordinatorEntry[];
   regionalCoordinators?: RosterCoordinatorEntry[];
@@ -1466,3 +1472,163 @@ export interface DailyMissionSubmission {
   createdAt: string;
 }
 
+export type DistrictSectionId =
+  | 'district_overview'
+  | 'district_schools'
+  | 'district_students'
+  | 'district_captains'
+  | 'district_applications'
+  | 'district_reports'
+  | 'district_ambassadors'
+  | 'district_ratings'
+  | 'district_rewards'
+  | 'district_announcements'
+  | 'district_analytics'
+  | 'district_settings';
+
+export interface DistrictAnnouncementRecord {
+  id: string;
+  scope: 'district';
+  title: string;
+  message: string;
+  targetAudience: 'all' | 'school_admin' | 'ambassador' | 'student';
+  priority: 'normal' | 'urgent';
+  region: string;
+  district: string;
+  schoolId?: string;
+  schoolName?: string;
+  recipientsCount: number;
+  telegramDeliveredCount?: number;
+  createdByUid: string;
+  createdByName: string;
+  createdAt: string;
+}
+
+export type RegionalSectionId =
+  | 'regional_overview'
+  | 'regional_coordinators'
+  | 'regional_map'
+  | 'regional_schools_students'
+  | 'regional_eco_control'
+  | 'regional_championship'
+  | 'regional_announcements'
+  | 'regional_analytics'
+  | 'regional_ai_analyst';
+
+export interface RegionalDistrictSummary {
+  district: string;
+  region: string;
+  schoolsCount: number;
+  studentsCount: number;
+  captainsCount: number;
+  ambassadorsCount: number;
+  totalReports: number;
+  resolvedReports: number;
+  pendingReports: number;
+  escalatedReports: number;
+  totalCoins: number;
+  treesPlanted: number;
+  cleanupsCompleted: number;
+  activityLevel: 'high' | 'medium' | 'low';
+  coordinator: {
+    uid: string;
+    fullName: string;
+    phoneNumber?: string;
+    telegramUsername?: string;
+    telegramLinked?: boolean;
+    avatarUrl?: string;
+    status?: 'active' | 'suspended';
+    badge?: string;
+  } | null;
+}
+
+export interface RegionalCommandSummaryResponse {
+  success: boolean;
+  region: string;
+  totals: {
+    districtsTotal: number;
+    districtsWithCoordinator: number;
+    coordinatorsCount: number;
+    schoolsCount: number;
+    studentsCount: number;
+    captainsCount: number;
+    ambassadorsCount: number;
+    totalReports: number;
+    resolvedReports: number;
+    pendingReports: number;
+    escalatedReports: number;
+    pendingApplications: number;
+    totalCoins: number;
+    treesPlanted: number;
+  };
+  districts: RegionalDistrictSummary[];
+  recentAuditLogs: AuditLog[];
+}
+
+export interface RegionalAnnouncementRecord {
+  id: string;
+  scope: 'regional';
+  title: string;
+  message: string;
+  targetMode: 'all_districts' | 'selected_districts';
+  targetDistricts: string[];
+  targetAudience: 'all' | 'district_coordinator' | 'school_admin' | 'ambassador' | 'student';
+  priority: 'normal' | 'urgent';
+  pinToHome?: boolean;
+  homePostId?: string;
+  region: string;
+  recipientsCount: number;
+  telegramDeliveredCount?: number;
+  createdByUid: string;
+  createdByName: string;
+  createdAt: string;
+}
+
+export interface RegionalAnalyticsPeriodResponse {
+  success: boolean;
+  region: string;
+  period: 'daily' | 'weekly' | 'monthly' | 'yearly';
+  districtFilter: string;
+  totals: {
+    schools: number;
+    students: number;
+    reportsTotal: number;
+    reportsResolved: number;
+    reportsPending: number;
+    reportsEscalated: number;
+    mediaApproved: number;
+    totalEcoCoins: number;
+    treesPlanted: number;
+    cleanupsCompleted: number;
+  };
+  timeSeries: {
+    label: string;
+    reports: number;
+    resolved: number;
+    mediaApproved: number;
+    coinsAwarded: number;
+  }[];
+  districtComparison: {
+    district: string;
+    schools: number;
+    students: number;
+    reports: number;
+    resolved: number;
+    resolutionRate: number;
+    coins: number;
+    treesPlanted: number;
+  }[];
+  categoryBreakdown: {
+    category: string;
+    label: string;
+    count: number;
+  }[];
+}
+
+export interface RegionalAiAnalystMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  createdAt: string;
+  modelUsed?: string;
+}

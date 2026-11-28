@@ -63,6 +63,10 @@ import {
   ChampionshipLiveResponse,
   ProctoredQuizStartResponse,
   ProctoredQuizAnswerResponse,
+  DistrictAnnouncementRecord,
+  RegionalCommandSummaryResponse,
+  RegionalAnnouncementRecord,
+  RegionalAnalyticsPeriodResponse,
 } from '../types/eco';
 import {
   INITIAL_USER,
@@ -525,6 +529,99 @@ interface EcoContextType {
     error?: string;
     data?: DistrictUserGrowthResponse;
   }>;
+  updateDistrictSchool: (
+    schoolId: string,
+    updates: {
+      name?: string;
+      number?: string;
+      address?: string;
+      status?: 'verified' | 'pending';
+      ambassadorName?: string;
+    }
+  ) => Promise<{ success: boolean; school?: School; error?: string }>;
+  updateDistrictStudent: (
+    uid: string,
+    updates: { schoolId?: string; grade?: string }
+  ) => Promise<{ success: boolean; error?: string }>;
+  updateDistrictAmbassadorStatus: (
+    ambassadorId: string,
+    status: 'active' | 'paused' | 'revoked',
+    reason?: string
+  ) => Promise<{ success: boolean; error?: string }>;
+  manageDistrictCaptain: (
+    uid: string,
+    payload: { action: 'reassign' | 'revoke'; schoolId?: string; reason?: string }
+  ) => Promise<{ success: boolean; error?: string }>;
+  performDistrictReportAction: (
+    reportId: string,
+    action: 'verify' | 'assign_captain' | 'escalate' | 'request_info' | 'reject' | 'resolve',
+    payload?: { note?: string; escalationTarget?: string; resolvedImageUrl?: string }
+  ) => Promise<{ success: boolean; report?: EcoReport; error?: string }>;
+  reviewDistrictMedia: (
+    submissionId: string,
+    decision: 'APPROVED' | 'REJECTED' | 'NEEDS_REVISION',
+    moderatorNote?: string,
+    customCoins?: number
+  ) => Promise<{ success: boolean; error?: string }>;
+  sendDistrictAnnouncement: (payload: {
+    title: string;
+    message: string;
+    targetAudience: 'all' | 'school_admin' | 'ambassador' | 'student';
+    priority?: 'normal' | 'urgent';
+    schoolId?: string;
+    sendTelegram?: boolean;
+  }) => Promise<{ success: boolean; announcement?: DistrictAnnouncementRecord; error?: string }>;
+  fetchDistrictAuditLogs: () => Promise<AuditLog[]>;
+  fetchRegionalCommandSummary: (region?: string) => Promise<RegionalCommandSummaryResponse | null>;
+  manageRegionalCoordinator: (
+    uid: string,
+    payload: {
+      action: 'reassign' | 'suspend' | 'activate' | 'revoke' | 'update_contact';
+      district?: string;
+      reason?: string;
+      phoneNumber?: string;
+      telegramUsername?: string;
+      badge?: string;
+    }
+  ) => Promise<{ success: boolean; error?: string }>;
+  dispatchRegionalReport: (
+    reportId: string,
+    action: 'dispatch_to_district' | 'verify' | 'resolve' | 'escalate' | 'request_info' | 'reject',
+    payload?: { note?: string; targetDistrict?: string }
+  ) => Promise<{ success: boolean; report?: EcoReport; error?: string }>;
+  fetchRegionalAnnouncements: () => Promise<RegionalAnnouncementRecord[]>;
+  sendRegionalAnnouncement: (payload: {
+    title: string;
+    message: string;
+    targetMode: 'all_districts' | 'selected_districts';
+    targetDistricts?: string[];
+    targetAudience: 'all' | 'district_coordinator' | 'school_admin' | 'ambassador' | 'student';
+    priority?: 'normal' | 'urgent';
+    pinToHome?: boolean;
+    sendTelegram?: boolean;
+    region?: string;
+  }) => Promise<{ success: boolean; announcement?: RegionalAnnouncementRecord; error?: string }>;
+  fetchRegionalAnalytics: (params?: {
+    period?: 'daily' | 'weekly' | 'monthly' | 'yearly';
+    district?: string;
+    region?: string;
+  }) => Promise<RegionalAnalyticsPeriodResponse | null>;
+  awardRegionalChampionship: (payload: {
+    region?: string;
+    periodType: 'monthly' | 'yearly';
+    category: 'district' | 'school' | 'student';
+    targetId?: string;
+    targetName: string;
+    district?: string;
+    rank: number;
+    bonusCoins: number;
+    prizeTitle: string;
+  }) => Promise<{ success: boolean; award?: any; error?: string }>;
+  askRegionalAiAnalyst: (payload: {
+    question: string;
+    history?: { role: 'user' | 'assistant'; text: string }[];
+    region?: string;
+  }) => Promise<{ success: boolean; reply?: string; modelUsed?: string; generatedAt?: string; error?: string }>;
   fetchChatThreads: () => Promise<ChatThreadSummary[]>;
   fetchChatMessages: (channelId: string) => Promise<{ success: boolean; messages: EcoChatMessage[]; error?: string }>;
   sendChatMessage: (payload: {
@@ -3402,7 +3499,12 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const markNotificationRead = (id: string) => {
-    setNotifications(prev => prev.map(n => (n.id === id ? { ...n, read: true } : n)));
+    const isAll = id === '__all__';
+    setNotifications(prev => prev.map(n => (isAll || n.id === id ? { ...n, read: true } : n)));
+    apiFetch('/api/notifications/mark-read', {
+      method: 'POST',
+      body: JSON.stringify(isAll ? { all: true } : { id }),
+    }).catch(() => {});
   };
 
   const sendTelegramNotification = async (
@@ -5056,6 +5158,356 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [apiFetch, showNotification, syncBootstrap, triggerConfetti]
   );
 
+  const updateDistrictSchool: EcoContextType['updateDistrictSchool'] = useCallback(
+    async (schoolId, updates) => {
+      try {
+        const res = await apiFetch(`/api/schools/${schoolId}`, {
+          method: 'PATCH',
+          body: JSON.stringify(updates),
+        });
+        const data = await parseApiJson<any>(res);
+        if (!res.ok || !data?.success) {
+          showNotification(data?.error || 'Maktab yangilanmadi', 'warning');
+          return { success: false, error: data?.error || 'Xatolik' };
+        }
+        await syncBootstrap();
+        showNotification("Maktab ma'lumotlari saqlandi!", 'success');
+        return { success: true, school: data.school };
+      } catch (err: any) {
+        showNotification(err?.message || 'Tarmoq xatoligi', 'warning');
+        return { success: false, error: err?.message || 'Tarmoq xatoligi' };
+      }
+    },
+    [apiFetch, showNotification, syncBootstrap]
+  );
+
+  const updateDistrictStudent: EcoContextType['updateDistrictStudent'] = useCallback(
+    async (uid, updates) => {
+      try {
+        const res = await apiFetch(`/api/district/students/${uid}`, {
+          method: 'PATCH',
+          body: JSON.stringify(updates),
+        });
+        const data = await parseApiJson<any>(res);
+        if (!res.ok || !data?.success) {
+          showNotification(data?.error || "O'quvchi ma'lumotlari saqlanmadi", 'warning');
+          return { success: false, error: data?.error || 'Xatolik' };
+        }
+        await syncBootstrap();
+        showNotification("O'quvchi ma'lumotlari yangilandi!", 'success');
+        return { success: true };
+      } catch (err: any) {
+        showNotification(err?.message || 'Tarmoq xatoligi', 'warning');
+        return { success: false, error: err?.message || 'Tarmoq xatoligi' };
+      }
+    },
+    [apiFetch, showNotification, syncBootstrap]
+  );
+
+  const updateDistrictAmbassadorStatus: EcoContextType['updateDistrictAmbassadorStatus'] = useCallback(
+    async (ambassadorId, status, reason) => {
+      try {
+        const res = await apiFetch(`/api/district/ambassadors/${ambassadorId}/status`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status, reason }),
+        });
+        const data = await parseApiJson<any>(res);
+        if (!res.ok || !data?.success) {
+          showNotification(data?.error || "Eko-Elchi holati o'zgarmadi", 'warning');
+          return { success: false, error: data?.error || 'Xatolik' };
+        }
+        await syncBootstrap();
+        showNotification('Eko-Elchi holati yangilandi!', 'success');
+        return { success: true };
+      } catch (err: any) {
+        showNotification(err?.message || 'Tarmoq xatoligi', 'warning');
+        return { success: false, error: err?.message || 'Tarmoq xatoligi' };
+      }
+    },
+    [apiFetch, showNotification, syncBootstrap]
+  );
+
+  const manageDistrictCaptain: EcoContextType['manageDistrictCaptain'] = useCallback(
+    async (uid, payload) => {
+      try {
+        const res = await apiFetch(`/api/district/captains/${uid}`, {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        });
+        const data = await parseApiJson<any>(res);
+        if (!res.ok || !data?.success) {
+          showNotification(data?.error || 'Maktab sardori amali bajarilmadi', 'warning');
+          return { success: false, error: data?.error || 'Xatolik' };
+        }
+        await syncBootstrap();
+        showNotification(
+          payload.action === 'reassign'
+            ? 'Maktab sardori yangi maktabga biriktirildi!'
+            : 'Maktab sardori vakolati olib tashlandi',
+          'success'
+        );
+        return { success: true };
+      } catch (err: any) {
+        showNotification(err?.message || 'Tarmoq xatoligi', 'warning');
+        return { success: false, error: err?.message || 'Tarmoq xatoligi' };
+      }
+    },
+    [apiFetch, showNotification, syncBootstrap]
+  );
+
+  const performDistrictReportAction: EcoContextType['performDistrictReportAction'] = useCallback(
+    async (reportId, action, payload = {}) => {
+      try {
+        const res = await apiFetch(`/api/district/reports/${reportId}/action`, {
+          method: 'POST',
+          body: JSON.stringify({ action, ...payload }),
+        });
+        const data = await parseApiJson<any>(res);
+        if (!res.ok || !data?.success) {
+          showNotification(data?.error || 'Hisobot amali bajarilmadi', 'warning');
+          return { success: false, error: data?.error || 'Xatolik' };
+        }
+        await syncBootstrap();
+        showNotification('Ekologik hisobot holati yangilandi!', 'success');
+        return { success: true, report: data.report };
+      } catch (err: any) {
+        showNotification(err?.message || 'Tarmoq xatoligi', 'warning');
+        return { success: false, error: err?.message || 'Tarmoq xatoligi' };
+      }
+    },
+    [apiFetch, showNotification, syncBootstrap]
+  );
+
+  const reviewDistrictMedia: EcoContextType['reviewDistrictMedia'] = useCallback(
+    async (submissionId, decision, moderatorNote, customCoins) => {
+      try {
+        const res = await apiFetch(`/api/district/media/${submissionId}/review`, {
+          method: 'POST',
+          body: JSON.stringify({ decision, moderatorNote, customCoins }),
+        });
+        const data = await parseApiJson<any>(res);
+        if (!res.ok || !data?.success) {
+          showNotification(data?.error || 'Eko-media tekshirilmadi', 'warning');
+          return { success: false, error: data?.error || 'Xatolik' };
+        }
+        await syncBootstrap();
+        showNotification('Eko-media qarori saqlandi!', 'success');
+        return { success: true };
+      } catch (err: any) {
+        showNotification(err?.message || 'Tarmoq xatoligi', 'warning');
+        return { success: false, error: err?.message || 'Tarmoq xatoligi' };
+      }
+    },
+    [apiFetch, showNotification, syncBootstrap]
+  );
+
+  const sendDistrictAnnouncement: EcoContextType['sendDistrictAnnouncement'] = useCallback(
+    async (payload) => {
+      try {
+        const res = await apiFetch('/api/district/announcements', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        const data = await parseApiJson<any>(res);
+        if (!res.ok || !data?.success) {
+          showNotification(data?.error || "E'lon yuborilmadi", 'warning');
+          return { success: false, error: data?.error || 'Xatolik' };
+        }
+        await syncBootstrap();
+        showNotification(
+          `E'lon ${data.announcement?.recipientsCount || 0} nafar ishtirokchiga yuborildi!`,
+          'success'
+        );
+        return { success: true, announcement: data.announcement };
+      } catch (err: any) {
+        showNotification(err?.message || 'Tarmoq xatoligi', 'warning');
+        return { success: false, error: err?.message || 'Tarmoq xatoligi' };
+      }
+    },
+    [apiFetch, showNotification, syncBootstrap]
+  );
+
+  const fetchDistrictAuditLogs: EcoContextType['fetchDistrictAuditLogs'] = useCallback(async () => {
+    try {
+      const res = await apiFetch('/api/district/audit-logs');
+      const data = await parseApiJson<any>(res);
+      if (!res.ok || !data?.success) return [];
+      return (data.logs || []) as AuditLog[];
+    } catch {
+      return [];
+    }
+  }, [apiFetch]);
+
+  const fetchRegionalCommandSummary: EcoContextType['fetchRegionalCommandSummary'] = useCallback(
+    async (region) => {
+      try {
+        const q = region ? `?region=${encodeURIComponent(region)}` : '';
+        const res = await apiFetch(`/api/regional/command-summary${q}`);
+        const data = await parseApiJson<any>(res);
+        if (!res.ok || !data?.success) return null;
+        return data as RegionalCommandSummaryResponse;
+      } catch {
+        return null;
+      }
+    },
+    [apiFetch]
+  );
+
+  const manageRegionalCoordinator: EcoContextType['manageRegionalCoordinator'] = useCallback(
+    async (uid, payload) => {
+      try {
+        const res = await apiFetch(`/api/regional/coordinators/${uid}`, {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        });
+        const data = await parseApiJson<any>(res);
+        if (!res.ok || !data?.success) {
+          showNotification(data?.error || 'Koordinator amali bajarilmadi', 'warning');
+          return { success: false, error: data?.error || 'Xatolik' };
+        }
+        await syncBootstrap();
+        showNotification('Koordinator vakolati yangilandi!', 'success');
+        return { success: true };
+      } catch (err: any) {
+        showNotification(err?.message || 'Tarmoq xatoligi', 'warning');
+        return { success: false, error: err?.message || 'Tarmoq xatoligi' };
+      }
+    },
+    [apiFetch, showNotification, syncBootstrap]
+  );
+
+  const dispatchRegionalReport: EcoContextType['dispatchRegionalReport'] = useCallback(
+    async (reportId, action, payload = {}) => {
+      try {
+        const res = await apiFetch(`/api/regional/reports/${reportId}/dispatch`, {
+          method: 'POST',
+          body: JSON.stringify({ action, ...payload }),
+        });
+        const data = await parseApiJson<any>(res);
+        if (!res.ok || !data?.success) {
+          showNotification(data?.error || 'Ekologik nazorat amali bajarilmadi', 'warning');
+          return { success: false, error: data?.error || 'Xatolik' };
+        }
+        await syncBootstrap();
+        showNotification(
+          action === 'dispatch_to_district'
+            ? 'Muammo tuman koordinatoriga qayta ishlash uchun yuborildi!'
+            : 'Ekologik hisobot holati yangilandi!',
+          'success'
+        );
+        return { success: true, report: data.report };
+      } catch (err: any) {
+        showNotification(err?.message || 'Tarmoq xatoligi', 'warning');
+        return { success: false, error: err?.message || 'Tarmoq xatoligi' };
+      }
+    },
+    [apiFetch, showNotification, syncBootstrap]
+  );
+
+  const fetchRegionalAnnouncements: EcoContextType['fetchRegionalAnnouncements'] = useCallback(async () => {
+    try {
+      const res = await apiFetch('/api/regional/announcements');
+      const data = await parseApiJson<any>(res);
+      if (!res.ok || !data?.success) return [];
+      return (data.announcements || []) as RegionalAnnouncementRecord[];
+    } catch {
+      return [];
+    }
+  }, [apiFetch]);
+
+  const sendRegionalAnnouncement: EcoContextType['sendRegionalAnnouncement'] = useCallback(
+    async (payload) => {
+      try {
+        const res = await apiFetch('/api/regional/announcements', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        const data = await parseApiJson<any>(res);
+        if (!res.ok || !data?.success) {
+          showNotification(data?.error || "E'lon yuborilmadi", 'warning');
+          return { success: false, error: data?.error || 'Xatolik' };
+        }
+        await syncBootstrap();
+        showNotification(
+          `E'lon ${data.announcement?.recipientsCount || 0} nafar ishtirokchiga yuborildi!`,
+          'success'
+        );
+        return { success: true, announcement: data.announcement };
+      } catch (err: any) {
+        showNotification(err?.message || 'Tarmoq xatoligi', 'warning');
+        return { success: false, error: err?.message || 'Tarmoq xatoligi' };
+      }
+    },
+    [apiFetch, showNotification, syncBootstrap]
+  );
+
+  const fetchRegionalAnalytics: EcoContextType['fetchRegionalAnalytics'] = useCallback(
+    async (params = {}) => {
+      try {
+        const qs = new URLSearchParams();
+        if (params.period) qs.set('period', params.period);
+        if (params.district) qs.set('district', params.district);
+        if (params.region) qs.set('region', params.region);
+        const query = qs.toString() ? `?${qs.toString()}` : '';
+        const res = await apiFetch(`/api/regional/analytics${query}`);
+        const data = await parseApiJson<any>(res);
+        if (!res.ok || !data?.success) return null;
+        return data as RegionalAnalyticsPeriodResponse;
+      } catch {
+        return null;
+      }
+    },
+    [apiFetch]
+  );
+
+  const awardRegionalChampionship: EcoContextType['awardRegionalChampionship'] = useCallback(
+    async (payload) => {
+      try {
+        const res = await apiFetch('/api/regional/championship/award', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        const data = await parseApiJson<any>(res);
+        if (!res.ok || !data?.success) {
+          showNotification(data?.error || 'Mukofotlashda xatolik', 'warning');
+          return { success: false, error: data?.error || 'Xatolik' };
+        }
+        await syncBootstrap();
+        showNotification("Chempionat g'olibi rasman taqdirlandi!", 'success');
+        return { success: true, award: data.award };
+      } catch (err: any) {
+        showNotification(err?.message || 'Tarmoq xatoligi', 'warning');
+        return { success: false, error: err?.message || 'Tarmoq xatoligi' };
+      }
+    },
+    [apiFetch, showNotification, syncBootstrap]
+  );
+
+  const askRegionalAiAnalyst: EcoContextType['askRegionalAiAnalyst'] = useCallback(
+    async (payload) => {
+      try {
+        const res = await apiFetch('/api/regional/ai-analyst', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+          timeoutMs: 30000,
+        });
+        const data = await parseApiJson<any>(res);
+        if (!res.ok || !data?.success) {
+          return { success: false, error: data?.error || 'AI tahlilchi javob bera olmadi' };
+        }
+        return {
+          success: true,
+          reply: data.reply,
+          modelUsed: data.modelUsed,
+          generatedAt: data.generatedAt,
+        };
+      } catch (err: any) {
+        return { success: false, error: err?.message || 'Tarmoq xatoligi' };
+      }
+    },
+    [apiFetch]
+  );
+
   return (
     <EcoContext.Provider
       value={{
@@ -5194,6 +5646,22 @@ export const EcoProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         subscribeChatEvents,
         fetchRosterDirectory,
         fetchDistrictUserGrowth,
+        updateDistrictSchool,
+        updateDistrictStudent,
+        updateDistrictAmbassadorStatus,
+        manageDistrictCaptain,
+        performDistrictReportAction,
+        reviewDistrictMedia,
+        sendDistrictAnnouncement,
+        fetchDistrictAuditLogs,
+        fetchRegionalCommandSummary,
+        manageRegionalCoordinator,
+        dispatchRegionalReport,
+        fetchRegionalAnnouncements,
+        sendRegionalAnnouncement,
+        fetchRegionalAnalytics,
+        awardRegionalChampionship,
+        askRegionalAiAnalyst,
         fetchChatThreads,
         fetchChatMessages,
         sendChatMessage,

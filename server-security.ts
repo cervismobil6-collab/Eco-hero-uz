@@ -372,8 +372,11 @@ export function assertDistrictAccess(user: any, region?: string, district?: stri
 export function assertRegionAccess(user: any, region?: string): boolean {
   if (!user) return false;
   if (checkIsSuperAdmin(user) || hasAnyRole(user, ['moderator'])) return true;
+  const userReg = String(user.region || '').trim().toLowerCase();
+  const targetReg = String(region || '').trim().toLowerCase();
+  if (!userReg || !targetReg) return false;
   if (hasAnyRole(user, ['regional_coordinator'])) {
-    return String(user.region || '').toLowerCase() === String(region || '').toLowerCase();
+    return userReg === targetReg;
   }
   return false;
 }
@@ -446,8 +449,12 @@ export function canViewReport(report: any, viewer: any): boolean {
   if (!viewer) return false;
   if (checkIsSuperAdmin(viewer) || hasAnyRole(viewer, ['moderator'])) return true;
   if (report.reporterUid === viewer.uid) return true;
-  if (hasAnyRole(viewer, ['regional_coordinator']) && report.region === viewer.region) return true;
-  if (hasAnyRole(viewer, ['district_coordinator']) && report.district === viewer.district) return true;
+  const rReg = String(report.region || '').trim().toLowerCase();
+  const rDist = String(report.district || '').trim().toLowerCase();
+  const vReg = String(viewer.region || '').trim().toLowerCase();
+  const vDist = String(viewer.district || '').trim().toLowerCase();
+  if (hasAnyRole(viewer, ['regional_coordinator']) && rReg && vReg && rReg === vReg) return true;
+  if (hasAnyRole(viewer, ['district_coordinator']) && rDist && vDist && rDist === vDist && (!rReg || !vReg || rReg === vReg)) return true;
   if (hasAnyRole(viewer, ['school_admin', 'ambassador']) && report.schoolId && report.schoolId === viewer.schoolId) {
     return true;
   }

@@ -52,7 +52,9 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useEco } from '../context/EcoContext';
-import { DistrictUserGrowthResponse, EcoAd, ShopItem, ShopRedemptionGate } from '../types/eco';
+import { DistrictUserGrowthResponse, DistrictSectionId, RegionalSectionId, EcoAd, ShopItem, ShopRedemptionGate } from '../types/eco';
+import { DISTRICT_MENU_ITEMS } from '../components/dashboard/district/districtTypes';
+import { REGIONAL_MENU_ITEMS } from '../components/dashboard/regional/regionalTypes';
 import { resolveMediaUrl, openAdTargetUrl } from '../utils/api';
 import { EcoTelegramChatPanel } from '../components/chat/EcoTelegramChatPanel';
 import { StudentDashboardView } from '../components/dashboard/StudentDashboardView';
@@ -75,9 +77,9 @@ function getDefaultTabForRole(role: string): string {
     case 'super_admin':
       return 'role_requests';
     case 'regional_coordinator':
-      return 'regional_dashboard';
+      return 'regional_overview';
     case 'district_coordinator':
-      return 'district_dashboard';
+      return 'district_overview';
     case 'school_admin':
       return 'school_dashboard';
     case 'ambassador':
@@ -123,6 +125,7 @@ export const AdminDashboardPage: React.FC = () => {
     liveMetrics,
     refreshBootstrap,
     dailyMissions,
+    notifications,
     adminIntent,
   } = useEco();
 
@@ -521,6 +524,70 @@ export const AdminDashboardPage: React.FC = () => {
     roleRequests.filter(r => r.status === 'pending').length;
   const pendingMediaCount = mediaSubmissions.filter(m => m.status === 'PENDING').length;
 
+  const districtPendingAppsCount = registrationApplications.filter(
+    a =>
+      ['pending', 'needs_info'].includes(a.status) &&
+      ['school_admin', 'ambassador'].includes(a.requestedRole) &&
+      a.district?.toLowerCase() === (user.district || '').toLowerCase() &&
+      a.region?.toLowerCase() === (user.region || '').toLowerCase()
+  ).length;
+  const districtPendingReportsCount =
+    reports.filter(
+      r =>
+        r.district?.toLowerCase() === (user.district || '').toLowerCase() &&
+        r.region?.toLowerCase() === (user.region || '').toLowerCase() &&
+        ['pending', 'PENDING_REVIEW', 'NEEDS_INFO', 'ESCALATED'].includes(r.status)
+    ).length +
+    mediaSubmissions.filter(
+      m =>
+        m.district?.toLowerCase() === (user.district || '').toLowerCase() &&
+        m.region?.toLowerCase() === (user.region || '').toLowerCase() &&
+        m.status === 'PENDING'
+    ).length;
+  const districtUnreadNotifsCount = notifications.filter(n => !n.read).length;
+
+  const districtUnifiedMenu = DISTRICT_MENU_ITEMS.map(item => ({
+    id: item.id as string,
+    label: item.label,
+    icon: item.icon,
+    roles: ['district_coordinator'],
+    badge:
+      item.id === 'district_applications'
+        ? districtPendingAppsCount
+        : item.id === 'district_reports'
+        ? districtPendingReportsCount
+        : item.id === 'district_announcements'
+        ? districtUnreadNotifsCount
+        : undefined,
+  }));
+
+  const regionalPendingAppsCount = registrationApplications.filter(
+    a =>
+      ['pending', 'needs_info'].includes(a.status) &&
+      ['district_coordinator', 'school_admin', 'ambassador'].includes(a.requestedRole) &&
+      a.region?.toLowerCase() === (user.region || '').toLowerCase()
+  ).length;
+  const regionalPendingReportsCount = reports.filter(
+    r =>
+      r.region?.toLowerCase() === (user.region || '').toLowerCase() &&
+      ['pending', 'PENDING_REVIEW', 'NEEDS_INFO', 'ESCALATED'].includes(r.status)
+  ).length;
+
+  const regionalUnifiedMenu = REGIONAL_MENU_ITEMS.map(item => ({
+    id: item.id as string,
+    label: item.label,
+    icon: item.icon,
+    roles: ['regional_coordinator'],
+    badge:
+      item.id === 'regional_coordinators'
+        ? regionalPendingAppsCount
+        : item.id === 'regional_eco_control'
+        ? regionalPendingReportsCount
+        : item.id === 'regional_announcements'
+        ? districtUnreadNotifsCount
+        : undefined,
+  }));
+
   const menuItems = [
     { id: 'student_dashboard', label: "O'quvchi Kabineti", icon: LayoutDashboard, roles: ['student'] },
     { id: 'role_apply', label: 'Lavozimga Ariza', icon: UserCheck, roles: ['student'] },
@@ -530,17 +597,17 @@ export const AdminDashboardPage: React.FC = () => {
     { id: 'problem_workflow', label: 'Muammo 6-Bosqich', icon: AlertTriangle, roles: ['super_admin', 'moderator'] },
     { id: 'reward_settings', label: 'EcoCoin Sozlamalari', icon: Coins, roles: ['super_admin'] },
     { id: 'role_management', label: 'Rollar Boshqaruvi', icon: Users, roles: ['super_admin'] },
-    { id: 'regional_dashboard', label: 'Viloyat Dashbordi', icon: Globe, roles: ['super_admin', 'regional_coordinator'] },
-    { id: 'district_dashboard', label: 'Tuman Dashbordi', icon: MapPin, roles: ['super_admin', 'regional_coordinator', 'district_coordinator'] },
-    { id: 'district_growth_race', label: 'TOP-3 Foydalanuvchi Poygasi', icon: TrendingUp, roles: ['super_admin', 'district_coordinator'] },
+    { id: 'regional_dashboard', label: 'Viloyat Dashbordi', icon: Globe, roles: ['super_admin'] },
+    { id: 'district_dashboard', label: 'Tuman Dashbordi', icon: MapPin, roles: ['super_admin'] },
+    { id: 'district_growth_race', label: 'TOP-3 Foydalanuvchi Poygasi', icon: TrendingUp, roles: ['super_admin'] },
     { id: 'school_dashboard', label: 'Maktab Sardori', icon: SchoolIcon, roles: ['super_admin', 'school_admin'] },
     { id: 'ambassador_dashboard', label: 'Eko-Elchi Dashbordi', icon: ListChecks, roles: ['super_admin', 'ambassador'] },
     { id: 'sponsor_dashboard', label: 'Homiy Kabineti', icon: Briefcase, roles: ['super_admin', 'sponsor'] },
-    { id: 'team_chat', label: 'Suhbat & Topshiriqlar', icon: MessageSquare, roles: ['super_admin', 'regional_coordinator', 'district_coordinator', 'school_admin', 'ambassador', 'moderator', 'sponsor', 'student'] },
-    { id: 'reports', label: 'Muammolar Arxivi', icon: Activity, roles: ['super_admin', 'moderator', 'regional_coordinator', 'district_coordinator', 'school_admin', 'ambassador'] },
-    { id: 'schools', label: 'Maktablar', icon: Building2, roles: ['super_admin', 'regional_coordinator', 'district_coordinator'] },
+    { id: 'team_chat', label: 'Suhbat & Topshiriqlar', icon: MessageSquare, roles: ['super_admin', 'school_admin', 'ambassador', 'moderator', 'sponsor', 'student'] },
+    { id: 'reports', label: 'Muammolar Arxivi', icon: Activity, roles: ['super_admin', 'moderator', 'school_admin', 'ambassador'] },
+    { id: 'schools', label: 'Maktablar', icon: Building2, roles: ['super_admin'] },
     { id: 'shop_management', label: 'Eko-Bozor', icon: Package, roles: ['super_admin'] },
-    { id: 'voucher_verifier', label: 'Vaucher Tekshirgich', icon: QrCode, roles: ['super_admin', 'moderator', 'school_admin', 'district_coordinator', 'regional_coordinator'] },
+    { id: 'voucher_verifier', label: 'Vaucher Tekshirgich', icon: QrCode, roles: ['super_admin', 'moderator', 'school_admin'] },
     { id: 'shop_orders', label: 'Buyurtmalar', icon: Clock, roles: ['super_admin', 'sponsor', 'school_admin'] },
     { id: 'ads', label: 'Reklama (ADS)', icon: Sparkles, roles: ['super_admin', 'sponsor'] },
     { id: 'daily_missions', label: 'Bugungi Missiyalar', icon: Sparkles, roles: ['super_admin'], badge: dailyMissions.length },
@@ -550,7 +617,12 @@ export const AdminDashboardPage: React.FC = () => {
     { id: 'firebase_guide', label: 'Firebase Info', icon: Database, roles: ['super_admin'] },
   ];
 
-  const filteredMenu = menuItems.filter(item => item.roles.includes(user.role));
+  const filteredMenu =
+    user.role === 'district_coordinator'
+      ? districtUnifiedMenu
+      : user.role === 'regional_coordinator'
+      ? regionalUnifiedMenu
+      : menuItems.filter(item => item.roles.includes(user.role));
 
   useEffect(() => {
     if (filteredMenu.length > 0 && !filteredMenu.some(m => m.id === activeTab)) {
@@ -559,8 +631,25 @@ export const AdminDashboardPage: React.FC = () => {
   }, [user.role]);
 
   useEffect(() => {
-    if (adminIntent?.adminTab && filteredMenu.some(m => m.id === adminIntent.adminTab)) {
-      setActiveTab(adminIntent.adminTab);
+    if (!adminIntent?.adminTab) return;
+    const mappedTab =
+      user.role === 'district_coordinator' && adminIntent.adminTab === 'district_dashboard'
+        ? 'district_overview'
+        : user.role === 'district_coordinator' && adminIntent.adminTab === 'district_growth_race'
+        ? 'district_ratings'
+        : user.role === 'regional_coordinator' && adminIntent.adminTab === 'regional_dashboard'
+        ? 'regional_overview'
+        : user.role === 'regional_coordinator' && adminIntent.adminTab === 'reports'
+        ? 'regional_eco_control'
+        : user.role === 'regional_coordinator' && adminIntent.adminTab === 'schools'
+        ? 'regional_schools_students'
+        : user.role === 'regional_coordinator' && adminIntent.adminTab === 'team_chat'
+        ? 'regional_announcements'
+        : user.role === 'regional_coordinator' && adminIntent.adminTab === 'voucher_verifier'
+        ? 'regional_championship'
+        : adminIntent.adminTab;
+    if (filteredMenu.some(m => m.id === mappedTab)) {
+      setActiveTab(mappedTab);
     }
   }, [adminIntent, user.role]);
 
@@ -712,7 +801,7 @@ export const AdminDashboardPage: React.FC = () => {
       </aside>
 
       {/* Content Area */}
-      <main className="flex-1 lg:ml-68 min-h-screen p-4 md:p-6 space-y-5 max-w-full overflow-x-hidden">
+      <main className="flex-1 lg:ml-68 min-h-screen p-4 pb-24 md:p-6 lg:pb-8 space-y-5 max-w-full overflow-x-hidden">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <button
@@ -723,10 +812,15 @@ export const AdminDashboardPage: React.FC = () => {
             </button>
             <div className="space-y-0.5">
               <h1 className="text-xl md:text-2xl font-black tracking-tight">
-                {menuItems.find(m => m.id === activeTab)?.label || 'Kabinet'}
+                {filteredMenu.find(m => m.id === activeTab)?.label || menuItems.find(m => m.id === activeTab)?.label || 'Kabinet'}
               </h1>
               <p className="text-[11px] text-slate-500 dark:text-emerald-300/70 font-semibold">
-                {user.region} · {user.district} · {user.schoolName || 'EcoHero Platformasi'}
+                {user.region} · {user.district}
+                {user.role === 'district_coordinator'
+                  ? ' · Tuman Koordinatori Kabineti'
+                  : user.role === 'regional_coordinator'
+                  ? ' · Regional Command Center'
+                  : ` · ${user.schoolName || 'EcoHero Platformasi'}`}
               </p>
             </div>
           </div>
@@ -933,7 +1027,26 @@ export const AdminDashboardPage: React.FC = () => {
             {activeTab === 'reward_settings' && <SuperAdminModerationView section="reward_settings" />}
             {activeTab === 'role_management' && <SuperAdminModerationView section="role_management" />}
             {activeTab === 'regional_dashboard' && <RegionalCoordinatorDashboardView />}
+            {user.role === 'regional_coordinator' &&
+              activeTab.startsWith('regional_') &&
+              activeTab !== 'regional_dashboard' && (
+                <RegionalCoordinatorDashboardView
+                  activeSection={activeTab as RegionalSectionId}
+                  onNavigateSection={sec => setActiveTab(sec)}
+                  globalSearchQuery={searchQuery}
+                />
+              )}
             {activeTab === 'district_dashboard' && <DistrictCoordinatorDashboardView />}
+            {user.role === 'district_coordinator' &&
+              activeTab.startsWith('district_') &&
+              activeTab !== 'district_dashboard' &&
+              activeTab !== 'district_growth_race' && (
+                <DistrictCoordinatorDashboardView
+                  activeSection={activeTab as DistrictSectionId}
+                  onNavigateSection={sec => setActiveTab(sec)}
+                  globalSearchQuery={searchQuery}
+                />
+              )}
             {activeTab === 'district_growth_race' && (
               <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#061812] border border-amber-500/40 space-y-4">
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
