@@ -17,7 +17,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { AnimatePresence, motion, Variants } from 'framer-motion';
+import { motion, Variants } from 'framer-motion';
 import { useEco } from '../context/EcoContext';
 import { EcoAdBanner } from '../components/EcoAdBanner';
 import { resolveMediaUrl, openAdTargetUrl, isInsideTelegramWebApp } from '../utils/api';
@@ -77,12 +77,17 @@ export const HomePage: React.FC = () => {
   } = useEco();
 
   const newsScrollRef = useRef<HTMLDivElement | null>(null);
+  const newsTrackRef = useRef<HTMLDivElement | null>(null);
   const touchPauseTimerRef = useRef<number | null>(null);
+  const slideFinishTimerRef = useRef<number | null>(null);
+  const isSlidingRef = useRef(false);
+  const activeHomePostsRef = useRef<HomePost[]>([]);
   const [activeNewsIdx, setActiveNewsIdx] = useState(0);
 
-  // Client-only cyclic post order for 5-second fair rotation (never mutates Firebase)
+  // Client-only cyclic post order for 10-second fair rotation (never mutates Firebase)
   const [orderedPostIds, setOrderedPostIds] = useState<string[]>([]);
-  const [wrappingPostId, setWrappingPostId] = useState<string | null>(null);
+  const [isSliding, setIsSliding] = useState(false);
+  const [slideShiftPx, setSlideShiftPx] = useState(0);
   const [openedPost, setOpenedPost] = useState<HomePost | null>(null);
   const [playingVideoPostId, setPlayingVideoPostId] = useState<string | null>(null);
   const [isCarouselInteracting, setIsCarouselInteracting] = useState(false);
@@ -117,6 +122,10 @@ export const HomePage: React.FC = () => {
         .sort((a, b) => Number(b.isPinned) - Number(a.isPinned)),
     [homePosts]
   );
+
+  useEffect(() => {
+    activeHomePostsRef.current = activeHomePosts;
+  }, [activeHomePosts]);
 
   // Sync client-side rotation queue whenever activeHomePosts list changes
   useEffect(() => {
@@ -155,12 +164,13 @@ export const HomePage: React.FC = () => {
     return resolved;
   }, [activeHomePosts, orderedPostIds]);
 
-  // Clear wrapping post animation hint
-  useEffect(() => {
-    if (!wrappingPostId) return;
-    const t = window.setTimeout(() => setWrappingPostId(null), 460);
-    return () => window.clearTimeout(t);
-  }, [wrappingPostId]);
+  const renderPosts = useMemo(
+    () =>
+      isSliding && rotatedPosts.length > 1
+        ? [...rotatedPosts, rotatedPosts[0]]
+        : rotatedPosts,
+    [isSliding, rotatedPosts]
+  );
 
   // Pause rotation if tab/WebView goes hidden
   useEffect(() => {
@@ -170,14 +180,40 @@ export const HomePage: React.FC = () => {
     return () => document.removeEventListener('visibilitychange', onVisChange);
   }, []);
 
-  // Cleanup touch pause timer on unmount
+  // Cleanup timers on unmount
   useEffect(() => {
     return () => {
       if (touchPauseTimerRef.current) {
         window.clearTimeout(touchPauseTimerRef.current);
       }
+      if (slideFinishTimerRef.current) {
+        window.clearTimeout(slideFinishTimerRef.current);
+      }
     };
   }, []);
+
+  const completeSlideRotation = () => {
+    if (!isSlidingRef.current) return;
+    isSlidingRef.current = false;
+    if (slideFinishTimerRef.current) {
+      window.clearTimeout(slideFinishTimerRef.current);
+      slideFinishTimerRef.current = null;
+    }
+    setOrderedPostIds(prev => {
+      const base = prev.length > 0 ? prev : activeHomePostsRef.current.map(p => p.id);
+      if (base.length <= 1) return base;
+      const [first, ...rest] = base;
+      return [...rest, first];
+    });
+    setIsSliding(false);
+    setSlideShiftPx(0);
+    setActiveNewsIdx(0);
+  };
+
+  const handleTrackTransitionEnd = (e: React.TransitionEvent<HTMLDivElement>) => {
+    if (e.target !== newsTrackRef.current || e.propertyName !== 'transform') return;
+    completeSlideRotation();
+  };
 
   const isRotationPaused = Boolean(
     openedPost ||
@@ -189,25 +225,38 @@ export const HomePage: React.FC = () => {
       rotatedPosts.length <= 1
   );
 
-  // Fair 5-second rotation: first post moves to last, remaining shift forward sequentially
+  const canRotatePosts = rotatedPosts.length > 1;
+
+  // Fair 10-second rotation: smooth GPU slide left, then first post moves to last atomically
   useEffect(() => {
-    if (isRotationPaused || rotatedPosts.length <= 1) return;
+    if (isRotationPaused || !canRotatePosts) return;
     const intervalId = window.setInterval(() => {
-      setOrderedPostIds(prev => {
-        const base = prev.length > 0 ? prev : activeHomePosts.map(p => p.id);
-        if (base.length <= 1) return base;
-        const [first, ...rest] = base;
-        setWrappingPostId(first);
-        return [...rest, first];
-      });
-      setActiveNewsIdx(0);
-      const el = newsScrollRef.current;
-      if (el && el.scrollLeft > 4) {
-        el.scrollTo({ left: 0, behavior: 'auto' });
+      if (isSlidingRef.current) return;
+      const scrollEl = newsScrollRef.current;
+      const trackEl = newsTrackRef.current;
+      if (!trackEl) return;
+
+      if (scrollEl && scrollEl.scrollLeft > 4) {
+        scrollEl.scrollTo({ left: 0, behavior: 'smooth' });
+        return;
       }
-    }, 5000);
+
+      const cards = trackEl.querySelectorAll<HTMLElement>('[data-news-card]');
+      if (cards.length < 2) return;
+      const stepPx = Math.max(200, cards[1].offsetLeft - cards[0].offsetLeft);
+
+      isSlidingRef.current = true;
+      setSlideShiftPx(stepPx);
+      setIsSliding(true);
+      if (slideFinishTimerRef.current) {
+        window.clearTimeout(slideFinishTimerRef.current);
+      }
+      slideFinishTimerRef.current = window.setTimeout(() => {
+        completeSlideRotation();
+      }, 480);
+    }, 10000);
     return () => window.clearInterval(intervalId);
-  }, [isRotationPaused, rotatedPosts.length, rotationCycleNonce, activeHomePosts]);
+  }, [isRotationPaused, canRotatePosts, rotationCycleNonce]);
 
   // Close inline playback / opened post if deleted
   useEffect(() => {
@@ -284,6 +333,15 @@ export const HomePage: React.FC = () => {
   };
 
   const focusPostById = (postId: string) => {
+    if (isSlidingRef.current) {
+      isSlidingRef.current = false;
+      if (slideFinishTimerRef.current) {
+        window.clearTimeout(slideFinishTimerRef.current);
+        slideFinishTimerRef.current = null;
+      }
+      setIsSliding(false);
+      setSlideShiftPx(0);
+    }
     setOrderedPostIds(prev => {
       const base = prev.length > 0 ? prev : activeHomePosts.map(p => p.id);
       const targetIdx = base.indexOf(postId);
@@ -567,7 +625,7 @@ export const HomePage: React.FC = () => {
           </div>
         </div>
 
-        {/* Horizontal Swipe Carousel with 5s fair client-side rotation */}
+        {/* Horizontal Swipe Carousel with 10s smooth GPU slide rotation */}
         {rotatedPosts.length > 0 ? (
           <div
             className="space-y-2.5"
@@ -580,38 +638,40 @@ export const HomePage: React.FC = () => {
               onTouchStart={pauseCarouselForTouch}
               onTouchEnd={resumeCarouselAfterTouch}
               onTouchCancel={resumeCarouselAfterTouch}
-              className="flex gap-3 sm:gap-4 overflow-x-auto snap-x snap-mandatory scrollbar-hide pb-1"
+              className={`overflow-x-auto scrollbar-hide pb-1 ${
+                isSliding ? '' : 'snap-x snap-mandatory'
+              }`}
             >
-              <AnimatePresence initial={false}>
-                {rotatedPosts.map(post => {
+              <div
+                ref={newsTrackRef}
+                onTransitionEnd={handleTrackTransitionEnd}
+                style={{
+                  transform: isSliding
+                    ? `translate3d(-${slideShiftPx}px, 0, 0)`
+                    : 'translate3d(0, 0, 0)',
+                  transition: isSliding
+                    ? 'transform 430ms cubic-bezier(0.22, 1, 0.36, 1)'
+                    : 'none',
+                  willChange: isSliding ? 'transform' : 'auto',
+                }}
+                className="relative flex gap-3 sm:gap-4"
+              >
+                {renderPosts.map((post, renderIdx) => {
+                  const isTailClone = isSliding && renderIdx === renderPosts.length - 1;
                   const catMeta = postCategoryMeta[post.category] || postCategoryMeta.news;
                   const CatIcon = catMeta.icon;
                   const formattedDate = formatUzNewsDate(post.createdAt);
                   const { targetUrl, buttonLabel } = resolvePostAction(post);
-                  const isPlayingInline = playingVideoPostId === post.id;
-                  const isWrapping = wrappingPostId === post.id;
+                  const isPlayingInline = !isTailClone && playingVideoPostId === post.id;
                   const hasCustomCover =
                     Boolean(post.imageUrl) && post.imageUrl !== '/assets/schools/eco_courtyard.jpg';
 
                   return (
-                    <motion.article
-                      key={post.id}
-                      layout="position"
-                      initial={{ opacity: 0, scale: 0.97 }}
-                      animate={{
-                        opacity: isWrapping ? 0.85 : 1,
-                        scale: isWrapping ? 0.98 : 1,
-                      }}
-                      exit={{ opacity: 0, scale: 0.96 }}
-                      transition={{
-                        layout: { type: 'spring', stiffness: 250, damping: 28, mass: 0.9 },
-                        opacity: { duration: 0.25 },
-                        scale: { duration: 0.25 },
-                      }}
-                      style={{ zIndex: isWrapping ? 0 : 2 }}
+                    <article
+                      key={isTailClone ? `${post.id}__tail_slide` : post.id}
                       data-news-card
                       onClick={() => handleOpenPostReader(post)}
-                      className="w-[78vw] max-w-[335px] sm:w-[330px] lg:w-[calc((100%-2rem)/3)] shrink-0 snap-start rounded-[22px] overflow-hidden border border-slate-200 dark:border-emerald-400/30 bg-white dark:bg-gradient-to-b dark:from-[#082418] dark:to-[#04140D] shadow-xl shadow-emerald-950/20 flex flex-col justify-between transition-colors hover:border-emerald-400/60 cursor-pointer"
+                      className="w-[78vw] max-w-[335px] sm:w-[330px] lg:w-[calc((100%-2rem)/3)] shrink-0 snap-start rounded-[22px] overflow-hidden border border-slate-200 dark:border-emerald-400/30 bg-white dark:bg-gradient-to-b dark:from-[#082418] dark:to-[#04140D] shadow-md shadow-emerald-950/15 flex flex-col justify-between transition-colors hover:border-emerald-400/60 cursor-pointer"
                     >
                       <div className="min-w-0">
                         {/* Card Media Stage (Video or Photo) */}
@@ -663,7 +723,7 @@ export const HomePage: React.FC = () => {
                                     triggerHaptic('light');
                                     setPlayingVideoPostId(post.id);
                                   }}
-                                  className="absolute inset-0 m-auto w-11 h-11 rounded-full bg-[#04140D]/80 hover:bg-emerald-500 text-white hover:text-[#04110B] border border-emerald-400/60 shadow-[0_0_20px_rgba(16,232,138,0.4)] flex items-center justify-center transition-all cursor-pointer z-10"
+                                  className="absolute inset-0 m-auto w-11 h-11 rounded-full bg-[#04140D]/85 hover:bg-emerald-500 text-white hover:text-[#04110B] border border-emerald-400/60 shadow-[0_0_16px_rgba(16,232,138,0.35)] flex items-center justify-center transition-colors cursor-pointer z-10"
                                 >
                                   <Play className="w-5 h-5 fill-current ml-0.5" />
                                 </button>
@@ -688,13 +748,13 @@ export const HomePage: React.FC = () => {
                           {!isPlayingInline && (
                             <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1.5">
                               <span
-                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border backdrop-blur-md shadow-sm ${catMeta.badgeClass}`}
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border shadow-sm ${catMeta.badgeClass}`}
                               >
                                 <CatIcon className="w-3.5 h-3.5 shrink-0" />
                                 <span>{catMeta.label}</span>
                               </span>
                               {post.videoUrl && (
-                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold border border-purple-400/45 bg-[#120722]/85 text-purple-200 backdrop-blur-md">
+                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold border border-purple-400/45 bg-[#120722]/90 text-purple-200">
                                   <Video className="w-3 h-3" />
                                   <span>Video</span>
                                 </span>
@@ -711,7 +771,7 @@ export const HomePage: React.FC = () => {
                                   e.stopPropagation();
                                   openEditPost(post);
                                 }}
-                                className="p-1.5 rounded-xl bg-[#040D0A]/80 text-amber-300 hover:bg-amber-500 hover:text-slate-950 transition-colors cursor-pointer"
+                                className="p-1.5 rounded-xl bg-[#040D0A]/85 text-amber-300 hover:bg-amber-500 hover:text-slate-950 transition-colors cursor-pointer"
                                 title="Postni o'zgartirish"
                               >
                                 <Edit2 className="w-3.5 h-3.5" />
@@ -722,7 +782,7 @@ export const HomePage: React.FC = () => {
                                   e.stopPropagation();
                                   deleteHomePost(post.id);
                                 }}
-                                className="p-1.5 rounded-xl bg-[#040D0A]/80 text-rose-400 hover:bg-rose-500 hover:text-white transition-colors cursor-pointer"
+                                className="p-1.5 rounded-xl bg-[#040D0A]/85 text-rose-400 hover:bg-rose-500 hover:text-white transition-colors cursor-pointer"
                                 title="Postni o'chirish"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -763,7 +823,7 @@ export const HomePage: React.FC = () => {
                                 openAdTargetUrl(targetUrl);
                               }
                             }}
-                            className="w-full min-h-[40px] px-3 py-2 rounded-xl bg-gradient-to-r from-[#10B981] to-[#059669] dark:from-[#138D59] dark:to-[#0C6A42] hover:brightness-110 border border-emerald-400/45 text-white font-bold text-xs sm:text-[13px] flex items-center justify-center gap-1.5 shadow-[0_4px_16px_rgba(16,185,129,0.24)] transition-all"
+                            className="w-full min-h-[40px] px-3 py-2 rounded-xl bg-gradient-to-r from-[#10B981] to-[#059669] dark:from-[#138D59] dark:to-[#0C6A42] hover:brightness-110 border border-emerald-400/45 text-white font-bold text-xs sm:text-[13px] flex items-center justify-center gap-1.5 shadow-[0_4px_12px_rgba(16,185,129,0.2)] transition-all"
                           >
                             <span>{buttonLabel}</span>
                             <ChevronRight className="w-4 h-4 shrink-0" />
@@ -776,10 +836,10 @@ export const HomePage: React.FC = () => {
                           </p>
                         </div>
                       )}
-                    </motion.article>
+                    </article>
                   );
                 })}
-              </AnimatePresence>
+              </div>
             </div>
 
             {/* Carousel Pagination Dots (reflects active lead post across fair rotation) */}
