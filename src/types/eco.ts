@@ -800,6 +800,7 @@ export interface HomePost {
   content: string;
   category: HomePostCategory;
   imageUrl?: string;
+  videoUrl?: string;
   ctaText?: string;
   ctaUrl?: string;
   telegramPostId?: string;

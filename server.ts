@@ -9745,6 +9745,7 @@ app.post(
         content,
         category,
         imageUrl,
+        videoUrl,
         ctaText,
         ctaUrl,
         telegramPostInput,
@@ -9778,13 +9779,15 @@ app.post(
       const resolvedCat = allowedCats.includes(category) ? category : 'news';
       const nowIso = new Date().toISOString();
       const normalizedCtaUrl = ctaUrl ? String(ctaUrl).trim() : '';
+      const normalizedVideoUrl = videoUrl ? String(videoUrl).trim().slice(0, 1024) : '';
 
       const post = {
         id: `hpost_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         title: String(title).trim().slice(0, 180),
         content: String(content).trim().slice(0, 1500),
         category: resolvedCat,
-        imageUrl: imageUrl ? String(imageUrl).trim() : '/assets/schools/eco_courtyard.jpg',
+        imageUrl: imageUrl ? String(imageUrl).trim().slice(0, 1024) : '/assets/schools/eco_courtyard.jpg',
+        ...(normalizedVideoUrl ? { videoUrl: normalizedVideoUrl } : {}),
         ctaText: ctaText
           ? String(ctaText).trim().slice(0, 80)
           : tgValidation.normalized
@@ -9849,6 +9852,7 @@ app.patch(
         content,
         category,
         imageUrl,
+        videoUrl,
         ctaText,
         ctaUrl,
         telegramPostInput,
@@ -9890,7 +9894,15 @@ app.patch(
       if (title !== undefined) post.title = String(title).trim().slice(0, 180);
       if (content !== undefined) post.content = String(content).trim().slice(0, 1500);
       if (category !== undefined) post.category = category;
-      if (imageUrl !== undefined) post.imageUrl = String(imageUrl).trim();
+      if (imageUrl !== undefined) post.imageUrl = String(imageUrl).trim().slice(0, 1024);
+      if (videoUrl !== undefined) {
+        const cleanVideoUrl = String(videoUrl).trim().slice(0, 1024);
+        if (cleanVideoUrl) {
+          post.videoUrl = cleanVideoUrl;
+        } else {
+          delete post.videoUrl;
+        }
+      }
       if (ctaText !== undefined) post.ctaText = String(ctaText).trim().slice(0, 80);
       if (ctaUrl !== undefined) {
         const trimmedCta = String(ctaUrl).trim();

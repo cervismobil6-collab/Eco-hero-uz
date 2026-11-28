@@ -75,7 +75,7 @@ const ALLOWED_FIELDS: Record<CatalogCollectionName | 'reward_settings' | 'catalo
     'impressionsCount', 'clicksCount', 'complianceNote', 'createdAt', 'updatedAt',
   ],
   home_posts: [
-    'id', 'title', 'content', 'category', 'imageUrl', 'ctaText', 'ctaUrl',
+    'id', 'title', 'content', 'category', 'imageUrl', 'videoUrl', 'ctaText', 'ctaUrl',
     'telegramPostId', 'telegramPostUrl',
     'authorUid', 'authorName', 'authorRole', 'schoolId', 'schoolName',
     'region', 'district', 'isPinned', 'status', 'createdAt', 'updatedAt',
@@ -143,6 +143,9 @@ function sanitizeForFirestore(
     } else {
       delete out.telegramPostId;
       delete out.telegramPostUrl;
+    }
+    if (typeof out.videoUrl === 'string' && !out.videoUrl.trim()) {
+      delete out.videoUrl;
     }
     out.createdAt = out.createdAt || new Date().toISOString();
     out.updatedAt = out.updatedAt || new Date().toISOString();

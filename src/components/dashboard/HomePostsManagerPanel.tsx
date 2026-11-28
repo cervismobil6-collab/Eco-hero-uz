@@ -12,6 +12,7 @@ import {
   Check,
   X,
   Send,
+  Video,
 } from 'lucide-react';
 import { useEco } from '../../context/EcoContext';
 import { HomePost, HomePostCategory } from '../../types/eco';
@@ -52,9 +53,11 @@ export const HomePostsManagerPanel: React.FC = () => {
   const [ctaUrl, setCtaUrl] = useState('');
   const [telegramPostInput, setTelegramPostInput] = useState('');
   const [imageUrl, setImageUrl] = useState('/assets/schools/eco_courtyard.jpg');
+  const [videoUrl, setVideoUrl] = useState('');
   const [isPinned, setIsPinned] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
@@ -63,6 +66,7 @@ export const HomePostsManagerPanel: React.FC = () => {
   const [editCtaUrl, setEditCtaUrl] = useState('');
   const [editTelegramPostInput, setEditTelegramPostInput] = useState('');
   const [editImageUrl, setEditImageUrl] = useState('');
+  const [editVideoUrl, setEditVideoUrl] = useState('');
 
   const refreshManaged = async () => {
     if (!isSuperAdmin) return;
@@ -109,6 +113,33 @@ export const HomePostsManagerPanel: React.FC = () => {
     }
   };
 
+  const handleVideoUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    mode: 'create' | 'edit' = 'create'
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 80 * 1024 * 1024) {
+      showNotification('Video hajmi 80 MB dan oshmasligi kerak', 'warning');
+      e.target.value = '';
+      return;
+    }
+    setIsUploadingVideo(true);
+    try {
+      const uploaded = await uploadMediaFile(file, file.name);
+      if (uploaded.success && uploaded.url) {
+        if (mode === 'edit') setEditVideoUrl(uploaded.url);
+        else setVideoUrl(uploaded.url);
+        showNotification('Post videosi yuklandi', 'success');
+      } else {
+        showNotification(uploaded.error || 'Video yuklanmadi', 'warning');
+      }
+    } finally {
+      setIsUploadingVideo(false);
+      e.target.value = '';
+    }
+  };
+
   const createTgPreview = validateEcoHerouzPostInput(telegramPostInput);
   const editTgPreview = validateEcoHerouzPostInput(editTelegramPostInput);
 
@@ -135,6 +166,7 @@ export const HomePostsManagerPanel: React.FC = () => {
       content: content.trim(),
       category,
       imageUrl: imageUrl.trim() || '/assets/schools/eco_courtyard.jpg',
+      videoUrl: videoUrl.trim() || undefined,
       ctaText: ctaText.trim() || undefined,
       ctaUrl: ctaUrl.trim() || undefined,
       telegramPostId: createTgPreview.normalized?.postId || '',
@@ -146,6 +178,7 @@ export const HomePostsManagerPanel: React.FC = () => {
     if (res.success) {
       setTitle('');
       setContent('');
+      setVideoUrl('');
       setCtaText('');
       setCtaUrl('');
       setTelegramPostInput('');
@@ -162,6 +195,7 @@ export const HomePostsManagerPanel: React.FC = () => {
     setEditCtaUrl(post.ctaUrl || '');
     setEditTelegramPostInput(post.telegramPostUrl || post.telegramPostId || '');
     setEditImageUrl(post.imageUrl || '');
+    setEditVideoUrl(post.videoUrl || '');
   };
 
   const handleSaveEdit = async (id: string) => {
@@ -186,6 +220,7 @@ export const HomePostsManagerPanel: React.FC = () => {
       telegramPostUrl: editTgPreview.normalized?.postUrl || '',
       telegramPostInput: editTelegramPostInput.trim(),
       imageUrl: editImageUrl.trim() || undefined,
+      videoUrl: editVideoUrl.trim(),
     });
     if (res.success) {
       setEditingId(null);
@@ -328,6 +363,36 @@ export const HomePostsManagerPanel: React.FC = () => {
             </div>
           </div>
 
+          <div className="space-y-1.5">
+            <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400">
+              Video manzili yoki yuklash (ixtiyoriy, 80 MB gacha)
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={videoUrl}
+                onChange={e => setVideoUrl(e.target.value)}
+                placeholder="https://... yoki video yuklang"
+                className="flex-1 min-w-0 min-h-[40px] px-3 py-2 rounded-xl bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 text-xs font-mono text-slate-900 dark:text-white outline-none focus:border-emerald-500"
+              />
+              <label className="min-h-[40px] px-3 py-2 rounded-xl border border-purple-400/35 bg-purple-500/10 text-purple-700 dark:text-purple-300 text-xs font-semibold flex items-center gap-1.5 cursor-pointer shrink-0 hover:border-purple-400">
+                <Video className="w-3.5 h-3.5" />
+                <span>{isUploadingVideo ? '...' : 'Video'}</span>
+                <input type="file" accept="video/*" onChange={e => handleVideoUpload(e, 'create')} className="hidden" />
+              </label>
+              {videoUrl && (
+                <button
+                  type="button"
+                  onClick={() => setVideoUrl('')}
+                  title="Videoni olib tashlash"
+                  className="min-h-[40px] px-2.5 rounded-xl border border-rose-500/30 text-rose-500 hover:bg-rose-500/10 cursor-pointer shrink-0"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
           <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer pt-1">
             <input
               type="checkbox"
@@ -418,6 +483,29 @@ export const HomePostsManagerPanel: React.FC = () => {
                         <input type="file" accept="image/*" onChange={e => handleImageUpload(e, 'edit')} className="hidden" />
                       </label>
                     </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={editVideoUrl}
+                        onChange={e => setEditVideoUrl(e.target.value)}
+                        placeholder="Video havolasi (ixtiyoriy)"
+                        className="flex-1 min-w-0 px-3 py-1.5 rounded-lg bg-white dark:bg-[#061812] border border-slate-200 dark:border-emerald-500/20 text-xs font-mono outline-none focus:border-emerald-500"
+                      />
+                      <label className="px-3 py-1.5 rounded-lg border border-purple-400/35 bg-purple-500/10 text-purple-600 dark:text-purple-300 text-xs font-semibold flex items-center gap-1 cursor-pointer shrink-0">
+                        <Video className="w-3.5 h-3.5" />
+                        <span>{isUploadingVideo ? '...' : 'Video'}</span>
+                        <input type="file" accept="video/*" onChange={e => handleVideoUpload(e, 'edit')} className="hidden" />
+                      </label>
+                      {editVideoUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setEditVideoUrl('')}
+                          className="px-2 py-1.5 rounded-lg border border-rose-500/30 text-rose-500 cursor-pointer shrink-0"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                     <div className="flex justify-end gap-2">
                       <button
                         type="button"
@@ -450,6 +538,14 @@ export const HomePostsManagerPanel: React.FC = () => {
                           <>
                             <span className="text-slate-400">·</span>
                             <span className="text-sky-500 font-semibold">Qadalgan</span>
+                          </>
+                        )}
+                        {post.videoUrl && (
+                          <>
+                            <span className="text-slate-400">·</span>
+                            <span className="inline-flex items-center gap-1 text-purple-500 font-semibold">
+                              <Video className="w-3 h-3" /> Video
+                            </span>
                           </>
                         )}
                       </div>

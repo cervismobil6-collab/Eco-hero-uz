@@ -172,7 +172,7 @@ const ALLOWED_CATALOG_FIELDS: Record<string, string[]> = {
     'impressionsCount', 'clicksCount', 'complianceNote', 'createdAt', 'updatedAt',
   ],
   home_posts: [
-    'id', 'title', 'content', 'category', 'imageUrl', 'ctaText', 'ctaUrl',
+    'id', 'title', 'content', 'category', 'imageUrl', 'videoUrl', 'ctaText', 'ctaUrl',
     'telegramPostId', 'telegramPostUrl',
     'authorUid', 'authorName', 'authorRole', 'schoolId', 'schoolName',
     'region', 'district', 'isPinned', 'status', 'createdAt', 'updatedAt',
@@ -220,6 +220,9 @@ function sanitizeCatalogRecord(collectionName: string, record: Record<string, an
     } else {
       delete out.telegramPostId;
       delete out.telegramPostUrl;
+    }
+    if (typeof out.videoUrl === 'string' && !out.videoUrl.trim()) {
+      delete out.videoUrl;
     }
   }
   if (collectionName === 'eco_missions' && !out.updatedAt) {

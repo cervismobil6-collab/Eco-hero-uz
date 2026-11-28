@@ -481,6 +481,7 @@
         "content": { "type": "string", "minLength": 2, "maxLength": 2000 },
         "category": { "type": "string", "enum": ["bot_news", "website", "channel_ad", "news", "school_event"] },
         "imageUrl": { "type": "string", "maxLength": 1024 },
+        "videoUrl": { "type": "string", "maxLength": 1024 },
         "ctaText": { "type": "string", "maxLength": 80 },
         "ctaUrl": { "type": "string", "maxLength": 1024 },
         "telegramPostId": { "type": "string", "maxLength": 32, "pattern": "^[0-9]{1,12}$", "description": "@EcoHerouz Telegram kanalidagi post ID raqami" },

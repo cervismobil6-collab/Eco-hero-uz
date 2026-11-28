@@ -469,7 +469,7 @@ service cloud.firestore {
     function isValidHomePost(data) {
       return data.keys().hasAll(['id', 'title', 'content', 'category', 'authorUid', 'status', 'createdAt']) &&
         data.keys().hasOnly([
-          'id', 'title', 'content', 'category', 'imageUrl', 'ctaText', 'ctaUrl',
+          'id', 'title', 'content', 'category', 'imageUrl', 'videoUrl', 'ctaText', 'ctaUrl',
           'telegramPostId', 'telegramPostUrl',
           'authorUid', 'authorName', 'authorRole', 'schoolId', 'schoolName',
           'region', 'district', 'isPinned', 'status', 'createdAt', 'updatedAt'
@@ -487,6 +487,7 @@ service cloud.firestore {
         (!('district' in data) || (data.district is string && data.district.size() <= 100)) &&
         (!('isPinned' in data) || data.isPinned is bool) &&
         (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 1024)) &&
+        (!('videoUrl' in data) || (data.videoUrl is string && data.videoUrl.size() <= 1024)) &&
         (!('ctaText' in data) || (data.ctaText is string && data.ctaText.size() <= 80)) &&
         (!('ctaUrl' in data) || (data.ctaUrl is string && data.ctaUrl.size() <= 1024)) &&
         (!('telegramPostId' in data) || (data.telegramPostId is string && data.telegramPostId.size() <= 32 && (data.telegramPostId == '' || data.telegramPostId.matches('^[0-9]{1,12}$')))) &&

@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
   Calendar,
@@ -8,14 +8,16 @@ import {
   Globe,
   Image as ImageIcon,
   Leaf,
+  Play,
   Plus,
   Send,
   Sprout,
   Trash2,
+  Video,
   X,
   Zap,
 } from 'lucide-react';
-import { motion, Variants } from 'framer-motion';
+import { AnimatePresence, motion, Variants } from 'framer-motion';
 import { useEco } from '../context/EcoContext';
 import { EcoAdBanner } from '../components/EcoAdBanner';
 import { resolveMediaUrl, openAdTargetUrl, isInsideTelegramWebApp } from '../utils/api';
@@ -75,7 +77,20 @@ export const HomePage: React.FC = () => {
   } = useEco();
 
   const newsScrollRef = useRef<HTMLDivElement | null>(null);
+  const touchPauseTimerRef = useRef<number | null>(null);
   const [activeNewsIdx, setActiveNewsIdx] = useState(0);
+
+  // Client-only cyclic post order for 5-second fair rotation (never mutates Firebase)
+  const [orderedPostIds, setOrderedPostIds] = useState<string[]>([]);
+  const [wrappingPostId, setWrappingPostId] = useState<string | null>(null);
+  const [openedPost, setOpenedPost] = useState<HomePost | null>(null);
+  const [playingVideoPostId, setPlayingVideoPostId] = useState<string | null>(null);
+  const [isCarouselInteracting, setIsCarouselInteracting] = useState(false);
+  const [isCarouselHovered, setIsCarouselHovered] = useState(false);
+  const [isTabHidden, setIsTabHidden] = useState(
+    typeof document !== 'undefined' ? document.hidden : false
+  );
+  const [rotationCycleNonce, setRotationCycleNonce] = useState(0);
 
   // Super Admin inline post editor state
   const [postModalOpen, setPostModalOpen] = useState(false);
@@ -84,12 +99,14 @@ export const HomePage: React.FC = () => {
   const [postContent, setPostContent] = useState('');
   const [postCategory, setPostCategory] = useState<HomePostCategory>('news');
   const [postImageUrl, setPostImageUrl] = useState('');
+  const [postVideoUrl, setPostVideoUrl] = useState('');
   const [postCtaText, setPostCtaText] = useState('');
   const [postCtaUrl, setPostCtaUrl] = useState('');
   const [postTelegramInput, setPostTelegramInput] = useState('');
   const [postPinned, setPostPinned] = useState(false);
   const [savingPost, setSavingPost] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
 
   const isSuperAdmin = user.role === 'super_admin';
 
@@ -100,6 +117,109 @@ export const HomePage: React.FC = () => {
         .sort((a, b) => Number(b.isPinned) - Number(a.isPinned)),
     [homePosts]
   );
+
+  // Sync client-side rotation queue whenever activeHomePosts list changes
+  useEffect(() => {
+    const activeIds = activeHomePosts.map(p => p.id);
+    const activeSet = new Set(activeIds);
+    setOrderedPostIds(prev => {
+      if (prev.length === 0) return activeIds;
+      const kept = prev.filter(id => activeSet.has(id));
+      const keptSet = new Set(kept);
+      const newlyAdded = activeIds.filter(id => !keptSet.has(id));
+      const next = [...newlyAdded, ...kept];
+      if (next.length === prev.length && next.every((id, idx) => id === prev[idx])) {
+        return prev;
+      }
+      return next;
+    });
+  }, [activeHomePosts]);
+
+  const rotatedPosts = useMemo(() => {
+    if (activeHomePosts.length === 0) return [];
+    const byId = new Map(activeHomePosts.map(p => [p.id, p]));
+    const resolved: HomePost[] = [];
+    const seen = new Set<string>();
+    for (const id of orderedPostIds) {
+      const post = byId.get(id);
+      if (post && !seen.has(id)) {
+        resolved.push(post);
+        seen.add(id);
+      }
+    }
+    for (const post of activeHomePosts) {
+      if (!seen.has(post.id)) {
+        resolved.push(post);
+      }
+    }
+    return resolved;
+  }, [activeHomePosts, orderedPostIds]);
+
+  // Clear wrapping post animation hint
+  useEffect(() => {
+    if (!wrappingPostId) return;
+    const t = window.setTimeout(() => setWrappingPostId(null), 460);
+    return () => window.clearTimeout(t);
+  }, [wrappingPostId]);
+
+  // Pause rotation if tab/WebView goes hidden
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const onVisChange = () => setIsTabHidden(document.hidden);
+    document.addEventListener('visibilitychange', onVisChange);
+    return () => document.removeEventListener('visibilitychange', onVisChange);
+  }, []);
+
+  // Cleanup touch pause timer on unmount
+  useEffect(() => {
+    return () => {
+      if (touchPauseTimerRef.current) {
+        window.clearTimeout(touchPauseTimerRef.current);
+      }
+    };
+  }, []);
+
+  const isRotationPaused = Boolean(
+    openedPost ||
+      playingVideoPostId ||
+      postModalOpen ||
+      isCarouselInteracting ||
+      isCarouselHovered ||
+      isTabHidden ||
+      rotatedPosts.length <= 1
+  );
+
+  // Fair 5-second rotation: first post moves to last, remaining shift forward sequentially
+  useEffect(() => {
+    if (isRotationPaused || rotatedPosts.length <= 1) return;
+    const intervalId = window.setInterval(() => {
+      setOrderedPostIds(prev => {
+        const base = prev.length > 0 ? prev : activeHomePosts.map(p => p.id);
+        if (base.length <= 1) return base;
+        const [first, ...rest] = base;
+        setWrappingPostId(first);
+        return [...rest, first];
+      });
+      setActiveNewsIdx(0);
+      const el = newsScrollRef.current;
+      if (el && el.scrollLeft > 4) {
+        el.scrollTo({ left: 0, behavior: 'auto' });
+      }
+    }, 5000);
+    return () => window.clearInterval(intervalId);
+  }, [isRotationPaused, rotatedPosts.length, rotationCycleNonce, activeHomePosts]);
+
+  // Close inline playback / opened post if deleted
+  useEffect(() => {
+    if (openedPost) {
+      const fresh = activeHomePosts.find(p => p.id === openedPost.id);
+      if (!fresh) setOpenedPost(null);
+      else if (fresh !== openedPost) setOpenedPost(fresh);
+    }
+    if (playingVideoPostId && !activeHomePosts.some(p => p.id === playingVideoPostId)) {
+      setPlayingVideoPostId(null);
+    }
+  }, [activeHomePosts, openedPost, playingVideoPostId]);
 
   const postCategoryMeta: Record<
     string,
@@ -132,29 +252,73 @@ export const HomePage: React.FC = () => {
     },
   };
 
+  const pauseCarouselForTouch = () => {
+    if (touchPauseTimerRef.current) {
+      window.clearTimeout(touchPauseTimerRef.current);
+      touchPauseTimerRef.current = null;
+    }
+    setIsCarouselInteracting(true);
+  };
+
+  const resumeCarouselAfterTouch = () => {
+    if (touchPauseTimerRef.current) {
+      window.clearTimeout(touchPauseTimerRef.current);
+    }
+    touchPauseTimerRef.current = window.setTimeout(() => {
+      setIsCarouselInteracting(false);
+    }, 2200);
+  };
+
   const handleNewsScroll = () => {
     const el = newsScrollRef.current;
-    if (!el || activeHomePosts.length <= 1) return;
+    if (!el || rotatedPosts.length <= 1) return;
     const maxScroll = Math.max(1, el.scrollWidth - el.clientWidth);
     const ratio = el.scrollLeft / maxScroll;
     const nextIdx = Math.min(
-      activeHomePosts.length - 1,
-      Math.max(0, Math.round(ratio * (activeHomePosts.length - 1)))
+      rotatedPosts.length - 1,
+      Math.max(0, Math.round(ratio * (rotatedPosts.length - 1)))
     );
     if (nextIdx !== activeNewsIdx) {
       setActiveNewsIdx(nextIdx);
     }
   };
 
-  const scrollToNewsIndex = (idx: number) => {
+  const focusPostById = (postId: string) => {
+    setOrderedPostIds(prev => {
+      const base = prev.length > 0 ? prev : activeHomePosts.map(p => p.id);
+      const targetIdx = base.indexOf(postId);
+      if (targetIdx <= 0) return base;
+      return [...base.slice(targetIdx), ...base.slice(0, targetIdx)];
+    });
+    setActiveNewsIdx(0);
+    setRotationCycleNonce(n => n + 1);
     const el = newsScrollRef.current;
-    if (!el) return;
-    const cards = el.querySelectorAll<HTMLElement>('[data-news-card]');
-    const target = cards[idx];
-    if (target) {
-      el.scrollTo({ left: target.offsetLeft - 4, behavior: 'smooth' });
-      setActiveNewsIdx(idx);
+    if (el) {
+      el.scrollTo({ left: 0, behavior: 'smooth' });
     }
+  };
+
+  const handleOpenPostReader = (post: HomePost) => {
+    triggerHaptic('light');
+    setPlayingVideoPostId(null);
+    setOpenedPost(post);
+  };
+
+  const resolvePostAction = (post: HomePost) => {
+    const telegramPostUrl = resolveNewsTelegramPostUrl(post);
+    const fallbackCtaUrl =
+      post.category !== 'news' &&
+      post.ctaUrl &&
+      !isGenericEcoHerouzChannelUrl(post.ctaUrl)
+        ? post.ctaUrl
+        : '';
+    const targetUrl = telegramPostUrl || fallbackCtaUrl;
+    const buttonLabel = telegramPostUrl
+      ? post.category === 'news'
+        ? 'Batafsil o‘qish'
+        : post.ctaText?.trim() || 'Batafsil o‘qish'
+      : post.ctaText?.trim() || 'Ochish';
+    return { targetUrl, buttonLabel };
   };
 
   const handleUploadInlineImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -180,12 +344,36 @@ export const HomePage: React.FC = () => {
     }
   };
 
+  const handleUploadInlineVideo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 80 * 1024 * 1024) {
+      showNotification('Video hajmi 80 MB dan oshmasligi kerak', 'warning');
+      e.target.value = '';
+      return;
+    }
+    setUploadingVideo(true);
+    try {
+      const up = await uploadMediaFile(file, file.name);
+      if (up.success && up.url) {
+        setPostVideoUrl(up.url);
+        showNotification('Video muvaffaqiyatli yuklandi!', 'success');
+      } else {
+        showNotification(up.error || 'Video yuklashda xatolik', 'warning');
+      }
+    } finally {
+      setUploadingVideo(false);
+      e.target.value = '';
+    }
+  };
+
   const openCreatePost = () => {
     setEditingPost(null);
     setPostTitle('');
     setPostContent('');
     setPostCategory('news');
     setPostImageUrl('/assets/schools/eco_courtyard.jpg');
+    setPostVideoUrl('');
     setPostCtaText('');
     setPostCtaUrl('');
     setPostTelegramInput('');
@@ -199,6 +387,7 @@ export const HomePage: React.FC = () => {
     setPostContent(post.content);
     setPostCategory(post.category);
     setPostImageUrl(post.imageUrl || '');
+    setPostVideoUrl(post.videoUrl || '');
     setPostCtaText(post.ctaText || '');
     setPostCtaUrl(post.ctaUrl || '');
     setPostTelegramInput(post.telegramPostUrl || post.telegramPostId || '');
@@ -235,6 +424,7 @@ export const HomePage: React.FC = () => {
           content: postContent.trim(),
           category: postCategory,
           imageUrl: postImageUrl.trim() || undefined,
+          videoUrl: postVideoUrl.trim(),
           ctaText: postCtaText.trim(),
           ctaUrl: postCtaUrl.trim(),
           ...tgPayload,
@@ -250,6 +440,7 @@ export const HomePage: React.FC = () => {
           content: postContent.trim(),
           category: postCategory,
           imageUrl: postImageUrl.trim() || undefined,
+          videoUrl: postVideoUrl.trim() || undefined,
           ctaText: postCtaText.trim() || undefined,
           ctaUrl: postCtaUrl.trim() || undefined,
           ...tgPayload,
@@ -376,145 +567,233 @@ export const HomePage: React.FC = () => {
           </div>
         </div>
 
-        {/* Horizontal Swipe Carousel (Peek on mobile, 3-up crisp track on desktop) */}
-        {activeHomePosts.length > 0 ? (
-          <div className="space-y-2.5">
+        {/* Horizontal Swipe Carousel with 5s fair client-side rotation */}
+        {rotatedPosts.length > 0 ? (
+          <div
+            className="space-y-2.5"
+            onMouseEnter={() => setIsCarouselHovered(true)}
+            onMouseLeave={() => setIsCarouselHovered(false)}
+          >
             <div
               ref={newsScrollRef}
               onScroll={handleNewsScroll}
-              className="flex gap-3 sm:gap-4 overflow-x-auto snap-x snap-mandatory scrollbar-hide scroll-smooth pb-1"
+              onTouchStart={pauseCarouselForTouch}
+              onTouchEnd={resumeCarouselAfterTouch}
+              onTouchCancel={resumeCarouselAfterTouch}
+              className="flex gap-3 sm:gap-4 overflow-x-auto snap-x snap-mandatory scrollbar-hide pb-1"
             >
-              {activeHomePosts.map(post => {
-                const catMeta = postCategoryMeta[post.category] || postCategoryMeta.news;
-                const CatIcon = catMeta.icon;
-                const formattedDate = formatUzNewsDate(post.createdAt);
-                const telegramPostUrl = resolveNewsTelegramPostUrl(post);
-                const fallbackCtaUrl =
-                  post.category !== 'news' &&
-                  post.ctaUrl &&
-                  !isGenericEcoHerouzChannelUrl(post.ctaUrl)
-                    ? post.ctaUrl
-                    : '';
-                const targetUrl = telegramPostUrl || fallbackCtaUrl;
-                const buttonLabel = telegramPostUrl
-                  ? post.category === 'news'
-                    ? 'Batafsil o‘qish'
-                    : post.ctaText?.trim() || 'Batafsil o‘qish'
-                  : post.ctaText?.trim() || 'Ochish';
+              <AnimatePresence initial={false}>
+                {rotatedPosts.map(post => {
+                  const catMeta = postCategoryMeta[post.category] || postCategoryMeta.news;
+                  const CatIcon = catMeta.icon;
+                  const formattedDate = formatUzNewsDate(post.createdAt);
+                  const { targetUrl, buttonLabel } = resolvePostAction(post);
+                  const isPlayingInline = playingVideoPostId === post.id;
+                  const isWrapping = wrappingPostId === post.id;
+                  const hasCustomCover =
+                    Boolean(post.imageUrl) && post.imageUrl !== '/assets/schools/eco_courtyard.jpg';
 
-                return (
-                  <article
-                    key={post.id}
-                    data-news-card
-                    className="w-[78vw] max-w-[335px] sm:w-[330px] lg:w-[calc((100%-2rem)/3)] shrink-0 snap-start rounded-[22px] overflow-hidden border border-slate-200 dark:border-emerald-400/30 bg-white dark:bg-gradient-to-b dark:from-[#082418] dark:to-[#04140D] shadow-xl shadow-emerald-950/20 flex flex-col justify-between transition-colors hover:border-emerald-400/60"
-                  >
-                    <div className="min-w-0">
-                      {/* Card Image */}
-                      <div className="relative h-36 sm:h-42 bg-[#040D0A] overflow-hidden">
-                        <img
-                          src={resolveMediaUrl(post.imageUrl || '/assets/schools/eco_courtyard.jpg')}
-                          onError={e => {
-                            e.currentTarget.src = heroEcoForestImg;
-                          }}
-                          referrerPolicy="no-referrer"
-                          alt={post.title}
-                          className="w-full h-full object-cover"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-[#051A11] via-[#051A11]/25 to-black/25" />
+                  return (
+                    <motion.article
+                      key={post.id}
+                      layout="position"
+                      initial={{ opacity: 0, scale: 0.97 }}
+                      animate={{
+                        opacity: isWrapping ? 0.85 : 1,
+                        scale: isWrapping ? 0.98 : 1,
+                      }}
+                      exit={{ opacity: 0, scale: 0.96 }}
+                      transition={{
+                        layout: { type: 'spring', stiffness: 250, damping: 28, mass: 0.9 },
+                        opacity: { duration: 0.25 },
+                        scale: { duration: 0.25 },
+                      }}
+                      style={{ zIndex: isWrapping ? 0 : 2 }}
+                      data-news-card
+                      onClick={() => handleOpenPostReader(post)}
+                      className="w-[78vw] max-w-[335px] sm:w-[330px] lg:w-[calc((100%-2rem)/3)] shrink-0 snap-start rounded-[22px] overflow-hidden border border-slate-200 dark:border-emerald-400/30 bg-white dark:bg-gradient-to-b dark:from-[#082418] dark:to-[#04140D] shadow-xl shadow-emerald-950/20 flex flex-col justify-between transition-colors hover:border-emerald-400/60 cursor-pointer"
+                    >
+                      <div className="min-w-0">
+                        {/* Card Media Stage (Video or Photo) */}
+                        <div className="relative h-36 sm:h-42 bg-[#040D0A] overflow-hidden">
+                          {post.videoUrl ? (
+                            isPlayingInline ? (
+                              <video
+                                src={resolveMediaUrl(post.videoUrl)}
+                                poster={hasCustomCover ? resolveMediaUrl(post.imageUrl!) : undefined}
+                                controls
+                                autoPlay
+                                playsInline
+                                onClick={e => e.stopPropagation()}
+                                onPause={() =>
+                                  setPlayingVideoPostId(prev => (prev === post.id ? null : prev))
+                                }
+                                onEnded={() =>
+                                  setPlayingVideoPostId(prev => (prev === post.id ? null : prev))
+                                }
+                                className="w-full h-full object-cover bg-black"
+                              />
+                            ) : (
+                              <>
+                                {hasCustomCover ? (
+                                  <img
+                                    src={resolveMediaUrl(post.imageUrl!)}
+                                    onError={e => {
+                                      e.currentTarget.src = heroEcoForestImg;
+                                    }}
+                                    referrerPolicy="no-referrer"
+                                    alt={post.title}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <video
+                                    src={resolveMediaUrl(post.videoUrl)}
+                                    preload="metadata"
+                                    muted
+                                    playsInline
+                                    className="w-full h-full object-cover"
+                                  />
+                                )}
+                                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#051A11] via-[#051A11]/25 to-black/25" />
+                                <button
+                                  type="button"
+                                  aria-label="Videoni ijro etish"
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    triggerHaptic('light');
+                                    setPlayingVideoPostId(post.id);
+                                  }}
+                                  className="absolute inset-0 m-auto w-11 h-11 rounded-full bg-[#04140D]/80 hover:bg-emerald-500 text-white hover:text-[#04110B] border border-emerald-400/60 shadow-[0_0_20px_rgba(16,232,138,0.4)] flex items-center justify-center transition-all cursor-pointer z-10"
+                                >
+                                  <Play className="w-5 h-5 fill-current ml-0.5" />
+                                </button>
+                              </>
+                            )
+                          ) : (
+                            <>
+                              <img
+                                src={resolveMediaUrl(post.imageUrl || '/assets/schools/eco_courtyard.jpg')}
+                                onError={e => {
+                                  e.currentTarget.src = heroEcoForestImg;
+                                }}
+                                referrerPolicy="no-referrer"
+                                alt={post.title}
+                                className="w-full h-full object-cover"
+                              />
+                              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#051A11] via-[#051A11]/25 to-black/25" />
+                            </>
+                          )}
 
-                        {/* Category Pill Overlay (top-left) */}
-                        <div className="absolute top-2.5 left-2.5 z-10">
-                          <span
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border backdrop-blur-md shadow-sm ${catMeta.badgeClass}`}
-                          >
-                            <CatIcon className="w-3.5 h-3.5 shrink-0" />
-                            <span>{catMeta.label}</span>
-                          </span>
+                          {/* Category Overlay (hidden while controls play to keep video clear) */}
+                          {!isPlayingInline && (
+                            <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1.5">
+                              <span
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border backdrop-blur-md shadow-sm ${catMeta.badgeClass}`}
+                              >
+                                <CatIcon className="w-3.5 h-3.5 shrink-0" />
+                                <span>{catMeta.label}</span>
+                              </span>
+                              {post.videoUrl && (
+                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold border border-purple-400/45 bg-[#120722]/85 text-purple-200 backdrop-blur-md">
+                                  <Video className="w-3 h-3" />
+                                  <span>Video</span>
+                                </span>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Super Admin Edit/Delete */}
+                          {isSuperAdmin && !isPlayingInline && (
+                            <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  openEditPost(post);
+                                }}
+                                className="p-1.5 rounded-xl bg-[#040D0A]/80 text-amber-300 hover:bg-amber-500 hover:text-slate-950 transition-colors cursor-pointer"
+                                title="Postni o'zgartirish"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  deleteHomePost(post.id);
+                                }}
+                                className="p-1.5 rounded-xl bg-[#040D0A]/80 text-rose-400 hover:bg-rose-500 hover:text-white transition-colors cursor-pointer"
+                                title="Postni o'chirish"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
                         </div>
 
-                        {/* Super Admin Edit/Delete */}
-                        {isSuperAdmin && (
-                          <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => openEditPost(post)}
-                              className="p-1.5 rounded-xl bg-[#040D0A]/80 text-amber-300 hover:bg-amber-500 hover:text-slate-950 transition-colors cursor-pointer"
-                              title="Postni o'zgartirish"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => deleteHomePost(post.id)}
-                              className="p-1.5 rounded-xl bg-[#040D0A]/80 text-rose-400 hover:bg-rose-500 hover:text-white transition-colors cursor-pointer"
-                              title="Postni o'chirish"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                        {/* Metadata & Title */}
+                        <div className="p-3.5 sm:p-4 pb-2 space-y-2 min-w-0">
+                          <div className="flex items-center justify-between gap-2 text-[11px] font-semibold text-slate-500 dark:text-emerald-100/75 tabular-nums">
+                            <span className="inline-flex items-center gap-1.5">
+                              <Calendar className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400 shrink-0" />
+                              <span>{formattedDate}</span>
+                            </span>
+                            <span className="truncate max-w-[140px] text-slate-500 dark:text-emerald-200/70">
+                              {post.schoolName || post.authorName || ECOHERO_NEWS_CHANNEL_USERNAME}
+                            </span>
                           </div>
-                        )}
-                      </div>
 
-                      {/* Metadata & Title */}
-                      <div className="p-3.5 sm:p-4 pb-2 space-y-2 min-w-0">
-                        <div className="flex items-center justify-between gap-2 text-[11px] font-semibold text-slate-500 dark:text-emerald-100/75 tabular-nums">
-                          <span className="inline-flex items-center gap-1.5">
-                            <Calendar className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400 shrink-0" />
-                            <span>{formattedDate}</span>
-                          </span>
-                          <span className="truncate max-w-[140px] text-slate-500 dark:text-emerald-200/70">
-                            {post.schoolName || post.authorName || ECOHERO_NEWS_CHANNEL_USERNAME}
-                          </span>
+                          <h2 className="font-display text-sm sm:text-[15px] font-extrabold text-slate-900 dark:text-white leading-snug line-clamp-2">
+                            {post.title}
+                          </h2>
                         </div>
+                      </div>
 
-                        <h2 className="font-display text-sm sm:text-[15px] font-extrabold text-slate-900 dark:text-white leading-snug line-clamp-2">
-                          {post.title}
-                        </h2>
-                      </div>
-                    </div>
-
-                    {/* Full-Width Green Read More CTA (only rendered when direct post link exists) */}
-                    {targetUrl ? (
-                      <div className="px-3.5 sm:px-4 pb-3.5 pt-1.5">
-                        <a
-                          href={targetUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={e => {
-                            if (isInsideTelegramWebApp()) {
-                              e.preventDefault();
-                              openAdTargetUrl(targetUrl);
-                            }
-                          }}
-                          className="w-full min-h-[40px] px-3 py-2 rounded-xl bg-gradient-to-r from-[#10B981] to-[#059669] dark:from-[#138D59] dark:to-[#0C6A42] hover:brightness-110 border border-emerald-400/45 text-white font-bold text-xs sm:text-[13px] flex items-center justify-center gap-1.5 shadow-[0_4px_16px_rgba(16,185,129,0.24)] transition-all"
-                        >
-                          <span>{buttonLabel}</span>
-                          <ChevronRight className="w-4 h-4 shrink-0" />
-                        </a>
-                      </div>
-                    ) : (
-                      <div className="px-3.5 sm:px-4 pb-3.5 pt-0.5">
-                        <p className="text-[11px] text-slate-500 dark:text-emerald-100/65 line-clamp-2 leading-relaxed">
-                          {post.content}
-                        </p>
-                      </div>
-                    )}
-                  </article>
-                );
-              })}
+                      {/* Full-Width Green Read More CTA (only rendered when direct post link exists) */}
+                      {targetUrl ? (
+                        <div className="px-3.5 sm:px-4 pb-3.5 pt-1.5">
+                          <a
+                            href={targetUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={e => {
+                              e.stopPropagation();
+                              if (isInsideTelegramWebApp()) {
+                                e.preventDefault();
+                                openAdTargetUrl(targetUrl);
+                              }
+                            }}
+                            className="w-full min-h-[40px] px-3 py-2 rounded-xl bg-gradient-to-r from-[#10B981] to-[#059669] dark:from-[#138D59] dark:to-[#0C6A42] hover:brightness-110 border border-emerald-400/45 text-white font-bold text-xs sm:text-[13px] flex items-center justify-center gap-1.5 shadow-[0_4px_16px_rgba(16,185,129,0.24)] transition-all"
+                          >
+                            <span>{buttonLabel}</span>
+                            <ChevronRight className="w-4 h-4 shrink-0" />
+                          </a>
+                        </div>
+                      ) : (
+                        <div className="px-3.5 sm:px-4 pb-3.5 pt-0.5">
+                          <p className="text-[11px] text-slate-500 dark:text-emerald-100/65 line-clamp-2 leading-relaxed">
+                            {post.content}
+                          </p>
+                        </div>
+                      )}
+                    </motion.article>
+                  );
+                })}
+              </AnimatePresence>
             </div>
 
-            {/* Carousel Pagination Dots */}
-            {activeHomePosts.length > 1 && (
+            {/* Carousel Pagination Dots (reflects active lead post across fair rotation) */}
+            {rotatedPosts.length > 1 && (
               <div className="flex items-center justify-center gap-1.5 pt-0.5">
-                {activeHomePosts.slice(0, 8).map((post, idx) => {
-                  const isCurrent = idx === activeNewsIdx;
+                {activeHomePosts.slice(0, 10).map((post, idx) => {
+                  const visibleLead = rotatedPosts[activeNewsIdx] || rotatedPosts[0];
+                  const isCurrent = visibleLead?.id === post.id;
                   return (
                     <button
                       key={post.id}
                       type="button"
                       aria-label={`${idx + 1}-yangilik`}
-                      onClick={() => scrollToNewsIndex(idx)}
+                      onClick={() => focusPostById(post.id)}
                       className={`rounded-full transition-all cursor-pointer ${
                         isCurrent
                           ? 'w-5 h-2 bg-[#00F5A0] shadow-[0_0_8px_rgba(0,245,160,0.65)]'
@@ -760,10 +1039,100 @@ export const HomePage: React.FC = () => {
         <EcoAdBanner placement="home_top" />
       </section>
 
+      {/* Post Reader & Video Viewer Modal (pauses auto-rotation while open) */}
+      {openedPost && (
+        <div
+          onClick={() => setOpenedPost(null)}
+          className="fixed inset-0 z-[125] flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm"
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-[24px] bg-white dark:bg-[#071812] border border-slate-200 dark:border-emerald-400/30 text-slate-900 dark:text-white shadow-2xl overflow-hidden"
+          >
+            <div className="relative bg-black">
+              {openedPost.videoUrl ? (
+                <video
+                  src={resolveMediaUrl(openedPost.videoUrl)}
+                  poster={
+                    openedPost.imageUrl && openedPost.imageUrl !== '/assets/schools/eco_courtyard.jpg'
+                      ? resolveMediaUrl(openedPost.imageUrl)
+                      : undefined
+                  }
+                  controls
+                  autoPlay
+                  playsInline
+                  className="w-full max-h-72 object-contain bg-black"
+                />
+              ) : (
+                <img
+                  src={resolveMediaUrl(openedPost.imageUrl || '/assets/schools/eco_courtyard.jpg')}
+                  onError={e => {
+                    e.currentTarget.src = heroEcoForestImg;
+                  }}
+                  referrerPolicy="no-referrer"
+                  alt={openedPost.title}
+                  className="w-full max-h-64 object-cover"
+                />
+              )}
+              <button
+                type="button"
+                aria-label="Yopish"
+                onClick={() => setOpenedPost(null)}
+                className="absolute top-3 right-3 w-9 h-9 rounded-full bg-black/65 hover:bg-black/85 text-white flex items-center justify-center cursor-pointer transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-5 space-y-3">
+              <div className="flex items-center justify-between gap-2 text-xs font-semibold text-slate-500 dark:text-emerald-200/75 tabular-nums">
+                <span className="inline-flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
+                  <span>{formatUzNewsDate(openedPost.createdAt)}</span>
+                </span>
+                <span className="truncate">
+                  {openedPost.schoolName || openedPost.authorName || ECOHERO_NEWS_CHANNEL_USERNAME}
+                </span>
+              </div>
+
+              <h3 className="font-display text-base sm:text-lg font-extrabold leading-snug">
+                {openedPost.title}
+              </h3>
+
+              <p className="text-xs sm:text-sm text-slate-700 dark:text-emerald-100/85 leading-relaxed whitespace-pre-line">
+                {openedPost.content}
+              </p>
+
+              {(() => {
+                const { targetUrl, buttonLabel } = resolvePostAction(openedPost);
+                if (!targetUrl) return null;
+                return (
+                  <a
+                    href={targetUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={e => {
+                      if (isInsideTelegramWebApp()) {
+                        e.preventDefault();
+                        openAdTargetUrl(targetUrl);
+                      }
+                    }}
+                    className="w-full min-h-[44px] px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#10B981] to-[#059669] hover:brightness-110 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/25 transition-all"
+                  >
+                    <span>{buttonLabel}</span>
+                    <ExternalLink className="w-4 h-4 shrink-0" />
+                  </a>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Super Admin Inline Post Create / Edit Modal */}
       {isSuperAdmin && postModalOpen && (
         <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-3xl bg-[#071812] border border-emerald-500/25 text-white p-6 space-y-4 shadow-2xl">
+          <div className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl bg-[#071812] border border-emerald-500/25 text-white p-5 sm:p-6 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-black uppercase">
                 {editingPost ? "Postni O'zgartirish" : "Yangi Post Qo'shish"}
@@ -823,6 +1192,46 @@ export const HomePage: React.FC = () => {
                   />
                 )}
               </div>
+              <div className="space-y-2 p-3 rounded-xl bg-[#040D0A] border border-purple-500/25">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="flex-1 px-3 py-2 rounded-xl bg-purple-600/20 border border-purple-500/40 text-purple-300 font-bold flex items-center justify-center gap-2 cursor-pointer">
+                    <Video className="w-4 h-4" />
+                    <span>{uploadingVideo ? 'Video yuklanmoqda...' : 'Video yuklash (80 MB gacha)'}</span>
+                    <input
+                      type="file"
+                      accept="video/*"
+                      onChange={handleUploadInlineVideo}
+                      className="hidden"
+                    />
+                  </label>
+                  {postVideoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setPostVideoUrl('')}
+                      title="Videoni olib tashlash"
+                      className="p-2 rounded-xl border border-rose-500/40 text-rose-400 hover:bg-rose-500/15 cursor-pointer shrink-0"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  value={postVideoUrl}
+                  onChange={e => setPostVideoUrl(e.target.value)}
+                  placeholder="Yoki video havolasini kiriting (https://...)"
+                  className="w-full px-3 py-2 rounded-lg bg-[#071812] border border-purple-500/20 font-mono text-[11px] outline-none"
+                />
+                {postVideoUrl && (
+                  <video
+                    src={resolveMediaUrl(postVideoUrl)}
+                    controls
+                    playsInline
+                    muted
+                    className="w-full max-h-28 rounded-lg bg-black object-cover"
+                  />
+                )}
+              </div>
               <div className="space-y-1.5 p-3 rounded-xl bg-[#040D0A] border border-emerald-500/20">
                 <div className="flex items-center justify-between text-[11px] font-bold text-emerald-400">
                   <span>Telegram post ({ECOHERO_NEWS_CHANNEL_USERNAME})</span>
@@ -876,7 +1285,7 @@ export const HomePage: React.FC = () => {
               </label>
               <button
                 type="submit"
-                disabled={savingPost || uploadingMedia}
+                disabled={savingPost || uploadingMedia || uploadingVideo}
                 className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-[#040D0A] font-black uppercase tracking-wider cursor-pointer disabled:opacity-50"
               >
                 {savingPost ? 'Saqlanmoqda...' : 'Saqlash'}

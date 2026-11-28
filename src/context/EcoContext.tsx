@@ -480,6 +480,7 @@ interface EcoContextType {
     content: string;
     category: HomePostCategory;
     imageUrl?: string;
+    videoUrl?: string;
     ctaText?: string;
     ctaUrl?: string;
     telegramPostId?: string;
@@ -496,6 +497,7 @@ interface EcoContextType {
         | 'content'
         | 'category'
         | 'imageUrl'
+        | 'videoUrl'
         | 'ctaText'
         | 'ctaUrl'
         | 'telegramPostId'
